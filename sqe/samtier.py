@@ -24,8 +24,10 @@ from __future__ import annotations
 # reach_km: the practical reach (it opens fire this far out) | avoid_nm: an AI route keeps this far | station_nm: a fighter station (TARCAP / escort) keeps this far
 # sweep_nm: a sweep station | scramble_nm: a defender (alert pair) station | gate_km: the DEAD gate / hold orbit keeps this far | gate_reach_nm: the strike gate's
 # cover radius (war.covering_sams) | jsow_keep_nm: a JSOW launch point stays this far | harm_nm: a HARM point of another package stays this far | fighter_nm: a sweep's fight circle stops this far short
+# S153 (2026-11-22): a HARM point also stays harm_nm from its OWN target when the target is an SA-10. SA-10 harm_nm 35 -> 40: in test T1 the Sukhumi S-300 first fired
+# at 64.1 km (34.6 nm) at F-16s at 25,000 ft and killed the SEAD flight that sat on its 35 nm point; the Syria raid test saw 62 to 63 km. 40 nm = that plus about 5 nm (judgment call).
 SYSTEMS = {
-    "SA-10": dict(reach_km=55.0, avoid_nm=35.0, station_nm=45.0, sweep_nm=45.0, scramble_nm=35.0, gate_km=60, gate_reach_nm=35, jsow_keep_nm=40.0, harm_nm=35.0, fighter_nm=31),
+    "SA-10": dict(reach_km=55.0, avoid_nm=35.0, station_nm=45.0, sweep_nm=45.0, scramble_nm=35.0, gate_km=60, gate_reach_nm=35, jsow_keep_nm=40.0, harm_nm=40.0, fighter_nm=31),
     "SA-5":  dict(reach_km=122.0, avoid_nm=71.0, station_nm=81.0, sweep_nm=81.0, scramble_nm=71.0, gate_km=127, gate_reach_nm=71, jsow_keep_nm=76.0, harm_nm=71.0, fighter_nm=67),
 }
 

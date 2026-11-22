@@ -33,9 +33,16 @@ class SeadTiming:
                     bx, by = spot[0], spot[1]
             mshl = tm.package_marshal(st, (bx, by), bearing(bx, by, tgt.x, tgt.y), (tgt.x, tgt.y), p.flights)
             g = make_geometry(bx, by, tgt.x, tgt.y, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
+            from .strike_tasks import own_target_keep
             um = tm.umbrella_site(st, tgt)
+            keep_out = []
+            if um:
+                keep_out.append((um.x, um.y, samtier.get(um.variant, "harm_nm")))
+            own_keep = own_target_keep(tgt)                            # S153: the builder keeps the HARM point off an SA-10 target too
+            if own_keep is not None:
+                keep_out.append(own_keep)
             wps = plan_route(Role.SEAD, (bx, by), g, spec.profile, is_player=False, tanker_xy=None,
-                             keep_out=(um.x, um.y, samtier.get(um.variant, "harm_nm")) if um else None)
+                             keep_out=keep_out or None)
             assign_times(wps, 0.0)
             push, obj = next(w for w in wps if w.name == "PUSH"), objective_wp(wps)
             return obj.eta_s - push.eta_s

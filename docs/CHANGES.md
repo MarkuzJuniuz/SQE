@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.583, SEAD flights stay out of the S-300 they attack; cover on every attack axis
+An AI SEAD flight sent against an SA-10 now fires from 40 nm instead of 35, outside the reach where the S-300 opened fire in testing, and it no longer flies toward a second SA-10 its HARMs cannot reach from there (it used to cross the first one to get to it). In a package whose JSOW flight comes in on its own axis, the TARCAP now covers the most exposed axis and the escort the other, instead of both guarding the HARM shooters. Your own SEAD route is unchanged; a TARCAP or escort you fly moves with the new station.
+
 ## v0.41.582, no cut-off blue company inside red's lines
 New campaigns no longer start with a small blue force inside the first sector red holds. It showed up on the front map as a detached company beside a red column, 20 km past the line, and it would not have survived there. Red's first sector now starts fully red; saved campaigns keep what they have.
 

@@ -16,7 +16,7 @@ from .aircraft import AIRCRAFT
 from .loadouts import JSOW_PER_JET, JDAM_JETS, PEN_PER_JET, gbu_count
 from . import profiles
 from .models import SEAD_AIMS, AssetKind, ObjectiveType, Role
-from .routes import AVOID_NM, FT, AGM88_LAUNCH_NM, JDAM_ALT_FT, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
+from .routes import AVOID_NM, FT, AGM88_AI_REACH_NM, AGM88_LAUNCH_NM, JDAM_ALT_FT, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
 
 JSOW_ATTACK_S = 240           # a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home. Was 120 (v0.41.46; XO's run: releases came 25-60 s before the point). v0.41.362: 240 (judgment call): same marshal-exit lateness as the SLAM-ER (XO's run 2026-11-10 22-33-46, about 95 s late), plus margin
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
@@ -35,6 +35,28 @@ TOR_COVER_KM = 12.0           # a Tor this close to a SEAD/DEAD target, or to th
 SEARCH_RADARS = {"p-19 s-125 sr", "SA-11 Buk SR 9S18M1", "S-300PS 64H6E sr", "1L13 EWR", "55G6 EWR", "RLS_19J6"}      # S90 P3b: + the SA-5's ST-68U "Tin Shield"
 CAS_ZONE_M = 9000              # the AI CAS engage circle around TGT (m): the column stays within about 2 km of the point (CAS_ENEMY_ADVANCE_M, CAS_PATROL_MAX_M); S92 tried 18000 and put it back (a wider circle only adds neighbouring air defence)
 KPH = 1.852
+
+
+def own_target_keep(target):
+    """S153: the keep-out circle (x, y, nm) a SEAD flight's HARM point keeps from its OWN target, or None.
+
+    Only for a live SA-10 target: before this, the HARM point sat 35 nm from it, exactly at its reach, and the T1 test's S-300 killed the SEAD flight there.
+    Not for an SA-5: its harm_nm (71) is beyond what the AI's HARMs reach (AGM88_AI_REACH_NM), so the flight would have to fly in anyway.
+    """
+    if target is None or target.destroyed:
+        return None
+    if target.variant not in tm.UMBRELLA_VARIANTS:
+        return None
+    keep_nm = samtier.get(target.variant, "harm_nm")
+    if keep_nm > AGM88_AI_REACH_NM:
+        return None
+    return (target.x, target.y, keep_nm)
+
+
+def harm_reaches(point_x, point_y, site) -> bool:
+    """S153: True when `site` is within the AI's HARM reach (AGM88_AI_REACH_NM) of the HARM point. A HARM task on a site farther away
+    makes the AI fly toward it, through whatever stands in between (test T1: the Gudauta umbrella pulled the SEAD flight across the Sukhumi S-300)."""
+    return dist(point_x, point_y, site.x, site.y) <= AGM88_AI_REACH_NM * NM
 
 
 def _expend_for(each):
@@ -81,7 +103,7 @@ class StrikeTasks:
             # window (one HARM went at it), lit up a minute later and killed the whole JSOW flight; a second flight still holding HARMs for it covers that.
             um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
             ug_ = self.groups_by_asset.get(um_.id) if um_ else None
-            if ug_ is not None and um_.id != package.objective.target_id:
+            if ug_ is not None and um_.id != package.objective.target_id and harm_reaches(w.x, w.y, um_):      # S153: only an umbrella its HARMs reach from the HARM point
                 ctu = task.ControlledTask(task.AttackGroup(ug_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 ctu.stop_after_time(int(w.eta_s) + 420); wp.tasks.append(ctu)
             # v0.41.22: no clear JSOW axis: the neighbouring sites that still reach the JSOW launch point get this flight's HARMs as well
@@ -94,7 +116,7 @@ class StrikeTasks:
             # the first HARM flight opens on the umbrella (the SA-10 covering this target): it reaches every jet in the wave, so it goes first
             um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
             ug_ = self.groups_by_asset.get(um_.id) if um_ else None
-            if ug_ is not None:
+            if ug_ is not None and harm_reaches(w.x, w.y, um_):      # S153: only an umbrella its HARMs reach from the HARM point
                 ctu = task.ControlledTask(task.AttackGroup(ug_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 ctu.stop_after_time(int(w.eta_s) + 180); wp.tasks.append(ctu)
         ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.ARM, group_attack=True))
@@ -217,9 +239,13 @@ class StrikeTasks:
             return None
         out = []
         if package.objective.type == ObjectiveType.DEAD:
-            um = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
+            target = self.state.assets.get(package.objective.target_id)
+            um = tm.umbrella_site(self.state, target)
             if um:
                 out.append((um.x, um.y, samtier.get(um.variant, "harm_nm")))
+            own_keep = own_target_keep(target)
+            if own_keep is not None:
+                out.append(own_keep)
         out += self._zone_sams(package)
         return out or None
 

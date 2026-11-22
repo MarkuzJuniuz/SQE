@@ -26,7 +26,9 @@ HOLD_EXTEND_MAX_S = 1800      # ...extended at most this much past their own pac
 LRA_BACK_NM = 8               # v0.41.139 (XO 2026-10-27): in a package with a short-range and a long-range fighter flight (TARCAP + escort), the long-range one stands this far behind the short-range one (away from the target)...
 LRA_SIDE_NM = 6               # ...and this far to one side (judgment call: the sweep circles are 25 and 15 nm, so 10 nm between the two sets of jets; the lateral gap is for friendly-fire safety with active missiles in the air, DCS behaviour unverified)
 LRA_SPLIT_MIN_NM = 12         # ...but only when the two stations are closer than this (the SAM-free runs put both on one point; with SAM rings in the way they are already 30 nm apart)
-TARCAP_AXIS_SWINGS = tuple(v for k in range(0, 13) for v in ((0,) if k == 0 else (15 * k, -15 * k)))   # v0.41.119: degrees the TARCAP station may swing off the threat axis when SAM rings block it, smallest first, up to 180 (judgment call: a Sukhumi SA-10 sat on the axis in the 2026-10-22 probes, so the station takes the clear point nearest the axis; the old station is kept when that is no nearer)
+COVER_AXIS_SPLIT_NM = 10.0    # S154: flights whose launch points (or IPs) are farther apart than this are on different axes, each with its own cover. The JSOW flight flies
+                              # 30 deg off the HARM axis (routes.JSOW_AXIS_DEG): at a 30 nm launch range that is about 15 nm apart; two SEAD lanes are 1.5 to 4.5 nm apart. Judgment call
+TARCAP_AXIS_SWINGS =tuple(v for k in range(0, 13) for v in ((0,) if k == 0 else (15 * k, -15 * k)))   # v0.41.119: degrees the TARCAP station may swing off the threat axis when SAM rings block it, smallest first, up to 180 (judgment call: a Sukhumi SA-10 sat on the axis in the 2026-10-22 probes, so the station takes the clear point nearest the axis; the old station is kept when that is no nearer)
 
 
 def axis_station(centre, threat, jsow_xy, near_nm, min_jsow_nm, clear, cur=None):
@@ -165,7 +167,54 @@ class FighterStations:
         """v0.41.546 (S137, XO 2026-11-21: tethered aggression): the points the package's TARCAP / escort protect, round which their engage circle is
         centred: for every ground-attack flight (STRIKE / CAS, a person's own flight too: the mission is the same) its IP, its TGT and the point
         after it (the egress turn). A stand-off flight (SEAD, a JSOW kit, the SLAM point) gives only its launch point: its TGT lies in the SAM belt.
-        Empty when nothing plans (the caller falls back to the launch points)."""
+        Empty when nothing plans (the caller falls back to the launch points). S154: the same points as `_protect_points_by_flight`, in one list."""
+        out = []
+        for points in self._protect_points_by_flight(package, geom):
+            out.extend(points)
+        return out
+
+    def _cover_axes(self, flight_points) -> list:
+        """S154 (test T1 Syria: the JSOW flight flew 30 degrees off the HARM axis, 42 km from the SEAD flights, and the cover guarded only the SEAD side).
+        The package's protect points as axes, the most exposed axis first. `flight_points` is one list of points per flight (`_protect_points_by_flight`).
+        Flights whose first points (launch point or IP) lie within COVER_AXIS_SPLIT_NM of each other share an axis. The most exposed axis is the one whose
+        centre is nearest its own red approach (`_red_approach`). -> a list of point lists; one axis when everything flies together."""
+        axes = []                       # each item: {"first": (x, y) of the axis's first flight, "points": [...]}
+        for points in flight_points:
+            if not points:
+                continue
+            first = points[0]
+            home = None
+            for axis in axes:
+                if dist(first[0], first[1], axis["first"][0], axis["first"][1]) <= COVER_AXIS_SPLIT_NM * NM:
+                    home = axis
+                    break
+            if home is None:
+                axes.append({"first": first, "points": list(points)})
+            else:
+                home["points"].extend(points)
+        scored = []
+        for index, axis in enumerate(axes):
+            total_x = 0.0
+            total_y = 0.0
+            for point in axis["points"]:
+                total_x += point[0]
+                total_y += point[1]
+            centre_x = total_x / len(axis["points"])
+            centre_y = total_y / len(axis["points"])
+            threat = self._red_approach(centre_x, centre_y)
+            if threat is None:
+                distance = float("inf")
+            else:
+                distance = dist(centre_x, centre_y, threat[0], threat[1])
+            scored.append((distance, index, axis["points"]))
+        scored.sort()                   # nearest to red first; the index breaks ties, so the lists themselves are never compared
+        result = []
+        for distance, index, points in scored:
+            result.append(points)
+        return result
+
+    def _protect_points_by_flight(self, package, geom) -> list:
+        """S154: `_protect_points`, one list per ground-attack flight (flights with nothing to protect are left out)."""
         out = []
         for f in package.flights:
             if f.tag or f.role not in (Role.SEAD, Role.STRIKE, Role.CAS):
@@ -179,19 +228,22 @@ class FighterStations:
                 continue
             lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)
             standoff_ = f.role == Role.SEAD or getattr(f, "kit", "") in JSOW_FLIGHT_KITS or any(w.name == "SLAM" for w in wps)
+            flight_points = []
             if standoff_:
                 if lp_ is not None:
-                    out.append((lp_.x, lp_.y))
-                continue
-            ti_ = next((k for k, w in enumerate(wps) if w.name == "TGT"), None)
-            if ti_ is None:
-                if lp_ is not None:
-                    out.append((lp_.x, lp_.y))
-                continue
-            ip_ = next((w for w in wps[:ti_] if w.name == "IP"), None)
-            for w in (ip_, wps[ti_], wps[ti_ + 1] if ti_ + 1 < len(wps) else None):
-                if w is not None:
-                    out.append((w.x, w.y))
+                    flight_points.append((lp_.x, lp_.y))
+            else:
+                ti_ = next((k for k, w in enumerate(wps) if w.name == "TGT"), None)
+                if ti_ is None:
+                    if lp_ is not None:
+                        flight_points.append((lp_.x, lp_.y))
+                else:
+                    ip_ = next((w for w in wps[:ti_] if w.name == "IP"), None)
+                    for w in (ip_, wps[ti_], wps[ti_ + 1] if ti_ + 1 < len(wps) else None):
+                        if w is not None:
+                            flight_points.append((w.x, w.y))
+            if flight_points:
+                out.append(flight_points)
         return out
 
     def _stagger_stations(self, geom, package, tx, ty) -> None:

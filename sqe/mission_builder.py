@@ -3075,7 +3075,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 geom.stand[key] = self._stand_back(geom.stand[key], tx, ty, alt_, geom.egr, STAND_BACK_NM[f.aircraft])      # S45: the station of a package with no JSOW / SLAM flight, moved out
         if not geom.sweep and self.o.fighter_standoff and package.objective.type in (ObjectiveType.STRIKE, ObjectiveType.CAS, ObjectiveType.DEAD):
             done_, pp_ = set(), None
+            # S154: the TARCAP picks first (it takes the most exposed axis), then the escort (the next axis, when the package flies on more than one)
+            cover_flights = []
             for f in package.flights:
+                if f.role == Role.TARCAP:
+                    cover_flights.append(f)
+            for f in package.flights:
+                if f.role != Role.TARCAP:
+                    cover_flights.append(f)
+            axes_ = []
+            axis_turn = 0
+            for f in cover_flights:
                 if f.tag or (f.role == Role.ESCORT and self._escort_lead(package, f) is not None):
                     continue
                 prof = self._flight_profile(f, package)
@@ -3084,10 +3094,23 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     continue
                 done_.add(key)
                 if pp_ is None:
-                    pp_ = self._protect_points(package, geom) or self._launch_pts.get(package.id) or self._launch_points(package, geom)       # S141b: the points the cover protects
+                    by_flight_ = self._protect_points_by_flight(package, geom)
+                    pp_ = []
+                    for points_ in by_flight_:
+                        pp_.extend(points_)
+                    if pp_:
+                        axes_ = self._cover_axes(by_flight_)                    # S154: one list of points per axis, most exposed first
+                    else:
+                        pp_ = self._launch_pts.get(package.id) or self._launch_points(package, geom)       # S141b: the points the cover protects
+                        axes_ = [pp_] if pp_ else []
+                axis_points_ = pp_
+                if axes_:
+                    axis_points_ = axes_[axis_turn % len(axes_)]
+                axis_turn += 1
+                self.__dict__.setdefault("_ow_axis", {})[(package.id, f.role.value)] = (len(axes_), axis_points_)      # probe only: how many axes, and the points this flight covers
                 t = geom.tiers[key]
                 alt_ = t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000)
-                ow_ = self._overwatch_station(package, geom, f, alt_, pp_, OVERWATCH_BACK_MAX_NM + STAND_BACK_NM.get(f.aircraft, 0))
+                ow_ = self._overwatch_station(package, geom, f, alt_, axis_points_, OVERWATCH_BACK_MAX_NM + STAND_BACK_NM.get(f.aircraft, 0))
                 self.__dict__.setdefault("_ow_info", {})[(package.id, f.role.value)] = getattr(self, "_ow_why", "?")          # probe only: "" = overwatch found, else why the old station stayed
                 if ow_ is not None:
                     geom.stand[key] = (ow_[0], ow_[1], [], dist(ow_[0], ow_[1], tx, ty) / NM, profiles.leg_clear(self.state, ow_, geom.egr, alt_))     # S141b: the same tuple shape profiles.station returns
