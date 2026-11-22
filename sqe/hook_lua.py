@@ -17,6 +17,8 @@ local SOUND_YOU = "__SOUND_YOU__"
 local AITEST = __AITEST__            -- all-AI test: nobody sits in a flight, so calls go to everyone
 local CALLS = { __CALLS__ }
 local UFLT = { __UFLT__ }
+local BTGT = { __BTGT__ }            -- S149: unit name -> the target point of a striker (bomb) flight; a bomb leaving farther than BOMB_FAR_M from it is a jettison, not a release
+local BOMB_FAR_M = __BOMBFAR__ * 1000
 local ENEMYAIR = { __ENEMYAIR__ }
 -- v0.41.217: declared up here, before the event handler that reads them (a local further down the file is invisible to it: "attempt to index global DMGL")
 local AWUNIT = "__AWUNIT__"
@@ -71,7 +73,8 @@ local function shotsJson()
     local more = ""
     if k.km then more = string.format(',"km":%.1f,"alt":%d', k.km, math.floor(k.alt or 0)) end        -- shooter-to-target range (km) and shooter altitude (m) at launch
     if k.tx and k.tz then more = more .. string.format(',"tx":%d,"tz":%d', math.floor(k.tx), math.floor(k.tz)) end        -- the target's map position: its last known spot
-    if k.left then more = more .. string.format(',"left":%d', k.left) end        -- v0.41.122: air-to-air missiles still on the shooter
+    if k.left then more = more .. string.format(',"left":%d', k.left) end
+    if k.rk then more = more .. string.format(',"rk":%.1f', k.rk) end        -- S149: a bomb's distance from its flight's target point (km)        -- v0.41.122: air-to-air missiles still on the shooter
     o[#o + 1] = string.format('{"t":%d,"ev":"%s","by":"%s","bt":"%s","w":"%s","tg":"%s","tt":"%s"%s}', k.t, k.ev, esc(k.by), esc(k.bt), esc(k.w), esc(k.tg), esc(k.tt), more)
   end
   return "[" .. table.concat(o, ",") .. "]"
@@ -549,10 +552,19 @@ function H:onEvent(e)
     pcall(jamCheck, e, n)
     pcall(splashTrack, e, n)
     local lab = UFLT[n]
-    if lab and e.weapon then
-      local call = shotCall(e)
-      if call and throttle("shot:" .. lab .. call, 6) then say(lab .. ": " .. call .. ".") end
+    local call = (lab and e.weapon) and shotCall(e) or nil
+    local bt = BTGT[n]
+    if bt and e.weapon and e.initiator then       -- S149: how far from its target point the bomb left (km, kept in the shot log); far = a jettison (a jet jumped on its run dumps its load): no "Bombs away"
+      local okp, sp = pcall(function() return e.initiator:getPoint() end)
+      local okd, wd = pcall(function() return e.weapon:getDesc() end)
+      if okp and sp and okd and wd and wd.category == 3 then
+        local dm = math.sqrt((sp.x - bt.x) ^ 2 + (sp.z - bt.z) ^ 2)
+        local last = shots[#shots]
+        if last and last.ev == "shot" and last.by == n then last.rk = dm / 1000 end
+        if dm > BOMB_FAR_M then call = nil end
+      end
     end
+    if lab and call and throttle("shot:" .. lab .. call, 6) then say(lab .. ": " .. call .. ".") end
   elseif id == world.event.S_EVENT_HIT then
     logShot("hit", e, n)
     local tn = nameOf(e.target)

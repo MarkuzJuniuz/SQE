@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.580, no "Bombs away" for a jettison
+An AI striker that dumps its bombs far from its target (jumped by red on its run) no longer calls "Bombs away": the call needs the release to be within 20 km of the flight's target point. The state file's shot log now records how far from the target each bomb left.
+
 ## v0.41.579, two text fixes
 A saved campaign planned before v0.41.435 shows its runway strike as "OCA: Runway Strike, <field>" in the briefing, kneeboard, debrief and history, not "Crater the runway at <field>". A great sortie's closing line no longer claims the enemy will feel it "for days" ("That one will hurt them.").
 
