@@ -40,6 +40,7 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   extra_sams [{id, site, x/y or near+bearing+dist_m, levels, ...}] -> scenario.new_campaign (fixed extra SAM sites; default none)
 #   raid_bearing_deg [lo, hi]             -> bombers.raid_bearing_range()             (default (20, 40): the bearing from the carrier the Tu-22M3 raid arrives on; Syria 200 to 220, out of the open sea)
 #   max_raid {level: n}                   -> bombers.max_raid()                       (default bombers.MAX_RAID {2: 8, 3: 16}: the full Tu-22M3 carrier raid; Syria has none since B1: its 20-jet wing fields the 16)
+#   blue_fields[].patriot bool             -> sams.site_keys()                          (S143: a divert field still gets its Patriot; Syria: Hatay)
 #   bomber_bases [red field id, ...]      -> scenario.new_campaign / bombers.bomber_base_ids()   (B1: the Tu-22M3 wing's fields, the first is the lead: the level's `bomber_wing` and `bomber_escort_wing` are split between them; default [bomber_base] (the Caucasus: Mozdok). Syria: Damascus and Bassel Al-Assad; each field's Tu-22M3 share is capped at its DCS stand count, the overflow goes to the next field)
 #   land_tu {level: n}                    -> bombers.land_tu()                        (B1: Tu-22M3 in one land strike; default bombers.LAND_TU 2; Syria L3 4)
 #   raid_from_base J                      -> bombers.raid_bearing()                   (default none: the raid's bearing is drawn in raid_bearing_deg; J degrees = it comes along the line from the carrier through the bomber field, plus or minus J: Syria 4)
@@ -197,6 +198,9 @@ def _check_hooks(d: dict, src) -> None:
         levels_of("max_raid", d["max_raid"])
         if not all(isinstance(n_, int) and not isinstance(n_, bool) and 4 <= n_ <= 40 for n_ in d["max_raid"].values()):
             bad("max_raid values must be whole numbers of bombers, 4 to 40")
+    for f_ in d.get("blue_fields", []):
+        if "patriot" in f_ and not isinstance(f_["patriot"], bool):
+            bad(f"blue field {f_.get('id')!r}: patriot must be true or false (a divert field that still gets its Patriot)")
     if "bomber_bases" in d:
         ids_ = [f["id"] for f in d.get("red_fields", [])]
         if (not isinstance(d["bomber_bases"], list) or not d["bomber_bases"] or len(set(d["bomber_bases"])) != len(d["bomber_bases"])

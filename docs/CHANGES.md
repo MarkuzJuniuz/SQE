@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.572, Hatay gets its Patriot
+Syria's Hatay, red's objective and 57 nm from Incirlik, is a recovery field, and recovery fields had HAWK and AAA only. It now has a Patriot battery too, in new campaigns and in saved Syria campaigns (the site appears when you load). Red's raids bend round its 40 nm ring and its SEAD packages can target it. The Caucasus recovery field is unchanged.
+
 ## v0.41.571, Syria's bombers move from Tiyas to Bassel Al-Assad
 DCS has no stand at Tiyas that fits a Tu-22M3, so the wing's second half only ever existed on paper and its raiders started from the runway. In new Syria campaigns the Tu-22M3 wing is based at Damascus and Bassel Al-Assad, and a field never holds more bombers than it has stands for: at Level 3, 14 Tu-22M3 at Damascus and 6 at Bassel Al-Assad, 6 Su-27 escorts at each. Tiyas stays an ordinary red field with its SA-5. Saved Syria campaigns keep the wings they have; the Caucasus is unchanged.
 

@@ -159,7 +159,8 @@
    "id": "hatay",
    "name": "Hatay",
    "airport": "Hatay",
-   "divert": true
+   "divert": true,
+   "patriot": true
   }
  ],
  "support_base": "paphos",
