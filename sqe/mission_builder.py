@@ -535,6 +535,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if package.objective.type == ObjectiveType.FLEET_DEFENSE and pf.role == Role.CAP and (package.extra or {}).get("setpiece") and not pf.tag:
             self._raid_cap_station(package, geom, pw)               # v0.41.256: your racetrack is walked back clear of the SAMs like your wingmen's, and the card shows it
         self._add_cap2(pkg_p, pw, pspec, geom_p)               # Phase 8: the card shows CAP1 and CAP2, the same points the flight is built with
+        pw = self._leg_rules(pkg_p, pf, pw, pspec, False, geom_p)          # S140c: and the turn points round the rings (the same legs the group is built with)
         dep_s = launch_s + 60 + dist(pbase.x, pbase.y, pw[0].x, pw[0].y) / (pspec.profile.depart_kts * 0.514444) * 1.12     # roll + climb-out to the first point (DEP off a carrier, else the marshal)
         self._dep_s = dep_s
         assign_times(pw, dep_s)
@@ -763,7 +764,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                    "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "push": m_["push"], "tot": m_["tot"], "rtb": m_["rtb"], "flights": m_["flights"],
                                "status": ("already struck, heading home; its target is in ruins" if m_.get("struck") else "airborne when you start" if m_.get("underway") else "")} for m_ in merged if not m_.get("unseen")],
                    "intel": [l_.replace(" are within reach of the target area and may be sent to reinforce.", " may reinforce.").replace(" are on cockpit alert and may launch to help.", " on alert, may launch.") for l_ in self._intel],
-                   "zulu_note": self._zulu_note(), "msa": relief.msa_ft(polyline),
+                   "zulu_note": self._zulu_note(), "msa": relief.msa_ft(polyline), "detour_line": self._detour_line(pw),
+                   "avd_table": [{"n": f"AVD {k}", "leg": leg_, "pos": latlon(x_, y_, self.t)} for k, (leg_, x_, y_) in enumerate((self._f14ab or {}).get("avd", []), 1)],
                    "nav": [ln_ for ln_ in (self._nav_row("HOME", pbase), self._nav_row("DIVERT", div)) if ln_]}
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
@@ -1630,7 +1632,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     # v0.41.280: be on the intercept point RAID_MEET_LEAD_S before the bombers get there (their push + the flight from the marshal)
                     meet_ = rc_["t_leave"] + dist(rc_["mshl"][0], rc_["mshl"][1], ip_["ip"][0], ip_["ip"][1]) / RAID_MPS - RAID_MEET_LEAD_S
         self._add_cap2(package, wps, spec, geom)          # Phase 8: before the terrain check and the times, so both count it
-        if not f.tag and (not f.is_player or o.player_is_ai):
+        if not f.tag:
             wps = self._leg_rules(package, f, wps, spec, shaped_, geom)          # S140b1: the legs the plan did not route (a scramble CAP's way out, what follows a station)
         if not f.is_player or o.player_is_ai:
             terrain_clear(wps)                          # an AI flight climbs on its own schedule: its altitudes must clear the ridges on each leg
@@ -2402,15 +2404,24 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 self._clear_cap_orbit(package, wps, k1, geom)          # S140b2: the station's two ends out of the rings first
                 bs_ = self.state.bases[f.base_id]
                 wps = avoid_circles(wps[:k1 + 1], rings, mp - (len(wps) - k1 - 1), 1, edge=True, start=(bs_.x, bs_.y)) + wps[k1 + 1:]
-            return wps
+            return self._person_home(f, wps, rings, mp)
         if f.role not in (Role.TARCAP, Role.ESCORT, Role.SWEEP):
-            return wps
+            return self._person_home(f, wps, rings, mp)
         ko = max((i for i, w in enumerate(wps) if w.orbit or w.name == "CAP2"), default=None)
         if ko is None and self._escort_lead(package, f) is not None:
             ko = next((i for i, w in enumerate(wps) if w.name == "PUSH"), None)
         if ko is not None and ko + 1 < len(wps):
             avoid_circles(wps, rings, mp, ko + 1, edge=True)
-        return wps
+        return self._person_home(f, wps, rings, mp)
+
+    def _person_home(self, f, wps, rings, mp):
+        """S140c: a person's way home (his last route point -> the field) round the live rings, as plain AVD points in his route (card rows, group waypoints) before the landing point the builder adds; an AI
+        flight's way home is built into its group (`_home_avd`). The leg ends at the field itself: a field inside a ring is entered by the ring's edge (`safe_path_edge`). Nothing is tasked."""
+        if not (f.is_player and not self.o.player_is_ai) or not wps:
+            return wps
+        base = self.state.bases[f.base_id]
+        home_ = Wpt("HOME", base.x, base.y, wps[-1].alt_ft, wps[-1].speed_kts)
+        return avoid_circles(wps + [home_], rings, mp - 4, len(wps), edge=True)[:-1]          # the landing point, DIVERT, TKR and BULLS still follow
 
     def _home_leg(self, f, g, base, wps, idx, hold_end, stop, special, package=None):
         """The way home: the recovery entry point, landing or deck recovery."""
@@ -2595,6 +2606,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.add_waypoint(pt(x, y), a, (spec.profile.aar_kts if name == "TKR" else 300) * KPH, name)
 
     # ---- S103d: the plain F-14B player's waypoint scheme --------------------------------------------------------------------
+    @staticmethod
+    def _detour_line(pw) -> str:
+        """S140c (plan 2.6, last bullet): the card's one line about the turn points round the SAM rings: how many, and what they add against the same route without them. "" when the route has none or they add under 1 nm."""
+        straight = [w for w in pw if w.name != "AVD"]
+        n = len(pw) - len(straight)
+        if not n:
+            return ""
+        nm = (sum(dist(a.x, a.y, b.x, b.y) for a, b in zip(pw, pw[1:])) - sum(dist(a.x, a.y, b.x, b.y) for a, b in zip(straight, straight[1:]))) / NM
+        s = sum(leg_seconds(a, b) for a, b in zip(pw, pw[1:])) - sum(leg_seconds(a, b) for a, b in zip(straight, straight[1:]))
+        return f"Round SAM rings: {n} AVD point{'s' if n > 1 else ''}, +{nm:.0f} nm, +{s / 60:.0f} min vs straight." if nm >= 1 else ""
+
     def _f14ab_player(self, f) -> bool:
         """Your own flight in the plain F-14B (not the all-AI test, not the B(U), whose X-name scheme stays): the jet has three numbered waypoints."""
         return bool(f is not None and f.is_player and not self.o.player_is_ai and f.aircraft == "F-14B")
@@ -2656,6 +2678,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.add_nav_target_point(self._pt(geom.tx, geom.ty), "ST")            # XO 2026-11-21: a station fighter's ST is the package's ground target, a row just above HA
             extra.append(("ST", geom.tx, geom.ty))
         self._f14ab = {"keep": [(route[i].name, route[i].x, route[i].y) for i in keep], "ntp": ntp, "extra": extra}
+        avd_ = []                                            # S140c: the turn points the three-waypoint jet cannot hold: the card's "ROUTE POINTS (enter by hand)" table, in route order
+        for i, w in enumerate(route):
+            if w.name == "AVD" and i not in keep:
+                p_ = next((route[k].name for k in range(i - 1, -1, -1) if route[k].name != "AVD"), "TAKEOFF")
+                n_ = next((route[k].name for k in range(i + 1, len(route)) if route[k].name != "AVD"), "HB")
+                avd_.append((f"{p_} -> {n_}", w.x, w.y))
+        self._f14ab["avd"] = avd_
 
     # ---- Link 16 / SADL: the package flies as one network ------------------------------------------------------------------
     def _datalinks(self, package) -> list:
