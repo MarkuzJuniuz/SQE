@@ -203,7 +203,7 @@ def stagger(package, role) -> int:
 from .packages import Package, folded_n_def
 from .options import MissionOptions
 from .radio import RadioCfg, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import cap2_point, jsow_launch_xy, SLAM_LAUNCH_NM, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, avoid_circles, AGM88_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
+from .routes import cap2_point, jsow_launch_xy, SLAM_LAUNCH_NM, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, avoid_circles, safe_path_edge, AGM88_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, hold_leg_s, hold_next, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
 from .state import CampaignState
 
 F = VehicleGroup.Formation
@@ -383,6 +383,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
         self._f14ab = None                                              # S103d: the plain F-14B player's waypoint scheme once built: {"keep": [(name, x, y)], "ntp": [(code, name, x, y)], "extra": [(code, x, y)]} (kneeboard labels)
         self._route_end = {}                                            # v0.41.223: group name -> where its route ended before the SCRUB point was added (the home leg is built from there)
+        self._home_via = {}                                             # S140b1: group name -> (index of its route end in g.points, [(x, y)] the AVD points between it and its SCRUB point), for _home_floor
         self._armor_comps = {}                                          # S92b: asset id -> its rolled armor composition (see _armor_site_comp)
         self._cas_stock = {}                                            # S92: package id -> True when the AI CAS flight keeps the stock Maverick + cluster kit and attacks the column's air defence unit by unit
         self._cas_floors = {}                                           # S31a: package id -> the AI CAS attack floor in ft (0 = none)
@@ -539,7 +540,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         assign_times(pw, dep_s)
         mshl = next((w for w in pw if w.action in ("HOLD", "CAPORBIT")), pw[-1])
         k = pw.index(mshl)
-        leg_m = leg_seconds(mshl, pw[k + 1]) if (mshl.action == "HOLD" and k + 1 < len(pw)) else 0.0
+        leg_m = hold_leg_s(pw, k) if (mshl.action == "HOLD" and k + 1 < len(pw)) else 0.0        # S140b1: to the PUSH, turn points between included
         player_push = math.floor((mshl.eta_s + (0 if pf.role == Role.CAP else o.marshal_slack_min * 60) + leg_m) / 60.0 + 0.5) * 60.0     # S77 (XO 2026-11-14): nearest minute, not up, so a 1-minute hold stays about a minute (was ceil: 1 to 2)
         player_push = max(player_push, math.ceil((dep_s + 120) / 60.0) * 60.0)
         leave_s = hold_leave_s(pw, player_push)
@@ -1371,7 +1372,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         gate = self._dead_gate(package, f, g, wps, first, stw, tot_s, base)
         self._scrub_point(package, f, g, base, wps, tot_s)
         self._cas_done(package, f, g, armor, ai_a2g)
-        self._home_leg(f, g, base, wps, idx, hold_end, stop, special)
+        self._home_leg(f, g, base, wps, idx, hold_end, stop, special, package)
         if self._f14ab_player(f):
             self._f14ab_scheme(package, f, g, wps, first, geom, gate)
         if gate is not None and gate.get("ai") and gate.get("dead"):
@@ -1604,7 +1605,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          rel=self._rel_kind(package, f))
         if self._escort_lead(package, f) is not None:
             # S138a: the escort flies with the strikers: no station (the Escort task replaces it), out through the package egress point
-            wps = [w for w in wps if w.name not in ("CAP1", "CAP2")]
+            pi_ = next((i for i, w in enumerate(wps) if w.name == "PUSH"), None)
+            wps = [w for i, w in enumerate(wps) if w.name not in ("CAP1", "CAP2") and not (w.name == "AVD" and pi_ is not None and i > pi_)]      # S140b1: the turn points planned for the station leg go with it; _leg_rules routes PUSH -> EGR
             if not any(w.name == "EGR" for w in wps):
                 pr_ = self._flight_profile(f, package)
                 wps.append(Wpt("EGR", *geom.egr, pr_.alt_ft.get(f.role, 20000), pr_.egress_kts, "Exit with the package"))
@@ -1627,11 +1629,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if rc_ and rc_.get("t_leave") is not None and ip_ is not None and not RAID_F14_HOLD:
                     # v0.41.280: be on the intercept point RAID_MEET_LEAD_S before the bombers get there (their push + the flight from the marshal)
                     meet_ = rc_["t_leave"] + dist(rc_["mshl"][0], rc_["mshl"][1], ip_["ip"][0], ip_["ip"][1]) / RAID_MPS - RAID_MEET_LEAD_S
-            # v0.41.28: a raid scramble's way out to its station bends round red SAMs like a strike's (the orbit leg stays as it is)
-            k1_ = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
-            if k1_ and not shaped_:                                   # (an F-14's crossing leg goes toward the SAMs on purpose, once the gate opens)
-                wps = avoid_circles(wps[:k1_ + 1], self._zone_sams(package, True), spec.profile.max_points - (len(wps) - k1_ - 1), 1) + wps[k1_ + 1:]
         self._add_cap2(package, wps, spec, geom)          # Phase 8: before the terrain check and the times, so both count it
+        if not f.tag and (not f.is_player or o.player_is_ai):
+            wps = self._leg_rules(package, f, wps, spec, shaped_)          # S140b1: the legs the plan did not route (a scramble CAP's way out, what follows a station)
         if not f.is_player or o.player_is_ai:
             terrain_clear(wps)                          # an AI flight climbs on its own schedule: its altitudes must clear the ridges on each leg
         if f.is_player:
@@ -1641,7 +1641,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             assign_times(wps, 0.0)                      # natural pace from the spawn
             push_s, sead_hold_ = self._sead_window(package, f, wps, push_s)          # S38
             hold_i = next((i for i, w in enumerate(wps) if w.action == "HOLD"), None)
-            nat = wps[hold_i + 1].eta_s if hold_i is not None else next((w.eta_s for w in wps if w.action == "CAPORBIT"), next(w for w in reversed(wps) if w.name != "CAP2").eta_s)      # Phase 8: a sweep (no hold) is timed to its station, not to CAP2 behind it
+            nat = wps[hold_next(wps, hold_i)].eta_s if hold_i is not None else next((w.eta_s for w in wps if w.action == "CAPORBIT"), next(w for w in reversed(wps) if w.name != "CAP2").eta_s)      # Phase 8: a sweep (no hold) is timed to its station, not to CAP2 behind it; S140b1: a hold is timed to the PUSH after it (turn points can sit between)
             act_raw = int(push_s - nat - (120 if hold_i is not None else 60))      # arrive ~2 min early, hold, push on time
             if shaped_ and not RAID_F14_HOLD:
                 act_raw = int(meet_ - nat) if meet_ is not None else -RAID_HEAD_S     # v0.41.280: timed to the raid; without a raid clock the v0.41.278 head start (already airborne)
@@ -1719,7 +1719,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             # S86: never later than the old time; earlier when the strikers cross the covering site's reach before the HARMs would have landed. Floor: the flight's own spawn (no push before it can be there)
             early = cross - SEAD_REACH_MARGIN_S - SEAD_IMPACT_S - dsw
             hold_i = next((i for i, w in enumerate(wps) if w.action == "HOLD"), None)
-            nat = wps[hold_i + 1].eta_s if hold_i is not None else next((w.eta_s for w in wps if w.action == "CAPORBIT"), next(w for w in reversed(wps) if w.name != "CAP2").eta_s)      # as _flight_route computes it
+            nat = wps[hold_next(wps, hold_i)].eta_s if hold_i is not None else next((w.eta_s for w in wps if w.action == "CAPORBIT"), next(w for w in reversed(wps) if w.name != "CAP2").eta_s)      # as _flight_route computes it
             floor = nat + (120 if hold_i is not None else 60)                                       # act_raw >= 0
             if early < push_s:
                 push_s = min(push_s, max(early, floor))
@@ -2279,6 +2279,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 lw = wps[-1]
                 bx, by = offset(base.x, base.y, bearing(base.x, base.y, lw.x, lw.y), SCRUB_POINT_NM * NM)
                 alt_ = home_leg_ft((lw.x, lw.y), (bx, by), min(lw.alt_ft, 9000))      # clears the ground between the route's last point and here
+                ke_ = len(g.points) - 1
+                avd_, need_ = self._home_avd(package, f, g, (lw.x, lw.y), (bx, by), lw.alt_ft, alt_, 320 * KPH, 6)      # S140b1: round the live rings (this point, SCRUB, the floor point, RCV, the landing and two spare must still fit)
+                if avd_:
+                    alt_ = max(alt_, need_)
+                    self._home_via[g.name] = (ke_, avd_)
                 g.add_waypoint(self._pt(bx, by), alt_ * FT, 320 * KPH, "SCRUB")
                 to = len(g.points)
         self._scrub.append({"pkg": package.id, "grp": g.name, "k": kind, "units": [u.name for u in g.units], "to": to, "ai": ai, "you": bool(f.is_player),
@@ -2299,7 +2304,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return rcv_ft
         pts_ = g.points
         scr_ = pts_[-1] if getattr(pts_[-1], "name", "") == "SCRUB" else None
-        path = [(a_.x, a_.y)] + ([(scr_.position.x, scr_.position.y)] if scr_ is not None else []) + [rcv_xy]
+        ke_, avd_ = self._home_via.get(g.name, (None, []))                    # S140b1: the turn points between the route end and the SCRUB point are part of the way home
+        path = [(a_.x, a_.y)] + (list(avd_) if scr_ is not None else []) + ([(scr_.position.x, scr_.position.y)] if scr_ is not None else []) + [rcv_xy]
         sites = [a for a in self.state.assets.values() if a.kind == AssetKind.SAM and a.variant in HOME_SAM_VARIANTS and not a.destroyed and not a.suppressed]
         rings = [(a.x, a.y, (tm.RANGE_NM.get(a.variant, 0) + HOME_RING_MARGIN_NM) * NM) for a in sites]
         ex = home_floor_exit(path, rings)
@@ -2310,8 +2316,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         end_ft = wps[-1].alt_ft
         alt_ = end_ft if ceil_ + 1000 <= end_ft < floor_ else floor_          # a flight already clear of the ceiling does not climb; one under the floor never dives below it
         total_ = sum(math.hypot(path[i + 1][0] - path[i][0], path[i + 1][1] - path[i][1]) for i in range(len(path) - 1))
-        seg_ = ex[1] if scr_ is not None else 0                               # 0 = route end -> SCRUB (-> RCV when there is no SCRUB), 1 = SCRUB -> RCV
-        if scr_ is not None and seg_ == 1:
+        na_ = len(avd_) if scr_ is not None else 0
+        seg_ = ex[1] if scr_ is not None else 0                               # <= na_: route end -> (turn points ->) SCRUB (-> RCV when there is no SCRUB); na_ + 1: SCRUB -> RCV
+        if scr_ is not None and seg_ == na_ + 1:
             scr_.alt = max(scr_.alt, alt_ * FT)                                # the ring reaches past the SCRUB point: that point stays high too
         room_ = len(pts_) + 1 + 1 + 1 + 2 <= AIRCRAFT[f.aircraft].profile.max_points          # this point, RCV, the landing and the builder's spare
         if ex[0] >= total_ - 100:
@@ -2320,8 +2327,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return rcv_ft
         spd_ = scr_.speed if scr_ is not None else 320 * KPH
         g.add_waypoint(self._pt(*ex[2]), alt_ * FT, spd_, HOME_FLOOR_NAME)
-        if scr_ is not None and seg_ == 0:
-            pts_.insert(len(pts_) - 2, pts_.pop())                            # in front of the SCRUB point (it moved one place down: the hook's "to" follows)
+        if scr_ is not None and seg_ <= na_:
+            pts_.insert(len(pts_) - 2 if not na_ else ke_ + seg_ + 1, pts_.pop())      # in front of the vertex the exit leg ends at (the SCRUB point when there are no turn points; it moved one place down: the hook's "to" follows)
             for r_ in reversed(self._scrub):
                 if r_["grp"] == g.name:
                     if r_["to"]:
@@ -2329,7 +2336,56 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     break
         return rcv_ft
 
-    def _home_leg(self, f, g, base, wps, idx, hold_end, stop, special):
+    def _home_avd(self, package, f, g, a, b, a_alt_ft, b_alt_ft, spd, reserve):
+        """S140b1 (plan 2.2): the turn points of the leg a -> b of an AI flight's way home (route end -> SCRUB -> RCV, or the carrier RCV) round every live SAM ring (`routes.safe_path_edge`: a base near
+        the front takes its ring by the edge). They go onto `g` now, at height max(a_alt, b_alt, what the ground along the new legs needs) (ft), speed `spd`, name AVD, with no time and no lock
+        (`_free_locked_speeds` does the rest, design notes section 8). `reserve` = the points still to be added after these. A person's own flight, a leg with no way round and a flight with no room
+        keep the straight leg. -> ([(x, y)] added, the ground clearance in ft the leg's end point also needs)"""
+        o = self.o
+        if package is None or (f.is_player and not o.player_is_ai):
+            return [], 0
+        rings = self._zone_sams(package, True)
+        if not rings:
+            return [], 0
+        pts = safe_path_edge(a, b, rings)
+        if not pts:
+            if pts is None:
+                self.__dict__.setdefault("_leg_unrouted", []).append((f.callsign, "home"))          # probe only: no way round
+            return [], 0
+        if len(g.points) + len(pts) + reserve > AIRCRAFT[f.aircraft].profile.max_points:
+            self.__dict__.setdefault("_leg_unrouted", []).append((f.callsign, "home-room"))
+            return [], 0
+        poly = [tuple(a)] + pts + [tuple(b)]
+        need = max(home_leg_ft(poly[i], poly[i + 1], b_alt_ft) for i in range(len(poly) - 1))
+        alt = max(a_alt_ft, b_alt_ft, need)
+        for x, y in pts:
+            g.add_waypoint(self._pt(x, y), alt * FT, spd, "AVD")
+        return pts, need
+
+    def _leg_rules(self, package, f, wps, spec, shaped=False):
+        """S140b1 (plan 2.2): the legs of an AI package flight that `plan_route` could not route, once the route is final (the scramble CAP's station is moved, CAP2 is in): a scramble CAP's way out to its station
+        (the orbit leg CAP1 -> CAP2 stays as it is; an F-14's crossing leg goes toward the SAMs on purpose, once the gate opens), and every leg after a TARCAP / escort / sweep orbit (CAP2, else CAP1 -> EGR),
+        or from PUSH on for an escort that flies with its strikers. Every live ring (`_zone_sams(package, True)`), a leg that starts or ends inside one by its edge. -> wps"""
+        rings = self._zone_sams(package, True)
+        if not rings:
+            return wps
+        mp = spec.profile.max_points
+        if f.role == Role.CAP:
+            k1 = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
+            if k1 is not None and not shaped:
+                bs_ = self.state.bases[f.base_id]
+                wps = avoid_circles(wps[:k1 + 1], rings, mp - (len(wps) - k1 - 1), 1, edge=True, start=(bs_.x, bs_.y)) + wps[k1 + 1:]
+            return wps
+        if f.role not in (Role.TARCAP, Role.ESCORT, Role.SWEEP):
+            return wps
+        ko = max((i for i, w in enumerate(wps) if w.orbit or w.name == "CAP2"), default=None)
+        if ko is None and self._escort_lead(package, f) is not None:
+            ko = next((i for i, w in enumerate(wps) if w.name == "PUSH"), None)
+        if ko is not None and ko + 1 < len(wps):
+            avoid_circles(wps, rings, mp, ko + 1, edge=True)
+        return wps
+
+    def _home_leg(self, f, g, base, wps, idx, hold_end, stop, special, package=None):
         """The way home: the recovery entry point, landing or deck recovery."""
         o = self.o
         pt = self._pt
@@ -2342,6 +2398,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 rx_, ry_ = offset(base.x, base.y, rb_, RCV_NM * NM)
                 rcv_alt_ = home_leg_ft((lp_.x, lp_.y), (rx_, ry_), 3000 + 1000 * (idx % 4))      # v0.41.49: the home leg clears the ridges (was a fixed 3,000-6,000 ft)
                 rcv_alt_ = self._home_floor(f, g, wps, (rx_, ry_), rcv_alt_)      # S33: an AI fighter stays high over short-range air defence on the way home
+                pp_ = g.points[-1]
+                _, need_ = self._home_avd(package, f, g, (pp_.position.x, pp_.position.y), (rx_, ry_), pp_.alt / FT, rcv_alt_, 300 * KPH, 4)      # S140b1: the last leg home round the live rings (RCV, the landing and two spare must still fit)
+                rcv_alt_ = max(rcv_alt_, need_)
                 rcvp_ = g.add_waypoint(pt(rx_, ry_), rcv_alt_ * FT, 300 * KPH, "RCV")
                 if self._skip_landing(base):          # v0.41.18: recovered at its entry point instead of landing (setting "AI landings: airfields")
                     rcvp_.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
@@ -2354,7 +2413,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             lp_ = self._route_end.get(g.name) or g.points[-1].position
             if dist(base.x, base.y, lp_.x, lp_.y) > (CV_RCV_NM + 10) * NM:          # else it is already close: no extra point
                 cx_, cy_ = offset(base.x, base.y, bearing(base.x, base.y, lp_.x, lp_.y), CV_RCV_NM * NM)
-                g.add_waypoint(pt(cx_, cy_), self._home_floor(f, g, wps, (cx_, cy_), CV_RCV_FT) * FT, 300 * KPH, "RCV")      # S33: the floor over short-range air defence
+                cv_ft_ = self._home_floor(f, g, wps, (cx_, cy_), CV_RCV_FT)
+                pp_ = g.points[-1]
+                _, need_ = self._home_avd(package, f, g, (pp_.position.x, pp_.position.y), (cx_, cy_), pp_.alt / FT, cv_ft_, 300 * KPH, 4)      # S140b1: round the live rings
+                g.add_waypoint(pt(cx_, cy_), max(cv_ft_, need_) * FT, 300 * KPH, "RCV")      # S33: the floor over short-range air defence
         if base.kind == BaseKind.AIRFIELD:
             pass
         elif (not f.is_player or o.player_is_ai) and self._skip_landing(base):
@@ -2727,6 +2789,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         um_ = tm.umbrella_site(self.state, tt_) if tt_ is not None else None             # the one the HARMs go for: the flights must come to it
         # v0.41.20: every live medium / long-range SAM (SA-2/3/6/11/10), each by its own reach (AVOID_NM). A site whose circle holds the target
         # itself is the one this package comes for (its DEAD, or the site a CAS escort's HARMs keep quiet): no bending round that one
+        geom.all_rings = list(self._zone_sams(package, True))                              # S140b1: every live ring, for the transit, fighter and home legs (the target's own included)
         geom.sa10_avoid = [(a.x, a.y, AVOID_NM[a.variant]) for a in self.state.assets.values()
                            if a.kind == AssetKind.SAM and a.variant in AVOID_NM and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)
                            and a.id not in (tid_, getattr(um_, "id", None)) and dist(a.x, a.y, tx, ty) <= 150 * NM

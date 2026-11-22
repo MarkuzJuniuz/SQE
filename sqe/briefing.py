@@ -5,7 +5,7 @@ from . import narrative, credit_line
 from .aircraft import AIRCRAFT
 from .words import chance_word
 from .models import AssetKind
-from .routes import dist, NM
+from .routes import dist, NM, ring_nm
 
 _SAM_NAME = {"SA-8": "SA-8 Gecko", "AAA": "AAA", "MANPAD": "MANPADS", "SA-2": "SA-2 Guideline", "SA-3": "SA-3 Goa", "SA-6": "SA-6 Gainful",
              "SA-11": "SA-11 Gadfly", "SA-10": "SA-10 Grumble", "SA-15": "SA-15 Gauntlet", "SA-19": "SA-19 Grison",
@@ -21,8 +21,8 @@ def threat_lines(state, tx, ty) -> list:
         d = dist(a.x, a.y, tx, ty) / NM
         if d <= 60:
             nm = _SAM_NAME.get(a.variant, "Early-warning radar")
-            rng = RANGE_NM.get(a.variant)
-            out.append((d, f"{nm}{f' (~{rng} nm)' if rng else ''}, {d:.0f} nm from target"))
+            rng = ring_nm(a.variant)          # S140b1: the ring the routes keep out of (the map draws the same)
+            out.append((d, f"{nm}{f' (~{rng:g} nm)' if rng else ''}, {d:.0f} nm from target"))
     out.sort()
     return [t for _, t in out[:8]]
 
