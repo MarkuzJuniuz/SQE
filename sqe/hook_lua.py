@@ -1124,7 +1124,21 @@ local function siteBlind(id)
   return true
 end
 local function gateBlind(gs)
-  return siteBlind(gs.site)      -- the target's own radars only: a Tor still up on the run-in no longer holds the strike (v0.39.22); the go call names it
+  -- the target's own radars, and (S86b) the radars of the sites that cover it (gt.more: the sites the package's SEAD is tasked on; an airfield has no radars of its own);
+  -- a Tor still up on the run-in (gt.also) no longer holds the strike (v0.39.22); the go call names it
+  if not siteBlind(gs.site) then return false end
+  for _, gt in ipairs(gs.gates) do
+    for _, a in ipairs(gt.more or {}) do if not siteBlind(a) then return false end end
+  end
+  return true
+end
+local function radarLabel(gs, fallback)
+  for _, gt in ipairs(gs.gates) do
+    for _, a in ipairs(gt.more or {}) do
+      if not siteBlind(a) then for _, x in ipairs(SITES) do if x.id == a then return x.label or a end end end
+    end
+  end
+  return fallback
 end
 local function torsUp(gs)
   for _, gt in ipairs(gs.gates) do
@@ -1143,7 +1157,7 @@ local function breakOff(gs, why)
   if not aborted[gs.site] then
     aborted[gs.site] = true
     if why == "air-abort" then say(whoOf(s) .. ": abort, abort. " .. labelOf(s, gs) .. ", red fighters still up, flight break off.", gs.gates[1].you)
-    else say(whoOf(s) .. ": abort, abort. " .. labelOf(s, gs) .. " radars still up, DEAD flight break off.", gs.gates[1].you) end
+    else say(whoOf(s) .. ": abort, abort. " .. radarLabel(gs, labelOf(s, gs)) .. " radars still up, DEAD flight break off.", gs.gates[1].you) end
   end
   for _, gt in ipairs(gs.gates) do
     if gt.dead then
@@ -1209,7 +1223,7 @@ local function holdGroups(gs)
   for _, gt in ipairs(gs.gates) do
     if gt.dead then
       if gs.holdWhy == "air" then say(whoOf(s) .. ": " .. labelOf(s, gs) .. ", red fighters still up ahead. Hold outside, rechecking.", gt.you)
-      else say(whoOf(s) .. ": " .. labelOf(s, gs) .. " radars still up. Hold outside, rechecking.", gt.you) end
+      else say(whoOf(s) .. ": " .. radarLabel(gs, labelOf(s, gs)) .. " radars still up. Hold outside, rechecking.", gt.you) end
     end
   end
   for _, gt in ipairs(gs.gates) do
