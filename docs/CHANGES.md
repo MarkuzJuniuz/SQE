@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.589, fighters back off a little earlier from SAM rings and stop switching
+An AI fighter that is chasing an enemy now breaks off 5 nm before the other side's SAM rings and only starts a chase when it is 8 nm outside them, so it no longer flips between attacking and backing off at the ring edge. After breaking off from a pair because it ran toward the rings, went out of reach or lost a jet, it leaves that pair alone for two minutes (five after a loss), and a flight that loses a jet breaks off at once. Your own flight is unchanged.
+
 ## v0.41.588, fighters of both sides commit on enemy fighters, and stay out of their SAM cover
 Every AI air-to-air flight now goes after an enemy fighter that comes within its reach (blue: TARCAPs, escorts, sweeps, BARCAPs, HAVCAPs, alert pairs and raid interceptors; red: patrols, alert pairs, reliefs and standbys) while an AWACS is up, or its own radar has it (red also counts its early-warning radars). A flight never flies into the other side's SAM rings: it can shoot at a jet under SAM cover from outside it and breaks off when it would enter, runs out of reach, or its time on station ends. At most two flights go for one enemy pair, and a tanker or AWACS guard stays near what it guards. Red's raid escorts and sweeps are unchanged. Your own flight is unchanged.
 
