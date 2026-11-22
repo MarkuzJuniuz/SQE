@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.577, a runway needs four bomb hits to be cut
+A runway strike now closes the field only when 4 of its bombs land on the runway (it was 1). Fewer hits are damage the repair crews fix overnight, and the debrief says how many were needed. A two-jet flight of Vipers or Tomcats carries exactly 4 GBUs, so it has to land every one.
+
 ## v0.41.576, the Air Defense tab lists each side's sites on its own
 The Overview's Air Defense tab now has a "Coalition Sites" table and a table for red's sites, the same columns and widths as on the Force Index tab, instead of one mixed list.
 
