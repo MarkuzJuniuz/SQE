@@ -145,7 +145,22 @@ class StrikeTasks:
                     "ux": um_.x if um_ else None, "uz": um_.y if um_ else None, "um": samtier.get(um_.variant, "gate_km") * 1000 if um_ else None,
                     "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role in (Role.STRIKE, Role.CAS), "you": bool(f.is_player), "pkg": package.id,
                     "acap": AIR_HOLD_CAS_S if f.role == Role.CAS else AIR_HOLD_STRIKE_S, "tx": tga_.x if tga_ is not None else None, "tz": tga_.y if tga_ is not None else None}
+            if (ai_ and not fol_ and obj_.type in (ObjectiveType.STRIKE, ObjectiveType.CAS) and f.role in (Role.STRIKE, Role.CAS)
+                    and any(x_.role == Role.SEAD and not x_.tag for x_ in package.flights)):
+                gate["more"] = self._gate_cover_ids(package, tga_, um_)           # S86b: the strikers also wait for the radars of the sites that cover the target (the ones the package's SEAD is tasked on)
         return gate
+
+    def _gate_cover_ids(self, package, tga, um) -> list:
+        """S86b: the ids of the SAM sites a plain STRIKE / CAS package's SEAD is tasked on (`war.covering_sams` of the target, the same call and `short` as `_sead_attack_tasks`) plus the
+        umbrella site that covers the target, those that have a group in this mission. The airfield (or depot, or fuel farm) the strikers fly to has no radars of its own: the gate reads these."""
+        if tga is None:
+            return []
+        from .war import covering_sams
+        obj_ = package.objective
+        ids = [x.id for x in covering_sams(self.state, tga, short=obj_.type == ObjectiveType.CAS or bool((package.extra or {}).get("tor_escort")))]
+        if um is not None and not um.destroyed and um.id not in ids:
+            ids.append(um.id)
+        return [i for i in ids if i != tga.id and i in self.groups_by_asset]
 
     def _cas_tasks(self, wp, w, armor, tot_s, floor_ft=0, per_unit=False):
         """AI CAS: look at the fight, attack the column, then keep working the zone. Time-boxed so they eventually go home.

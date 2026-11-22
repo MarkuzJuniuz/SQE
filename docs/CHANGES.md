@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.578, strikers wait for the SAM sites that cover their target
+A strike or CAS package with its own SEAD flight now holds its AI strikers outside until the radars of the SAM sites covering the target are down, not just the target's own (an airfield or a depot has no radars, so the strikers used to go in at once). The hold, its time limit and the turn-back when the SEAD is lost are as before. Your own flight and your routes are unchanged.
+
 ## v0.41.577, a runway needs four bomb hits to be cut
 A runway strike now closes the field only when 4 of its bombs land on the runway (it was 1). Fewer hits are damage the repair crews fix overnight, and the debrief says how many were needed. A two-jet flight of Vipers or Tomcats carries exactly 4 GBUs, so it has to land every one.
 
