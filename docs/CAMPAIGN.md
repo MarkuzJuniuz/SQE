@@ -188,7 +188,7 @@ replacement airframe per 96 hours. Because red keeps fighters at almost every fi
 ### Runways
 
 A runway strike that lands its bombs **craters the field**: nothing launches from it, scrambles or lands there for 6
-turns (24 hours); a field that holds a Tu-22M3 squadron (Mozdok, Damascus, Tiyas) is repaired in 2 turns (8 hours), because red's bomber fields are its
+turns (24 hours); a field that holds a Tu-22M3 squadron (Mozdok, Damascus, Bassel Al-Assad) is repaired in 2 turns (8 hours), because red's bomber fields are its
 best-repaired. A closed field's squadrons cannot fly from it and red's wings skip it.
 
 ### Red's air
@@ -217,7 +217,7 @@ offer it yet, so the supply kit is still the FAB one.) On Syria the Su-17M4 carr
 (268 PTAB-1M each) on troops and four FAB-500 on a supply site. Red's front-line strike on a blue column carries the troops kit.
 Kh-59M raids, the Su-25's eight FAB-500 and the Tu-22M3 (three Kh-22 on the carrier raid, four racks of nine OFAB-250 on a land
 strike: DCS's Kh-22 is an anti-ship missile and the AI does not fire it at land) are as before. Red's SEAD packages fire the
-Kh-58U (65 nm) and the Kh-31P (50 nm), as described below; red's Tu-22M3 fields (Mozdok, Damascus, Tiyas) are repaired in two
+Kh-58U (65 nm) and the Kh-31P (50 nm), as described below; red's Tu-22M3 fields (Mozdok, Damascus, Bassel Al-Assad) are repaired in two
 turns after a runway hit, see Runways.
 Red's **SEAD raids** go after blue's Patriot and HAWK sites with anti-radiation missiles: a full Patriot is attacked
 by three packages (two at Level 3, where a raid never flies more than 16 jets), a HAWK by two, escorted and preceded (at
@@ -226,7 +226,7 @@ missiles a jet. The packages alternate: the first, and every second one, fires *
 the others **Kh-31P** from 50 nm, and the launch times are set so that every package's missiles reach the site together.
 On Syria the Su-17M4 flies SEAD too, always with the Kh-58U.
 
-At Levels 2 and 3 the **Tu-22M3 bomber wing** (at Mozdok on the Caucasus, split over Damascus and Tiyas in Syria) can raid the carrier, after a quiet day, and then not again for 8 days (5 when it is desperate). At Level 3 red sends it when it
+At Levels 2 and 3 the **Tu-22M3 bomber wing** (at Mozdok on the Caucasus, split over Damascus and Bassel Al-Assad in Syria) can raid the carrier, after a quiet day, and then not again for 8 days (5 when it is desperate). At Level 3 red sends it when it
 estimates a window it judges safe or when it is desperate; at Level 2 only when desperate (red's air arm or command structure is badly
 hurt, or Mozdok is under pressure). This raid is
 a flown set piece: the SEAD packages that clear its approach fly in the turn before.
@@ -333,7 +333,7 @@ Who you fight depends on the level: Level 1 is **the Northern Coastal Command** 
 | Red aircraft at the start | 94 (MiG-21Bis, MiG-23MLD, Su-17M4, Su-24M) | 238 (adds MiG-29A and MiG-25PD) | 238, plus the bomber wing (MiG-23MLD, MiG-29A and S, MiG-25PD, Su-27, MiG-31, Su-17M4, Su-24M) |
 | Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA, two SA-5 batteries | SA-10, SA-11, SA-6, SA-15, SA-19, three SA-5 batteries |
 | Air defence integration, red counter-attacks, ground pressure | as in section 2 (0.15 / 0.10 / 0.15) | 0.55 / 0.30 / 0.45 | 0.90 / 0.55 / 0.80 |
-| Tu-22M3 bomber wing | none | none | 20 Tu-22M3 with 12 Su-27 escorts, half each at Damascus and Tiyas |
+| Tu-22M3 bomber wing | none | none | 20 Tu-22M3 (14 at Damascus, 6 at Bassel Al-Assad) with 12 Su-27 escorts (6 at each) |
 | Victory | take Bassel Al-Assad | destroy all of Lutorin Works, or red's supply collapses (see below) | destroy all of Lutorin Works, or red's supply collapses |
 
 Red's jets fill each field's parking to about 75% at Level 1 (four small fields), about 70% at Levels 2 and 3 (the same jets per field; Level 2's types are older, a regional power's. Damascus is held back for the bomber wing at Level 3).

@@ -24,7 +24,7 @@ from . import clock
 
 HITS_TO_CLOSE = 1             # bomb impacts inside the runway rectangle that close the field (XO 2026-11-03: 3; XO 2026-11-13: 1, so a human pilot's own bomb alone closes it even if the wingmen drop nothing; judgment call, to be revisited after the next probes)
 CLOSE_TURNS = 6               # S25: was 12; a cratered field stays shut 6 four-hour turns = 24 hours, whatever the supply (XO 2026-11-08, "24 hours flat for now"; game rule, not a sourced figure)
-BOMBER_CLOSE_TURNS = 2        # B1 (XO 2026-11-21, "priority runway repair on every bomber field"): a field that holds a Tu-22M3 squadron (Mozdok; Damascus and Tiyas in Syria) is shut this many turns (8 hours), not CLOSE_TURNS. Game rule, not a sourced figure: a real crater repair takes hours (af.mil, above), and a strategic bomber base is the first one a crew team is sent to
+BOMBER_CLOSE_TURNS = 2        # B1 (XO 2026-11-21, "priority runway repair on every bomber field"): a field that holds a Tu-22M3 squadron (Mozdok; Damascus and Bassel Al-Assad in Syria) is shut this many turns (8 hours), not CLOSE_TURNS. Game rule, not a sourced figure: a real crater repair takes hours (af.mil, above), and a strategic bomber base is the first one a crew team is sent to
 RUNWAY_HALF_LEN_M = 2600.0    # same corridor as mission_builder.RUNWAY_HALF_LEN_M (long enough for the longest Caucasus strip; judgment call)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and mission_builder.RUNWAY_HALF_WIDTH_M (runway 45-60 m wide plus a margin; judgment call)
 
