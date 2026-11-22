@@ -88,13 +88,18 @@ def blue_site_id(bid: str, key: str) -> str:
 
 
 def site_keys(b) -> tuple:
-    """The sites a blue airfield is given: all three, except a DIVERT field, which gets the HAWK and AAA only (Phase 9b, XO 2026-11-10: Soganlug is 1.3 nm from Tbilisi, whose Patriot covers it).
-    A save from before that keeps the Patriot it already has (`blue_sites` returns whatever stands)."""
-    return tuple(k for k in BLUE_SITES if not (k == "pat" and getattr(b, "divert", False)))
+    """The sites a blue airfield is given: all three, except a DIVERT field, which gets the HAWK and AAA only (Phase 9b, XO 2026-11-10: Soganlug is 1.3 nm from Tbilisi, whose Patriot covers it),
+    unless its pack entry says `"patriot": true` (S143, XO 2026-11-22: Syria's Hatay, 57 nm from Incirlik, has no Patriot neighbour). The pack is read by field id, not a flag on the Base, so an OLD save
+    gets the Patriot on load (`ensure_blue_sams`). A save from before 9b keeps the Patriot it already has (`blue_sites` returns whatever stands)."""
+    if not getattr(b, "divert", False):
+        return tuple(BLUE_SITES)
+    from . import theatres
+    keep = any(f.get("id") == getattr(b, "id", None) and f.get("patriot") for f in theatres.active().get("blue_fields", []))
+    return tuple(k for k in BLUE_SITES if keep or k != "pat")
 
 
 def blue_sites(state, b) -> dict:
-    """{key: asset} for a blue airfield's sites, empty when it has none (a carrier). A divert field may have no Patriot: readers must not assume `"pat"` is there."""
+    """{key: asset} for a blue airfield's sites, empty when it has none (a carrier). A divert field has no Patriot unless its pack says `patriot`: readers must not assume `"pat"` is there."""
     sites = getattr(state, "blue_sams", None) or {}
     out = {k: sites[blue_site_id(b.id, k)] for k in BLUE_SITES if blue_site_id(b.id, k) in sites}
     return out if all(k in out for k in site_keys(b)) else {}

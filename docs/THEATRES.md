@@ -18,7 +18,7 @@ You still need the map installed in DCS to fly it, and pydcs must know the terra
 | `geo` | coarse coastline / lakes / borders file for the map view (file in the same folder; `land`, `lakes`, `borders` as lists of [x, y] points, x north, y east, metres) |
 | `scan` | required. The terrain-scan settings: `file` (the scan's file name in `Saved Games\SQE`), the area `x0 x1 y0 y1` in metres, `step`, and `probe_airport`. Optional: `height_step` and `relief_file`. A scan is not needed to play: the pack folder can ship the results (see "Data files" below) |
 | `carrier` | `id`, `name`, optional `short` (the label), and the station: `from_airport`, `heading` and `distance_m` out to sea. Optional `carrier_band_km` (80: how far from the best station the seeded pick may range) and `carrier_evade_nm` (215: how far from every enemy airfield the fleet sails on a staged raid). Optional `carrier_standoff_nm`: how far the fleet stays from every enemy airfield |
-| `blue_fields` | friendly airfields: `id`, `name`, `airport` (the pydcs airport name); optional `"divert": true` = a landing and recovery field with no squadron |
+| `blue_fields` | friendly airfields: `id`, `name`, `airport` (the pydcs airport name); optional `"divert": true` = a landing and recovery field with no squadron, no patrol and no Patriot battery (HAWK and AAA only); optional `"patriot": true` on a divert field gives it its Patriot too (Syria: Hatay) |
 | `support_base` | optional. Blue field id that hosts the AWACS and tankers |
 | `red_fields` | enemy airfields: `id` (must start with `ab_`), `name`, `airport`, `value` |
 | `red_extra_airports` | optional. Airport names that are set red in every mission although they are not campaign fields |
