@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.579, two text fixes
+A saved campaign planned before v0.41.435 shows its runway strike as "OCA: Runway Strike, <field>" in the briefing, kneeboard, debrief and history, not "Crater the runway at <field>". A great sortie's closing line no longer claims the enemy will feel it "for days" ("That one will hurt them.").
+
 ## v0.41.578, strikers wait for the SAM sites that cover their target
 A strike or CAS package with its own SEAD flight now holds its AI strikers outside until the radars of the SAM sites covering the target are down, not just the target's own (an airfield or a depot has no radars, so the strikers used to go in at once). The hold, its time limit and the turn-back when the SEAD is lost are as before. Your own flight and your routes are unchanged.
 

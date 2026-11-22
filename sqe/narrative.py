@@ -177,7 +177,7 @@ _PLAYER = {"recovered": [""],                         # v0.41.414 (XO): nothing 
            "lost": ["Your aircraft was lost. The squadron will write to your family if you are not found.",
                     "You did not return."],
            "airborne": [""]}
-_FOLLOW = {"great": ["Command wants more of the same tomorrow.", "The enemy will feel this for days."],
+_FOLLOW = {"great": ["Command wants more of the same tomorrow.", "That one will hurt them."],
            "good": ["The picture is improving.", "It was enough. Rest, and get ready for tomorrow."],
            "mixed": ["Intel will reassess before the next tasking.", "We take the gain and plan around the cost."],
            "bad": ["Command will rethink the approach.", "Get some rest. We will try again."]}
