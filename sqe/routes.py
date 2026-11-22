@@ -265,7 +265,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     elif role == Role.STRIKE:
         wp.append(Wpt("TGT", g.tx, g.ty, 0 if human else ialt, p.attack_kts, p.tgt_note, "BOMB", agl=human, rad=irad and not human))
     elif role == Role.SEAD and human:
-        wp.append(Wpt("TGT", g.tx, g.ty, 0, p.attack_kts, "SEAD site. You set standoff", "SEAD", agl=True))
+        wp.append(Wpt("TGT", g.tx, g.ty, 0, p.attack_kts, "SEAD site", "SEAD", agl=True))
     elif role == Role.SEAD:
         wp.append(Wpt("SEAD", *offset(g.tx, g.ty, agm88_ax, agm88_nm * NM), ialt, p.attack_kts, "HARM launch point", "SEAD", rad=irad))
     elif role in (Role.ESCORT, Role.SWEEP) and so:

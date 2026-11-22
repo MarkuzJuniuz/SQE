@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.564, kneeboard: when to leave your CAP station; no more "You set standoff"
+The CAP1 row of your kneeboard now says "leave hh:mm:ss": when your flight leaves its TARCAP, escort or sweep station, the same rule an AI flight in your seat follows (your time on station, extended to the last striker of your package and of the packages near it). The SEAD target line reads "SEAD site" and no longer says "You set standoff". Card text only: no route, task or time changes.
+
 ## v0.41.563, TARCAP and escort race-tracks point at the threat
 A TARCAP or station escort now flies its race-track along red's line: CAP2 lies behind the station, away from red, so the cold leg runs back and the hot leg points at red, instead of both legs flying the beam across red's approach. Where that point is not clear of the SAM rings (after halving the leg to 5 nm) or red has no approach, CAP2 stays across the line as before. In the plain F-14B the DP point moves with CAP2. Not flown.
 
