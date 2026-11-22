@@ -1470,7 +1470,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     def _add_cap2(self, package, wps, spec, geom) -> bool:
         """Phase 8 (v0.41.349, campaign rules plan decision 22): the far end of a TARCAP / escort / sweep station's race-track, a point (CAP2) right after the station
-        (CAP1). It lies CAP_SPREAD_NM[job] from the station across the line to the target, on the side with more SAM room, the leg halved (floor 5 nm) until it is clear.
+        (CAP1). It lies CAP_SPREAD_NM[job] from the station across the line to the target, on the side with more SAM room, the leg halved (floor 5 nm) until it is clear. S141c: a TARCAP / escort station
+        first tries the point straight BEHIND the station on red's line (`_red_approach`), the same halving; only when that is not clear (or there is no red approach) the across-the-line point.
         No clear point, or no room in the airframe's route: nothing is added and the station keeps its circle. The point is never an objective (no action, no orbit):
         the station stays the one place the flight is timed to. -> True when CAP2 was added."""
         k = next((i for i, w in enumerate(wps) if w.orbit and w.action in CAP_SPREAD_NM), None)
@@ -1480,7 +1481,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return False
         st_ = wps[k]
         need_ = min(CAP2_ROOM_NM, self._room(st_.x, st_.y, package))
-        xy = cap2_point(st_.x, st_.y, bearing(st_.x, st_.y, geom.tx, geom.ty), CAP_SPREAD_NM[st_.action], lambda x, y: self._room(x, y, package) - need_)
+        margin_ = lambda x, y: self._room(x, y, package) - need_
+        xy = None
+        if st_.action in ("TARCAP", "ESCORT"):
+            # S141c: the race-track on red's line: CAP2 BEHIND the station (away from red), so the orbit flies station -> CAP2 (cold) -> station (hot, nose on red), not the
+            # beam to red on both legs (S141 probe: median 84 degrees off the threat axis; a fighter's radar looks about 60 degrees either side of the nose). Judgment call until flown
+            thr_ = self._red_approach(st_.x, st_.y)
+            if thr_ is not None:
+                xy = cap2_point(st_.x, st_.y, bearing(st_.x, st_.y, thr_[0], thr_[1]) + 90.0, CAP_SPREAD_NM[st_.action], margin_, sides=(90.0,))
+                self.__dict__.setdefault("_cap2_axis", []).append(xy is not None)          # probe only
+        if xy is None:
+            xy = cap2_point(st_.x, st_.y, bearing(st_.x, st_.y, geom.tx, geom.ty), CAP_SPREAD_NM[st_.action], margin_)
         if xy is None:
             return False
         wps.insert(k + 1, Wpt("CAP2", xy[0], xy[1], st_.alt_ft, st_.speed_kts))

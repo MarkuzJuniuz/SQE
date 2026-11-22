@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.563, TARCAP and escort race-tracks point at the threat
+A TARCAP or station escort now flies its race-track along red's line: CAP2 lies behind the station, away from red, so the cold leg runs back and the hot leg points at red, instead of both legs flying the beam across red's approach. Where that point is not clear of the SAM rings (after halving the leg to 5 nm) or red has no approach, CAP2 stays across the line as before. In the plain F-14B the DP point moves with CAP2. Not flown.
+
 ## v0.41.562, TARCAPs and station escorts hold on red's line into the package
 In a strike, DEAD or CAS package a TARCAP or station escort now holds on red's straight line into the package, just behind the protect point nearest red, facing the threat, so it can shoot past the strikers instead of sitting beside or behind them. It stays outside every SAM ring and at most 20 nm behind that point (the F-14 a little further); where nothing is clear within that, it keeps its old station. In the plain F-14B and the other fighters the CAP1 and CAP2 points move with it. Not flown.
 
