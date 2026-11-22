@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.560, AI routes go round SAM rings with as many turn points as they need
+An AI strike, SEAD or CAS route, a raid scramble's way out, a support CAP's way home and the red raids' lanes now follow the shortest path round the SAM rings they must avoid, with as many turn points as it takes, instead of one point per ring (the two new legs often still cut the ring). A gap between two rings narrower than 4 nm counts as closed. A ring that holds a leg's start or end point no longer bends that leg.
+
 ## v0.41.559, F-14B: a station fighter's CAP1 is waypoint 3, CAP2 is DP, ST is the package target
 In the plain F-14B a fighter job with a station (TARCAP, sweep, fleet-defence CAP, escort) now has CAP1 as waypoint 3 and CAP2 as the DP navigation point, which shows on the TID but cannot be selected. An escort whose route has an egress keeps waypoint 3 for the EGR and gets CAP1 as the IP point, flown before it. A TARCAP or escort of a strike, DEAD or CAS package also gets ST at the package's ground target, listed just above HA on the card. A BARCAP is unchanged (CAP1 and CAP2 are waypoints 1 and 2). The midway DP of v0.41.558 is gone. Strike jobs and fighters flying a strike-shaped route are unchanged. Not flown.
 
