@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.562, TARCAPs and station escorts hold on red's line into the package
+In a strike, DEAD or CAS package a TARCAP or station escort now holds on red's straight line into the package, just behind the protect point nearest red, facing the threat, so it can shoot past the strikers instead of sitting beside or behind them. It stays outside every SAM ring and at most 20 nm behind that point (the F-14 a little further); where nothing is clear within that, it keeps its old station. In the plain F-14B and the other fighters the CAP1 and CAP2 points move with it. Not flown.
+
 ## v0.41.561, TARCAPs and station escorts are on station two minutes before the first striker reaches its IP
 A TARCAP or station escort now pushes so that it reaches its station two minutes before the first ground-attack flight of its package reaches its first protect point (IP, HARM, JSOW or release point, or target), instead of two minutes ahead of the strikers' push whatever the distances. Before, a TARCAP reached its station about 37 s before the TOT and after it in 3 builds of 10. The cover is never pushed later than before, and at most 15 minutes earlier. An escort that flies with its strikers is unchanged.
 

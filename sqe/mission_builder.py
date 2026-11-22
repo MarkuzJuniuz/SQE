@@ -129,6 +129,7 @@ RAID_SAM_RESERVE = 50    # v0.41.291 (XO 2026-11-04: spawn every red SAM, "trim 
 RAID_F14_HOLD = False     # v0.41.276 (XO 2026-11-04: "the interceptors should just fly fast and bend away from SAMs"): False = the fleet-defence F-14s and F-15s have no HOLD and no gate: they leave at the start, fly the SAM-bending lane at the dash speed and wait on the intercept point. True = the v0.41.256 hold-then-dash with the SEAD gate.
 COVER_ONSTATION_S = 120      # S141a (XO 2026-11-22: "on station 120 s before the first striker's IP"): a TARCAP / station escort is on its station this long before the first ground-attack flight of its package reaches its first protect point (IP, HARM / JSOW / SLAM / REL point or TGT). Doctrine: the cover is on station before the strike group enters the threat area (JP 3-01, from memory, firmness medium). Judgment call (180 was proposed).
 COVER_LEAD_MAX_S = 900        # S141a: judgment call: the cover never pushes more than this ahead of its old push (`TARCAP_LEAD_S` via `stagger`), so a far station cannot drag a TARCAP out of the marshal by half an hour
+OVERWATCH_BACK_MAX_NM = 20    # S141b (XO 2026-11-22: "at most 20 nm behind the package point"): a TARCAP / station escort holds on red's line into the package, at most this far behind the protect point nearest red (+ STAND_BACK_NM for the F-14); beyond it, the old station. About the AIM-120's head-on reach at altitude (20 to 30 nm, public figures, firmness medium): a point further back cannot cover the package. Judgment call.
 STAGGER = {Role.SWEEP: -90, Role.ESCORT: -90, Role.SEAD: -60, Role.TARCAP: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
 
 
@@ -2764,7 +2765,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         mx_, my_ = sum(q_[0] for q_ in lps_) / len(lps_), sum(q_[1] for q_ in lps_) / len(lps_)
                         while dist(ex_, ey_, mx_, my_) > near_nm_ * NM:
                             nx_, ny_ = offset(ex_, ey_, bearing(ex_, ey_, mx_, my_), 1.0 * NM)
-                            if dist(nx_, ny_, jx_, jy_) < TARCAP_BEHIND_NM * NM or not all(dist(nx_, ny_, a_.x, a_.y) > (samtier.get(a_.variant, "station_nm") * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
+                            if dist(nx_, ny_, jx_, jy_) < TARCAP_BEHIND_NM * NM or not self._station_clear(nx_, ny_, sites_):
                                 break
                             ex_, ey_ = nx_, ny_
                         # v0.41.119 (XO 2026-10-22: the TARCAP sat on the sea side, about 90 degrees off the way red comes, so it could not snipe): the station is then put
@@ -2773,12 +2774,30 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         thr_ = self._red_approach(mx_, my_)
                         if thr_ is not None:
                             ax2_ = axis_station((mx_, my_), thr_, (jx_, jy_), near_nm_, TARCAP_BEHIND_NM,
-                                                lambda x_, y_: all(dist(x_, y_, a_.x, a_.y) > (samtier.get(a_.variant, "station_nm") * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_), (ex_, ey_))
+                                                lambda x_, y_: self._station_clear(x_, y_, sites_), (ex_, ey_))
                             if ax2_ is not None:
                                 ex_, ey_ = ax2_
                 geom.stand[key] = (ex_, ey_, [], dist(ex_, ey_, tx, ty) / NM, False)
             elif f.aircraft in STAND_BACK_NM and f.role in (Role.TARCAP, Role.ESCORT):
                 geom.stand[key] = self._stand_back(geom.stand[key], tx, ty, alt_, geom.egr, STAND_BACK_NM[f.aircraft])      # S45: the station of a package with no JSOW / SLAM flight, moved out
+        if not geom.sweep and self.o.fighter_standoff and package.objective.type in (ObjectiveType.STRIKE, ObjectiveType.CAS, ObjectiveType.DEAD):
+            done_, pp_ = set(), None
+            for f in package.flights:
+                if f.tag or (f.role == Role.ESCORT and self._escort_lead(package, f) is not None):
+                    continue
+                prof = self._flight_profile(f, package)
+                key = (f.role, id(prof))
+                if f.role not in (Role.TARCAP, Role.ESCORT) or key in done_ or key not in geom.stand:
+                    continue
+                done_.add(key)
+                if pp_ is None:
+                    pp_ = self._protect_points(package, geom) or self._launch_pts.get(package.id) or self._launch_points(package, geom)       # S141b: the points the cover protects
+                t = geom.tiers[key]
+                alt_ = t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000)
+                ow_ = self._overwatch_station(package, geom, f, alt_, pp_, OVERWATCH_BACK_MAX_NM + STAND_BACK_NM.get(f.aircraft, 0))
+                self.__dict__.setdefault("_ow_info", {})[(package.id, f.role.value)] = getattr(self, "_ow_why", "?")          # probe only: "" = overwatch found, else why the old station stayed
+                if ow_ is not None:
+                    geom.stand[key] = (ow_[0], ow_[1], [], dist(ow_[0], ow_[1], tx, ty) / NM, profiles.leg_clear(self.state, ow_, geom.egr, alt_))     # S141b: the same tuple shape profiles.station returns
         if not geom.sweep:
             self._stagger_stations(geom, package, tx, ty)        # v0.41.139 (XO 2026-10-27): a long-range TARCAP stands behind and to one side of a short-range escort
 
@@ -2791,7 +2810,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         n_ = int(back_nm)
         while n_ > 0:
             nx, ny = offset(x, y, brg, n_ * NM)
-            if all(dist(nx, ny, a_.x, a_.y) > (samtier.get(a_.variant, "station_nm") * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
+            if self._station_clear(nx, ny, sites_):
                 return (nx, ny, names, dist(nx, ny, tx, ty) / NM, egr is not None and profiles.leg_clear(self.state, (nx, ny), egr, alt_ft))
             n_ -= 2
         return stn
