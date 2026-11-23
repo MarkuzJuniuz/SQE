@@ -60,7 +60,6 @@ FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue come
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
 PARKED_MAX = 8               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many parked jets (v0.41.324: real units, was 12 statics) stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `wreck_static_weight` of a unit)
 DORMANT_WEIGHT = 0.0             # S89 (XO 2026-11-17): the share of an ADDED group's units that `max_units` counts: 0 = the limit ignores them. Only the groups added after the mission is built as before (S89 C blue fields, S89 F red EWR / SAM extras) are tagged; the belt and supply guards of B1 / B2 count whole, exactly as with the setting off
-DORMANT_CEILING_WEIGHT = 0.0     # S89 (XO 2026-11-17): the same for the `limits.json` ceiling: the added groups are not counted against it (a probe showed 600+ units at 100+ FPS); 1.0 counts them whole again
 WAKE_MARGIN_NM = 8              # S89 B1 (XO 2026-11-16): a dormant SAM site's wake ring is its engagement ring plus this, so the woken radars reach the player's RWR before engagement range
 DORMANT_SLEEP = True            # S89 E (plan 7.3, XO 2026-11-16): a woken dormant group goes back to AI OFF 30 s after no enemy unit is in any zone that covers it, and wakes again (AI ON) when one enters. False = stage B / C exactly (woken groups stay awake). Read at build time by `_wire_dormant`
 DORMANT_SLEEP_MAX_TRIGGERS = 400  # S89 E judgment call (XO prompt): the most continuous triggers the sleep rules may add to one mission (2 + 2 per covering zone, per group); groups further from the route than the cap allows stay awake once woken
@@ -1138,15 +1137,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             self.warns.append(f"could not set the weather ({ex}); the mission keeps pydcs's clear default")
 
     def _units_room(self) -> float:
-        """Units still free (v0.41.104): the base mission's limit counts everything except what merged packages brought (self._merged_units), and the
-        total never goes past the ceiling in sqe/data/limits.json."""
-        from . import limits
+        """Units still free: the Settings unit limit (`max_units`) minus what the mission counts (S164a, XO 2026-11-22: the fixed ceiling of sqe/data/limits.json is parked, the setting is the only cap)."""
         c = self._counts()
-        u, u_full = c["units"], c["units_full"]
-        ceil_ = self.o.unit_ceiling or limits.unit_ceiling()
+        u = c["units"]
         if self.o.max_units >= 10 ** 5:                            # full-map stress test: no limit at all
             return float(10 ** 9)
-        return min(self.o.max_units - u, ceil_ - u_full)     # v0.41.131: the whole mission counts again; S89: the limit sees dormant groups weighted, the ceiling whole
+        return self.o.max_units - u     # v0.41.131: the whole mission counts again; S89: the limit sees dormant groups weighted
 
     def _fits(self, n: int, extra: int = 0) -> bool:
         """S89 B1: does a site of `n` units (+2 spare, + `extra`) still fit? Exactly `_units_room() >= n + 2 + extra`; the belt and the supply guards count whole, as with the setting off."""
@@ -1155,8 +1151,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _counts(self) -> dict:
         """Units for the VR budget. A dead static (wreck) and a live static (a supply site's building) are cheap, no AI and they never move, so both count
         `wreck_static_weight` of a unit (v0.41.221, XO 2026-10-31: the buildings used to count whole units); 'wrecks' and 'statics' are how many there are.
-        S89: 'units' weighs a group tagged by `_tag_dormant` DORMANT_WEIGHT per unit (what `max_units` limits); 'units_full' weighs it DORMANT_CEILING_WEIGHT (what the ceiling limits); 'units_total' counts every unit whole (reporting)."""
-        g = u = u_w = u_c = w = n_s = 0
+        S89: 'units' weighs a group tagged by `_tag_dormant` DORMANT_WEIGHT per unit (what `max_units` limits); 'units_total' counts every unit whole (reporting)."""
+        g = u = u_w = w = n_s = 0
         for coal in self.m.coalition.values():
             for c in coal.countries.values():
                 for attr in ("plane_group", "helicopter_group", "vehicle_group", "ship_group", "static_group"):
@@ -1170,9 +1166,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         dz_ = getattr(grp, "id", None) in self._dormant
                         g += 1; u += len(grp.units)
                         u_w += len(grp.units) * (DORMANT_WEIGHT if dz_ else 1)
-                        u_c += len(grp.units) * (DORMANT_CEILING_WEIGHT if dz_ else 1)
         st_ = int(math.ceil((w + n_s) * self.o.wreck_static_weight))
-        return {"groups": g, "units": int(math.ceil(round(u_w, 6))) + st_, "units_full": int(math.ceil(round(u_c, 6))) + st_, "units_total": u + st_, "wrecks": w, "statics": n_s}
+        return {"groups": g, "units": int(math.ceil(round(u_w, 6))) + st_, "units_total": u + st_, "wrecks": w, "statics": n_s}
 
     def _target_xy(self, package):
         o = package.objective

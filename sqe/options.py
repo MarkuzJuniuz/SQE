@@ -46,7 +46,6 @@ class MissionOptions:
     carcass_range_nm: int = 40          # only sites this close to the route get wrecks
     full_map: bool = False              # stress test: build everything that exists (see _spawn_everything); the unit limit is off
     max_units: int = 250                # the unit limit of the BASE mission (wrecks are trimmed, furthest first, to fit under it); merged packages' units do not count (v0.41.104)
-    unit_ceiling: int = 0               # most units in total, merged packages included (0 = sqe/data/limits.json, 500); a runaway guard
     target_area_radius_nm: int = 15           # v0.41.209 (XO; S139b: was merge_radius_nm): the target area radius, also the radius inside which every supply site (fuel farm, depot, both sides) is built round the target: the performance knob
     enemy_air_sum: int = 100            # folded packages: biggest enemy-air need + this % of the others' (S88 R2: no setting, no UI: 100 for everybody)
     carrier_min_enemy_nm: int = 150     # the carrier group is moved back along the line of retreat until it is at least this far from the fight
