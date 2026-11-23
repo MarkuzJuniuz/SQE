@@ -8,7 +8,8 @@ S160 (same script, both sides):
 * at most COMMIT_MAX_PER_TARGET flights on one enemy group (T1fix5: four flights piled onto one MiG-29 pair);
 * S160b (T1fix6): a break-off buffer (SAM_BREAK_BUFFER_NM) with hysteresis (commit only beyond SAM_COMMIT_BUFFER_NM), a cool-down before a recommit on the same
   group (COMMIT_COOLDOWN_S), and a "hurt" break-off when the flight lost a jet since it committed (then COMMIT_HURT_COOLDOWN_S);
-* an optional leash round an anchor point (HAVCAPs: they must not leave the tanker / AWACS for long);
+* an optional leash round an anchor point (HAVCAPs: they must not leave the tanker / AWACS for long; S160c: the base / carrier BARCAP guards too);
+* S160c: a flight that breaks off "hurt" commits on nothing for COMMIT_HURT_QUIET_S;
 * every air-to-air AI flight is registered (blue: station cover, support CAPs, alert pairs, raid interceptors, cover flights without a station; red: patrols,
   alert pairs, reliefs, standbys, raid-defence reinforcements). Red's raid escorts and sweeps are NOT registered (they fly Escort / FighterSweep with the bombers).
 
@@ -38,6 +39,10 @@ COMMIT_HURT_COOLDOWN_S = 300    # S160b: ...and this long after a flight lost a 
 SAM_RING_MARGIN_NM = 3.0        # an enemy SAM ring counts this much bigger (scramble.STATION_RING_MARGIN_NM, the defender's margin)
 HAVCAP_REACH_NM = 25            # S160: a tanker / AWACS guard commits only this far (judgment call; its normal circle is the guard ring)
 HAVCAP_LEASH_NM = 30            # ...and never more than this from its station (judgment call: it must stay with what it guards)
+BARCAP_REACH_NM = 30            # S160c (T1fix7 Caucasus: two F-14BU carrier BARCAP jets, reach 45 nm, fought away from the fleet and died): a base / carrier BARCAP guard commits only this far (judgment call, like HAVCAP_REACH_NM)
+BARCAP_LEASH_FLEET_NM = 25      # ...and never more than this from its station. A carrier station is `barcap.STATION_FLEET_NM` 35 nm out; 35 + 25 = 60 nm from the boat stays inside the ships' SM-2 reach (`barcap.FLEET_REACH_NM` 70, measured 51 to 67 nm). Judgment call
+BARCAP_LEASH_BASE_NM = 15       # ...a base station is `barcap.STATION_BASE_NM` 25 nm out; 25 + 15 = 40 nm from the field, the Patriot's ring (HAWK edge inside it). Judgment call
+COMMIT_HURT_QUIET_S = 300       # S160c (T1fix7 Syria: Alert 10 broke off "hurt", then went straight for the strikers and a Tiyas MiG-29 killed Viper 3-4): after a hurt break-off the flight commits on NOTHING for this long, not only on the group it left. Both sides. Judgment call
 RED_REACH_EXTRA_NM = 10         # S160: red's reach = its engage circle (`a2a_zone_nm`) + this, at most RED_REACH_MAX_NM (judgment call:
 RED_REACH_MAX_NM = 35           # the R-27ER first shots in the T1 runs were 24 to 58 km)
 
@@ -99,9 +104,9 @@ def commit_lua(side, flights, sams) -> str:
     sam_rows = []
     for x, z, radius in sams:
         sam_rows.append("{%d, %d, %d}" % (int(x), int(z), int(radius)))
-    data = ("%s = {side=%s, own=%s, enemy=%s, ewr=%s, step=%d, breakf=%s, maxper=%d, brk=%d, cmt=%d, cool=%d, hurtcool=%d, flights={%s}, sams={%s}}"
+    data = ("%s = {side=%s, own=%s, enemy=%s, ewr=%s, step=%d, breakf=%s, maxper=%d, brk=%d, cmt=%d, cool=%d, hurtcool=%d, hurtquiet=%d, flights={%s}, sams={%s}}"
             % (table, _lua_string(side), _lua_string(own), _lua_string(enemy), ewr, COMMIT_STEP_S, repr(float(COMMIT_BREAK_FACTOR)),
-               COMMIT_MAX_PER_TARGET, int(SAM_BREAK_BUFFER_NM * 1852), int(SAM_COMMIT_BUFFER_NM * 1852), COMMIT_COOLDOWN_S, COMMIT_HURT_COOLDOWN_S,
+               COMMIT_MAX_PER_TARGET, int(SAM_BREAK_BUFFER_NM * 1852), int(SAM_COMMIT_BUFFER_NM * 1852), COMMIT_COOLDOWN_S, COMMIT_HURT_COOLDOWN_S, COMMIT_HURT_QUIET_S,
                ", ".join(flight_rows), ", ".join(sam_rows)))
     return data + "\n" + COMMIT_BODY.replace("__TABLE__", table)
 
@@ -215,7 +220,10 @@ local function breakOff(f, g, why, now)
   end
   C.count[f.on] = math.max(0, (C.count[f.on] or 1) - 1)
   if why == "sam" or why == "far" or why == "leash" then f.cool[f.on] = now + C.cool end
-  if why == "hurt" then f.cool[f.on] = now + C.hurtcool end
+  if why == "hurt" then
+    f.cool[f.on] = now + C.hurtcool
+    f.quiet = now + C.hurtquiet
+  end
   env.info("SQECOMMIT " .. C.side .. " " .. f.g .. " breaks off " .. f.on .. " (" .. why .. ") at " .. math.floor(now))
   f.on = nil
 end
@@ -237,6 +245,7 @@ local function tick(_, t)
           if st ~= "on" then breakOff(f, g, st, now) end
         end
         local free = not f.on and now >= f.t0 and now <= f.t1 and lead:inAir() and not inSam(lp, C.cmt)
+        if free and f.quiet and now < f.quiet then free = false end
         if free and leashed(f) and anchorDist(f, lp) > f.leash then free = false end
         if free then
           local eg, d = nearestEnemy(f, g, lead, seenBySide)

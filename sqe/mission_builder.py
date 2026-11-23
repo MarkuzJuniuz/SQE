@@ -1920,15 +1920,20 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.points[0].tasks.append(rtbt_)
             # S160: the support CAPs commit too; a tanker / AWACS guard only HAVCAP_REACH_NM and on a leash round its station
             commit_end_ = stop if stop else COMMIT_ALL_MISSION_S
+            station_ = None
+            for w_ in wps:
+                if w_.name == "CAP1":
+                    station_ = (w_.x, w_.y)
+                    break
             if f.tag in ("HAVCAP", "TKR_HAVCAP"):
-                station_ = None
-                for w_ in wps:
-                    if w_.name == "CAP1":
-                        station_ = (w_.x, w_.y)
-                        break
                 self._commit_register("blue", g, blue_commit.HAVCAP_REACH_NM, 0, commit_end_, station_, blue_commit.HAVCAP_LEASH_NM)
             else:
-                self._commit_register("blue", g, cover_reach_nm(f.aircraft), 0, commit_end_)
+                # S160c: a base / carrier BARCAP guard is on a leash round its station too, so it does not fight out of its SAM and SM-2 cover
+                barcap_leash_nm = blue_commit.BARCAP_LEASH_BASE_NM
+                if f.tag == "CARRIER_BARCAP":
+                    barcap_leash_nm = blue_commit.BARCAP_LEASH_FLEET_NM
+                barcap_reach_nm = min(cover_reach_nm(f.aircraft), blue_commit.BARCAP_REACH_NM)
+                self._commit_register("blue", g, barcap_reach_nm, 0, commit_end_, station_, barcap_leash_nm)
         elif stw is not None and (not f.is_player or o.player_is_ai):
             # no chasing. A sweep engages inside a circle round its station (25 nm for the long-range shooters, 15 for the rest). A TARCAP or
             # escort covers the package: the circle is round the package's launch points (HARM / JSOW points, or the IP), COVER_ZONE_NM, and
