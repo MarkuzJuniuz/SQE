@@ -31,6 +31,7 @@ LRA_SPLIT_MIN_NM = 12         # ...but only when the two stations are closer tha
 TRANSIT_CIRCLES_MAX = 4       # S156: at most this many engage circles along a cover flight's way from PUSH to its station (4 x 2 x 25 nm covers a 200 nm leg). Judgment call
 COVER_AXIS_SPLIT_NM = 10.0    # S154: flights whose launch points (or IPs) are farther apart than this are on different axes, each with its own cover. The JSOW flight flies
                               # 30 deg off the HARM axis (routes.JSOW_AXIS_DEG): at a 30 nm launch range that is about 15 nm apart; two SEAD lanes are 1.5 to 4.5 nm apart. Judgment call
+OVERWATCH_FAR_MAX_NM = 60     # S163: when nothing is clear within the 20 nm cap, a cover station may stand up to this far behind the protect point. Judgment call (XO's prompt, 2026-11-22): beyond the AIM-120's reach the cover cannot protect, so the caller reports the distance
 TARCAP_AXIS_SWINGS =tuple(v for k in range(0, 13) for v in ((0,) if k == 0 else (15 * k, -15 * k)))   # v0.41.119: degrees the TARCAP station may swing off the threat axis when SAM rings block it, smallest first, up to 180 (judgment call: a Sukhumi SA-10 sat on the axis in the 2026-10-22 probes, so the station takes the clear point nearest the axis; the old station is kept when that is no nearer)
 
 
@@ -163,7 +164,22 @@ class FighterStations:
             if self._station_clear(x, y, sites):
                 self._ow_why = ""
                 return (x, y)
-        self._ow_why = "nothing clear within the cap"
+        # S163: nothing clear within the cap. Try further back instead of keeping the old station inside a live ring.
+        far_point = self._overwatch_far_back(px, py, b, back_nm, sites)
+        if far_point is not None:
+            self._ow_why = ""
+            self._ow_far = "back"
+            return far_point
+        self._ow_why = "nothing clear within the far cap"
+        return None
+
+    def _overwatch_far_back(self, px, py, bearing_back, back_nm, sites):
+        """S163 (tests T4 / T4b: a live Buk at the Sukhumi fuel farm covered every point within the 20 nm cap): the same walk as `_overwatch_station`,
+        one nm at a time, but from the cap out to OVERWATCH_FAR_MAX_NM. The first point outside every ring, or None."""
+        for n in range(int(back_nm) + 1, OVERWATCH_FAR_MAX_NM + 1):
+            x, y = offset(px, py, bearing_back, n * NM)
+            if self._station_clear(x, y, sites):
+                return (x, y)
         return None
 
     def _protect_points(self, package, geom) -> list:

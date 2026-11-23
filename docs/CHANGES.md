@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.592, cover fighters no longer park inside a live SAM ring
+When every point within 20 nm behind a package was covered by an enemy SAM ring, the escort and the TARCAP kept their old station, inside the ring, and the SAM shot them down. They now stand on the first clear point further back, up to 60 nm behind the package. Packages whose cover already found a clear point are unchanged.
+
 ## v0.41.591, the unit limit can go up to 750
 The "units max" box in Settings > Mission Build now goes up to 750 (it stopped at 400); the default stays 250. A regular merged mission holds roughly 500 to 750 units, so at the top of the range packages and ground sites are no longer left out for size. The groups that sleep until they wake (the Dormant Sites setting) still do not count against the limit. In tests on a dedicated server, missions of 490 to 590 units ran at real-time speed using 0.4 to 0.8 CPU cores; DCS in single player was not measured, so raise it step by step.
 
