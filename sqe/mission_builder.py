@@ -197,11 +197,25 @@ def carrier_station(state, b, tx, ty, min_enemy_nm) -> tuple | None:
             x, y = offset(b.x, b.y, away + da, nm * NM)
             if not seac.open_water(x, y, 25 * NM):
                 continue
-            if dist(x, y, tx, ty) >= need and all(dist(x, y, ex, ey) >= need for ex, ey in enemies):
-                h = carrier_heading(x, y, away)
-                if h is not None:
-                    return (x, y, h)
+            if dist(x, y, tx, ty) >= need:
+                far_from_enemies = True                       # at least `need` from every enemy field
+                for enemy_x, enemy_y in enemies:
+                    if not dist(x, y, enemy_x, enemy_y) >= need:
+                        far_from_enemies = False
+                        break
+                if far_from_enemies:
+                    h = carrier_heading(x, y, away)
+                    if h is not None:
+                        return (x, y, h)
     return None
+
+
+def _has_untagged_flight(package) -> bool:
+    """True when the package has at least one flight that is not a standing-patrol (tagged) flight."""
+    for flight in package.flights:
+        if not flight.tag:
+            return True
+    return False
 
 
 def stagger(package, role) -> int:
@@ -210,7 +224,11 @@ def stagger(package, role) -> int:
     if package.objective.type == ObjectiveType.DEAD and package.objective.aim == "DEAD":      # the DEAD stage: the SEAD package went in 25 min earlier
         return {Role.SWEEP: -60, Role.ESCORT: -60, Role.TARCAP: -TARCAP_LEAD_S}.get(role, 0)
     if package.objective.type == ObjectiveType.DEAD:
-        jsow = package.objective.aim in SEAD_AIMS and any(getattr(f, "kit", "") == "JSOW" for f in package.flights)
+        jsow = False
+        if package.objective.aim in SEAD_AIMS:
+            for flight in package.flights:
+                if getattr(flight, "kit", "") == "JSOW":
+                    jsow = True
         if jsow and role == Role.STRIKE:                     # the JSOW flight (Standoff DEAD): with the HARM shooters, on its own axis
             return -DEAD_SEAD_LEAD_S + JSOW_TRAIL_S
         if role == Role.SEAD:
@@ -391,7 +409,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         o = self.o
         tm.set_ramp_lead(bool(getattr(o, "hot_ramp_scrambles", False)))          # v0.41.92: bigger scramble circles when the pairs taxi from the ramp
         st = self.state = copy.copy(self.state)                       # a private view: the carrier may be moved back for this sortie only
-        st.bases = {k: copy.copy(v) for k, v in st.bases.items()}
+        copied_bases = {}
+        for base_id, base in st.bases.items():
+            copied_bases[base_id] = copy.copy(base)
+        st.bases = copied_bases
         pf = package.player_flight
         if pf is None:
             raise ValueError("choose your flight first")
@@ -412,9 +433,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._scrub = []                                                # v0.41.223: every package flight for the hook's package scrub (group, unit names, kind, SCRUB point)
         self._sead_grps = {}                                            # site id -> the SEAD flights' group names (all merged packages); the gate aborts when they are all down
         self._blind_site = set()
-        extras = [x for x in extras if any(not f.tag for f in x.flights)]
+        kept_extras = []
+        for extra_package in extras:
+            if _has_untagged_flight(extra_package):
+                kept_extras.append(extra_package)
+        extras = kept_extras
         self._extras = list(extras)
-        ruins = [x for x in ruins if any(not f.tag for f in x.flights)]
+        kept_ruins = []
+        for ruin_package in ruins:
+            if _has_untagged_flight(ruin_package):
+                kept_ruins.append(ruin_package)
+        ruins = kept_ruins
         self._preroll, self._ruin_sites = dict(preroll or {}), []
         self._detect_full = detection.any_full(package, extras)           # v0.41.346 (Phase 7a): red scrambles for this mission only if it saw ANY package in it (the stored verdict, `detection.cast`)
         package = self._gather_support(package, extras)
@@ -433,7 +462,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         start = datetime.datetime(date.year, date.month, date.day, hh, mm)
         self._start_min, self._red_intel, self._red_sel = hh * 60 + mm, [], []
         m.start_time = start
-        clock = lambda s: (start + datetime.timedelta(seconds=s)).strftime("%H:%M:%S")
+        def clock(seconds):
+            """The mission clock time (hh:mm:ss) `seconds` after the start."""
+            return (start + datetime.timedelta(seconds=seconds)).strftime("%H:%M:%S")
         date_str = start.strftime("%d %b %Y").upper()
         self.wx = weather.for_package(st, o.weather_mode, theatres.active(), package.start, bool(o.ils_low_vis))
         self.wx_notes = []
@@ -465,7 +496,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._cap_plan = self._plan_cap_stations(air_pkg, tx, ty, geom, keep0)
         if tgt_asset is not None:                      # steer the egress away from SAM rings and CAP
             skip = {tgt_asset.id} if package.objective.type == ObjectiveType.DEAD else set()      # a DEAD target is the one thing we are killing
-            avoid = [(c["x"], c["y"], 35) for c in self._cap_plan] + [(ex, ey, 40) for ex, ey in tm.fighter_bases(st)]
+            avoid = []                                    # circles to keep the egress out of: our patrol stations (35 nm) and the enemy fighter fields (40 nm)
+            for cap_station in self._cap_plan:
+                avoid.append((cap_station["x"], cap_station["y"], 35))
+            for field_x, field_y in tm.fighter_bases(st):
+                avoid.append((field_x, field_y, 40))
             geom.egr = (tm.first_safe_egress(st, tx, ty, geom.hdg, skip, avoid=avoid) or
                         tm.first_safe_egress(st, tx, ty, geom.hdg, skip) or
                         tm.safe_egress(st, tx, ty, geom.hdg, pspec.profile.egress_nm, tm.cluster_ids(tgt_asset)) or geom.egr)
@@ -486,7 +521,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 self.t.airports[a.airport].set_red()
         # v0.41.282 (XO 2026-11-04): every red-held field in the theatre data is red in every mission, also the ones this level's roster left out (they stayed neutral, and
         # long-legged jets that RTB to the nearest field landed on them)
-        blue_aps_ = {bs.airport for bs in st.bases.values() if bs.kind == BaseKind.AIRFIELD}      # (a field we took is a blue base: it stays blue)
+        blue_aps_ = set()                                                      # (a field we took is a blue base: it stays blue)
+        for blue_base in st.bases.values():
+            if blue_base.kind == BaseKind.AIRFIELD:
+                blue_aps_.add(blue_base.airport)
         for f_ in theatres.active().get("red_fields", []):
             if f_.get("airport") in self.t.airports and f_["airport"] not in blue_aps_:
                 self.t.airports[f_["airport"]].set_red()
@@ -498,7 +536,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # v0.41.539 (XO 2026-11-20): the other fields on the map get the side their 2001 politics give them (theatre `painted_airports`), so no neutral field is left that a red
         # jet and an F-16 can both land on (a red attacker landed on a Cyprus field). Mission-only, no campaign asset, never over an SQE base or a field the campaign already painted
         th_ = theatres.active()
-        sqe_aps_ = blue_aps_ | {a_.airport for a_ in st.assets.values() if a_.airport} | {f_.get("airport") for k_ in ("blue_fields", "red_fields") for f_ in th_.get(k_, [])}
+        sqe_aps_ = set(blue_aps_)                                              # blue's fields, the campaign's asset fields and every field the pack names
+        for asset in st.assets.values():
+            if asset.airport:
+                sqe_aps_.add(asset.airport)
+        for field_list_name in ("blue_fields", "red_fields"):
+            for pack_field in th_.get(field_list_name, []):
+                sqe_aps_.add(pack_field.get("airport"))
         for side_, aps_ in (th_.get("painted_airports") or {}).items():
             for ap_ in aps_:
                 if ap_ in self.t.airports and ap_ not in sqe_aps_:
@@ -506,7 +550,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # v0.41.28: a raid scramble also builds the field the raid is coming for (the XO's Kobuleti run: the raided field had no defences
         # because nothing launched from it)
         raided_ = [package.objective.target_id] if (package.objective.type == ObjectiveType.FLEET_DEFENSE and package.objective.target_id in st.bases) else []
-        for bid in dict.fromkeys([f.base_id for f in package.flights] + raided_ + [f.base_id for x in list(extras) + list(ruins) for f in x.flights if not f.tag]):
+        base_ids = []
+        for flight in package.flights:
+            base_ids.append(flight.base_id)
+        base_ids += raided_
+        for folded_package in list(extras) + list(ruins):
+            for flight in folded_package.flights:
+                if not flight.tag:
+                    base_ids.append(flight.base_id)
+        for bid in dict.fromkeys(base_ids):                   # (each field once, in this order)
             self._place_base(st.bases[bid], tx, ty)
         # v0.41.220 (XO 2026-10-31): a raid scramble also builds the neighbouring fields whose Patriot / HAWK cover the raid's target (the war sim and the raid gate already
         # count them; before, only the raided field and the fields with flights were built, so the target stood alone)
@@ -560,7 +612,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         dep_s = launch_s + 60 + dist(pbase.x, pbase.y, pw[0].x, pw[0].y) / (pspec.profile.depart_kts * 0.514444) * 1.12     # roll + climb-out to the first point (DEP off a carrier, else the marshal)
         self._dep_s = dep_s
         assign_times(pw, dep_s)
-        mshl = next((w for w in pw if w.action in ("HOLD", "CAPORBIT")), pw[-1])
+        mshl = pw[-1]                                       # the first HOLD / CAPORBIT point, else the last point
+        for w in pw:
+            if w.action in ("HOLD", "CAPORBIT"):
+                mshl = w
+                break
         k = pw.index(mshl)
         leg_m = hold_leg_s(pw, k) if (mshl.action == "HOLD" and k + 1 < len(pw)) else 0.0        # S140b1: to the PUSH, turn points between included
         player_push = math.floor((mshl.eta_s + (0 if pf.role == Role.CAP else o.marshal_slack_min * 60) + leg_m) / 60.0 + 0.5) * 60.0     # S77 (XO 2026-11-14): nearest minute, not up, so a 1-minute hold stays about a minute (was ceil: 1 to 2)
@@ -568,11 +624,23 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         leave_s = hold_leave_s(pw, player_push)
         P0 = player_push - self._cov_stg.get(id(pf), stagger(package, pf.role))      # the strikers' push; everyone else is relative to it
         self._escort_pend = []                                               # S138a: [(escort flight, its group, lead striker flight)] the Escort task is attached once the lead's group exists
-        push_of = lambda f: self._push_adj.get(id(f), P0 + (0 if f.tag else (0 if self._escort_lead(package, f) is not None else self._cov_stg.get(id(f), stagger(package, f.role)))))
+        def push_of(f):
+            """When flight `f` pushes: its own adjusted time, else the strikers' push plus its stagger (a standing patrol and a following escort have none)."""
+            if id(f) in self._push_adj:
+                return self._push_adj[id(f)]
+            if f.tag:
+                return P0
+            if self._escort_lead(package, f) is not None:
+                return P0
+            return P0 + self._cov_stg.get(id(f), stagger(package, f.role))
         assign_times(pw, dep_s, player_push)
         tgt = objective_wp(pw) or pw[-1]
         ptot = tgt.eta_s + RAID_SEAD_LEAD_S if psite is not None else tgt.eta_s          # v0.41.284: the time the raid's other flights work to: the interceptors are due on station RAID_SEAD_LEAD_S after your HARMs
-        egr = next((w for w in pw if w.name == "EGR"), pw[-1])
+        egr = pw[-1]                                        # the EGR point, else the last point
+        for w in pw:
+            if w.name == "EGR":
+                egr = w
+                break
         rtb_s = egr.eta_s + leg_seconds(egr, Wpt("RTB", pbase.x, pbase.y, 0, 300))
         self._p_times = (float(launch_s), float(rtb_s))                 # v0.41.97: your takeoff and landing, for the hot starts at your own field
         tl = {"launch": clock(launch_s), "marshal": clock(mshl.eta_s), "push": clock(player_push), "tot": clock(tgt.eta_s),
@@ -628,7 +696,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         whois = self._datalinks(package)
 
         # ---- enemy air picture (known CAP airborne from the start + alert aircraft that scramble when detected) ----
-        keep = [(p[0], p[1], 100) for p in (hav_xy,) if p is not None]          # v0.41.76: only the AWACS anchor / HAVCAP is kept clear of red's patrols (the tanker picks its own spot clear of them, threatmap.tanker_spot)
+        keep = []                                         # v0.41.76: only the AWACS anchor / HAVCAP is kept clear of red's patrols (the tanker picks its own spot clear of them, threatmap.tanker_spot)
+        if hav_xy is not None:
+            keep.append((hav_xy[0], hav_xy[1], 100))
         keep += self._fleet_keepout()
         self._spawn_air_picture(air_pkg, tx, ty, ptot, geom, manifest, keep)
         self._spawn_cas_support(package, plan, geom, manifest)
