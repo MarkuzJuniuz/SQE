@@ -74,7 +74,10 @@ _D: dict = {
     "F-15C": {
         # stock DCS preset: AIM-9*4,AIM-120*4,Fuel*3; S157 (XO 2026-11-22): AIM-120B -> AIM-120C on 4, 5, 7, 8 (test T1fix3: the B launched at 15 to 27 km, the F-16s' C at 33 to 39;
         # the AIM-120C was first delivered in 1996, designation-systems.net, so it fits Syria 2000; firmness medium)
-        "CAP": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 6: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 7: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 8: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 9: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 10: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 11: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
+        # S165 (XO 2026-11-22: the F-15C CAPs fired all four AIM-120C and stayed on station with only AIM-9s, "sidewinders are no good for CAP work"): every CAP kind (TARCAP, sweep, CAP role, BARCAP / HAVCAP tags) carries 8 AIM-120C on 1, 3, 4, 5, 7, 8, 9, 11 and the three tanks on 2, 6, 10 (pydcs: the AIM-120C fits all eight; the tanks stations take only tanks).
+        # NOT a stock preset (the old AI model's is 4 + 4): judgment call, XO's decision; the AIM-120C was first delivered in 1996 (designation-systems.net), firmness medium. The ESCORT kit stays the stock preset (4 AIM-120C + 4 AIM-9): the escorts are the ones that mostly get into the merge once the TARCAPs are broken (XO).
+        "CAP": {1: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 6: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 7: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 8: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 9: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 10: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 11: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}"},
+        "ESCORT": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 6: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 7: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 8: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 9: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 10: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 11: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
     },
     "F-15E": {
         # NOT a stock preset (the old AI model has none to copy; judgment call): AIM-9M on 1 and 19, AIM-120C on 3 and 17, 610 gal tanks on 2 and 18, GBU-31(V)1 on the four conformal-tank stations 7, 9, 11, 13
@@ -108,7 +111,7 @@ _D: dict = {
     },
 }
 _D["A-10C2"] = _D["A-10C"]          # S103e: the A-10C II (late) choice flies the same pydcs model and the same kits (one table, not a copy of the CLSIDs)
-_ALIAS = {Role.TARCAP: "CAP", Role.ESCORT: "CAP", Role.SWEEP: "CAP", Role.CAP: "CAP"}
+_ALIAS = {Role.TARCAP: "CAP", Role.ESCORT: "ESCORT", Role.SWEEP: "CAP", Role.CAP: "CAP"}      # S165: an ESCORT has its own table where an aircraft has one (the F-15C); every other aircraft falls back to its "CAP" table below
 
 
 def _find(P, want):
@@ -127,6 +130,8 @@ class LoadoutLibrary:
     def for_role(self, key: str, role: Role, kit: str = "") -> dict:
         name = kit or _ALIAS.get(role, role.value)
         c = self.custom.get(key, {})
+        if name == "ESCORT" and "ESCORT" not in c and "CAP" in c:                # S165: XO's captured "CAP" loadout still serves an escort (as before the escort had its own table)
+            name = "CAP"
         if name in c:
             return {int(p): {"CLSID": v} for p, v in c[name].items()}
         if name == "CBU" and "STRIKE" in c:                # v0.41.313 (XO 2026-11-06): the CBU kit starts from his own captured STRIKE loadout, only the bomb pylons change
