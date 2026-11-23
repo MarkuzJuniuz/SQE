@@ -18,7 +18,6 @@ from pathlib import Path
 
 
 # S88 R2 (XO 2026-11-17): settings fields renamed to match the dialog labels. old name -> new name; `merge_enemy_pct` is gone (no setting any more: an old file's key is ignored on load).
-MAX_UNITS = 1200   # S164b (XO 2026-11-23): the one mission size limit, fixed: no Settings row, an old settings file's value is ignored. 1200 is only reachable with dormant units (a regular mission tops out near 730 units, the full map holds 1,355). Judgment call; server runs at 250 to 450: pace 1.02, 0.4 to 0.8 cores
 RENAMED_FIELDS = {"carcass_weight_pct": "wreck_static_weight_pct", "hold_minutes": "marshal_slack_min", "merge_max_units": "max_units",
                   "merge_back_min": "merge_earlier_min", "merge_fwd_min": "merge_later_min", "merge_radius_nm": "target_area_radius_nm",       # S139b: the radius is the target area's now
                   "autoskip_duration_on": "autoskip_crew_rest", "autoskip_hours": "autoskip_crew_rest_hours"}
@@ -97,7 +96,7 @@ class AppSettings:
     merge_v131: bool = False
     merge_raids_all: bool = True          # S39: raid intercepts that start inside the time windows are listed in one mission, at any distance (off: a raid is listed there only when its way in passes the target area); S139b: the Missions list only, FLY takes every raid in the window
     merge_earlier_min: int = 15            # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
-    max_units: int = 1200                 # S164b: fixed (MAX_UNITS), the file's value is ignored on load; was 250 (Settings 60 to 400). # v0.41.131: the unit limit counts the WHOLE mission again, merged packages included (ruins go first, then the latest-starting package); the 500 ceiling in sqe/data/limits.json is dormant
+    max_units: int = 250                  # v0.41.131: the unit limit counts the WHOLE mission again, merged packages included (ruins go first, then the latest-starting package); the 500 ceiling in sqe/data/limits.json is dormant
     reactive: bool = True                 # enemy reinforcements and blue alert pairs can launch during a sortie
     ai_land_carrier: str = "always"       # v0.41.18: AI flights going home to a carrier: "always" recovered short of it | "home" only at your deck | "never" land
     ai_land_field: str = "never"          # v0.41.18: the same for airfields
@@ -165,7 +164,10 @@ class AppSettings:
                 raw = json.loads(f.read_text())
                 _apply_renames(raw)       # S88 R2: an older file's field names, before the filter and the migrations below
                 s = cls(**{k: v for k, v in raw.items() if k in cls.__dataclass_fields__ and k != "persist"})
-                s.max_units = MAX_UNITS          # S164b: fixed; the old unit_cap_v2 migration (150 -> 250) is moot
+                if not raw.get("unit_cap_v2"):
+                    if raw.get("max_units") == 150:
+                        s.max_units = 250   # still on the old default: move to the new one (an explicit different value is kept)
+                    s.unit_cap_v2 = True
                 s.reactive = True     # v0.41.135 (XO 2026-10-24): reactive dispatch is always on (the checkbox is gone)
                 s.fighter_standoff = True         # v0.41.133 (XO 2026-10-23): TARCAPs, escorts and sweeps always stop short of live SAM cover (the checkbox is gone; off made the AI go banzai)
                 if not raw.get("merge_v131"):
