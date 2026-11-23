@@ -35,6 +35,24 @@ SYSTEMS = {
 # the SA-5's 70 is the measured high-altitude reach rounded up. SA-9: Strela-1 reach 4.2 km (public, firm) = 2.3 nm, rounded to the MANPAD's 3.
 RANGE_NM = {"SA-8": 7, "AAA": 3, "MANPAD": 3, "SA-2": 25, "SA-3": 13, "SA-6": 13, "SA-11": 18, "SA-10": 48, "SA-15": 8, "SA-19": 5, "SA-5": 70, "SA-9": 3}
 
+# S168 (XO 2026-11-22, "resize rings"): how far a live site REALLY fires depends on the target's altitude. Measured in 31 server runs (`probes/s168/launch_ranges.py`, the p90 of the launch distance
+# to a target in the band, rounded up): the SA-11 (9M38M1, 113 launches) 3 to 8 km: p90 23.9 / max 25.0 nm, above 8 km: p90 25.7 / max 28.4; below 3 km (2 launches) too few: the base ring stays.
+# Floors in feet (3 km = 9,843 ft, 8 km = 26,247 ft), ascending. A variant with no row keeps its base ring: the S-300 (SA-10) fires well inside its 48 (p90 31 to 35 nm) and the SA-15 inside its 8.
+RING_BY_ALT_NM = {"SA-11": ((9843, 24.0), (26247, 26.0))}
+
+
+def ring_nm(variant: str, alt_ft=None) -> float:
+    """S168: the ring of a live site of this variant against a jet at alt_ft (None = the base `RANGE_NM`, the low-altitude ring). Never smaller than the base ring."""
+    base = RANGE_NM.get(variant, 0)
+    if alt_ft is None:
+        return base
+    reach = base
+    for floor_ft, nm in RING_BY_ALT_NM.get(variant, ()):
+        if alt_ft >= floor_ft and nm > reach:
+            reach = nm
+    return reach
+
+
 LONG_RANGE_NM = 30.0       # a SAM whose ring reaches this far counts as long-range for the station rule (profiles._long_range_threat): the SA-5 and SA-10 pass, the SA-2 / 3 / 6 / 11 do not
 
 DEFAULT_TIER = {"umbrella": ["SA-10"], "gate": ["SA-2", "SA-3", "SA-6", "SA-11", "SA-10"]}      # the Caucasus tier: exactly what the planner had before this module
