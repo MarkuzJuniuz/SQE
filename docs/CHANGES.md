@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.598, escorts hold a station again instead of following the strikers
+In tests the AI escort that was meant to fly with the lead striker never did: it ran ahead of its leader while the strikers were still taxiing, ended up 55 to 60 nm away on its own and was shot down by a SAM. Escorts of strike and CAS packages now hold a covering station near the strikers again, as before the follow mode was added. In the test the escort survived and shot down a fighter.
+
 ## v0.41.597, SAM rings follow what the SAMs really fire
 In tests an SA-11 Buk fired at jets up to 28 nm away, and the ships' SM-2 missiles up to 78 nm, further than the rings the AI kept to. Your fighter cover and escorts now keep out of an SA-11's real reach for their altitude (18 nm low down, 24 nm from 10,000 ft and 26 nm from 26,000 ft up) and out of 78 nm round the carrier group. This moves a few cover stations and turn points, yours included when you fly cover. Strike routes and the Patriot ring are unchanged.
 
