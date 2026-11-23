@@ -239,7 +239,7 @@ class SettingsDialog(QDialog):
         v = page("Mission Build")
         self.merge = QComboBox(); self.merge.addItem("Off (One Package per Mission)", "off"); self.merge.addItem("On (Nearest First, Up to the Unit Limit)", "area")
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
-        self.mmax = StepSpin(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.max_units))
+        self.mmax = StepSpin(); self.mmax.setRange(60, 750); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.max_units))
         row(v, "Package Merging", self.merge, self.mmax)
         hint(v, "Packages that start inside the time windows below fly in the same mission (AI-flown, one shared ground world and support), wherever their target is, "
                 "nearest to your target first. The unit limit counts the whole mission: over it, the furthest packages are left out first (a Fighter Sweep stays while a package it "
