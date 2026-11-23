@@ -48,6 +48,8 @@ N_MAX = {1: 4, 2: 8, 3: 8}   # S25: doubled for 4-hour turns (was {1: 2, 2: 4, 3
 NIGHT_FACTOR = {1: 0.25, 2: 0.33, 3: 0.33}      # a night turn (night ops on) plans this share of a day turn's count: the old night_r / day_r of PACKAGES_PER_TURN (not measured in Phase A, probed in B+C)
 STRIKE_ROLES = frozenset({Role.STRIKE, Role.SEAD, Role.CAS})      # squadrons whose pairs the package count is made from
 RETASK_TURNS = 1             # S25: was 2 (same 4 hours) # a target hit in the last this-many turns is not planned again unless its health has dropped since (the plan's value, judgment call)
+REFILL_EXTRA = 16            # S16a (XO 2026-11-23): when the turn's named jobs cannot all be crewed, the planner is asked for this many more candidates than the rate. Judgment call: the probe (`probes/s16/why_drop.py`) shows 3 to 5 named jobs dropped a turn
+REFILL_MAX_TRIES = 12        # ...and at most this many of them are tried per build pass (a try that fails costs one failed build, no jets); judgment call, the same size as the drops the probe measured
 PLAYER_EXTRA_JOBS = 4        # a day turn with no job for your squadron (while it has a ready pair) may add up to this many of the planner's next-best jobs, one at a time, until one fits (judgment call)
 RETASK_KEEP_TURNS = 4        # S25: was 8 (same 16 hours) # ...and the hit record is kept this long (bookkeeping only)
 MAX_NIGHT_TURNS = 6          # S25: was 12; a loop bound for the night auto-resolution (a night is three turns), never a game rule
@@ -364,6 +366,8 @@ class Session(Merging, SeadTiming):
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=n + (1 if is_bomber else 0), bomber=is_bomber, skip=self._retask_skip()) if (n > 0 or is_bomber) else []
         redair.assign_guards(st, self.d, objs)          # v0.41.10: red's patrols take stations over the SAM sites it expects to be attacked
         carry = self._carried(objs)
+        job_ids = {o.id for o in carry} | {o.id for o in objs}       # S16a: the jobs the turn aims at (yesterday's postponed ones and the planner's list); raids, supply fillers and prep packages are not counted
+        refill_pool = []                                               # S16a: the planner's next candidates, asked for once, only when a job was dropped
         # v0.41.241: the supply strikes and road-battalion CAS are the day's filler (with the road sites there are always some): they are built AFTER the announced raids, so a full job list
         # does not use up the fighters a raid intercept needs (it did: on a fresh L3 campaign no raid intercept was offered for ten days running)
         _late = [o for o in objs if (o.type == ObjectiveType.STRIKE and getattr(st.assets.get(o.target_id), "kind", None) in ground.SUPPLY_KINDS)
@@ -432,6 +436,43 @@ class Session(Merging, SeadTiming):
                     pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=tuple(range(pref[i - 1], _tod.NWAVES + 1)))
                 if pkg is not None:
                     out.append(pkg)
+            # S16a (XO 2026-11-23, lever A of the S16 probe): a named job that could not be crewed (a stand-off job with no kit jets free, a target out of reach, no SEAD seat) used to leave the turn one
+            # package short of its rate. The turn now tries the planner's next candidates, a few at a time, until it has built as many of its jobs as it named (or the tries run out).
+            pass_ids = set(job_ids)                                      # (this pass only: a second build pass of the turn starts from the planner's jobs again)
+            wanted = len(pass_ids)
+            built_jobs = sum(1 for p in out if p.objective.id in pass_ids)
+            if built_jobs < wanted and n > 0:
+                if not refill_pool:
+                    pool_limit = n + REFILL_EXTRA
+                    refill_pool.extend(ObjectivePlanner(self.d).plan(st, self._rng(), limit=pool_limit, bomber=False, skip=self._retask_skip(), waves=False))
+                tried_keys = {(o.type, o.target_id, o.aim) for o in objs}
+                refused_kits = set()
+                tries = 0
+                wave_count = {w: 0 for w in range(1, _tod.NWAVES + 1)}
+                for p in out:
+                    wave_count[p.extra.get("wave", 1)] = wave_count.get(p.extra.get("wave", 1), 0) + 1
+                for cand in refill_pool:
+                    if built_jobs >= wanted or tries >= REFILL_MAX_TRIES:
+                        break
+                    key = (cand.type, cand.target_id, cand.aim)
+                    if cand.type in (ObjectiveType.FLEET_DEFENSE, ObjectiveType.BARCAP):
+                        continue                                # (raid intercepts and fleet patrols are the raids' own packages, not the turn's strike-class jobs)
+                    if key in tried_keys or cand.after or cand.aim == "DEAD" or ai_only(st, cand) or (cand.type, cand.aim) in refused_kits:
+                        continue                                # (a Close DEAD or a follow job needs its partner package in the same list; a kit job whose kit just ran out fails the same way)
+                    tried_keys.add(key)
+                    tries += 1
+                    cand_copy = copy.copy(cand)
+                    cand_copy.id = f"obj-t{turn}-refill{tries}"
+                    start_wave = min(wave_count, key=lambda w: (wave_count[w], w))        # the least crowded wave first, later waves after it
+                    refill_pkg, refill_wave = self._build_wave(pb, cand_copy, len(objs) + 50 + tries, ledger, (False,), names, waves=tuple(range(start_wave, _tod.NWAVES + 1)))
+                    if refill_pkg is None:
+                        if cand.aim == "STANDOFF":
+                            refused_kits.add((cand.type, cand.aim))
+                        continue
+                    out.append(refill_pkg)
+                    wave_count[refill_wave] = wave_count.get(refill_wave, 0) + 1
+                    pass_ids.add(cand_copy.id)
+                    built_jobs += 1
             if st.barcap is not None:
                 st.barcap["react_used"] = used_hold                                          # blue hold jets this turn's raid intercepts crewed from (probe / Overview)
             out.sort(key=lambda p: p.number)

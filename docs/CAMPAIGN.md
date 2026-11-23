@@ -79,7 +79,8 @@ At the start of each (day) turn the planner builds the turn's tasking list, in t
    or a third (Levels 2 and 3) of that. It takes the best-scoring job of each kind first, and no one kind may take more than 40% of the
    list, with the SAM wave (section 5) taken out first. The F-117A's night jobs (section 5) come on top of that list.
 4. **Packages are built from the jets that are free.** A package is crewed from what the ledger shows (section 7). A job
-   that cannot be crewed waits for the next turn.
+   that cannot be crewed (no stand-off jets free, a target out of reach, no SEAD seat) waits for the next turn, and the turn tries the planner's next
+   candidates in its place (up to 12 tries), so it builds about as many packages as it aims at.
 5. **Start times are set in four waves, an hour apart.** The waves open with the turn and 60, 120 and 180 minutes later;
    packages start within about 25 minutes of their wave's opening. The jobs are spread over the four waves as evenly as they
    go, the earlier waves first; packages listed together (targets inside the Target Area Radius) stay together in one wave, and a carrier raid and its prep

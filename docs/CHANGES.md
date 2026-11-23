@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.607, a turn tries the next candidate jobs when one cannot be crewed
+When a job the planner named could not be flown (no stand-off jets free, a target out of reach, no SEAD seat), the turn used to be one package short. It now tries the planner's next candidates, a few at a time, so a turn builds about as many packages as it aims at. On day 1 that is about one more package on the Caucasus; on Syria Level 3 the crews are the limit and nothing changes.
+
 ## v0.41.606, the all-AI test's stand-in flight starts in the air
 In the all-AI test mode the flight that stands in for you spent about five and a half minutes taxiing in DCS, so it flew 330 to 400 seconds behind its plan and pulled the whole package's timing with it. It now starts in the air on its first point, like every other AI flight. Your own flight is unchanged.
 
