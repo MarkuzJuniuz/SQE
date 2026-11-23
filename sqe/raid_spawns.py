@@ -88,6 +88,9 @@ RAID_JOIN_S = 60              # the raid pushes this long after the last batch r
 RAID_CLIMB_S = 180            # allowance for the climb from the runway to the marshal
 RAID_STAGED_GAP_S = 15        # a staged raid's groups push this far apart (the salvo spread; the old raid used RAID_GROUP_GAP_S 60 s)
 RAID_MSHL_STEP_M = 150        # each group orbits the marshal this much lower than the one before (no two share a level)
+RAID_ESCORT_ABOVE_M = 300     # S169: the lowest escort flies this far above the HIGHEST bomber lane (judgment call: about the 1,000 ft vertical separation, 305 m), the next escort groups RAID_MSHL_STEP_M higher each. The Escort task holds
+                              # a point 300 m above its own bomber, which with the 150 m lane grading put the escort of group 4 exactly in group 2's lane (T3e, t=1145: a RAID-E MiG-23MLD and a RAID-B Su-24M collided at 8,994 m); the first fix
+                              # (every escort at one level) made two escort groups collide over the marshal (round 1, t=1101): so every escort group has a level of its own
 RAID_REACH_NM = 208           # how far the Tu-22M3's X-22 shoots as DCS flies it: 380 to 385 km (208 nm) in XO's 2026-11-03 run (measured)
 RAID_MSHL_CLEAR_NM = 12       # the marshal stays this far outside that
 
@@ -1318,8 +1321,12 @@ class RaidSpawns:
                                 continue
                             pt_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(pt_.position.x, pt_.position.y), int(esc_nm_ * NM), [task.Targets.All.Air]))
                     else:
+                        # S169: the escort's point is above the highest bomber lane, and each escort group on a level of its own (RAID_MSHL_STEP_M apart, like the bomber lanes): none shares a level with a bomber group or another escort group
+                        top_lane_m = max(group_.points[1].alt for group_ in bomber_gs if len(group_.points) > 1)
+                        escort_level_m = top_lane_m + RAID_ESCORT_ABOVE_M + RAID_MSHL_STEP_M * ci
+                        escort_height_m = max(RAID_ESCORT_ABOVE_M, escort_level_m - bg.points[1].alt) if len(bg.points) > 1 else RAID_ESCORT_ABOVE_M
                         eg.points[0].tasks.insert(0, task.EscortTaskAction(group_id=bg.id, engagement_max_dist=int(esc_nm_ * NM), lastwpt=len(bg.points) - home_n[bg.name],
-                                                                            targets=[task.Targets.All.Air.id], position={"x": -1000, "y": 300, "z": 500}))
+                                                                            targets=[task.Targets.All.Air.id], position={"x": -1000, "y": escort_height_m, "z": 500}))
                 rtbe_ = task.OptRTBOnOutOfAmmo(); rtbe_.params["action"]["params"]["value"] = AAM_WEAPONS
                 eg.points[0].tasks.append(rtbe_)
                 en = []
