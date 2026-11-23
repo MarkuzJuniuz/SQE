@@ -35,11 +35,11 @@ _OLD_RUNWAY_TEXT = re.compile(r"^Crater the runway at (.+) \((\d+) aircraft\)$")
 def _upgrade_runway_text(*parts) -> None:
     """S78 open point: a package planned before v0.41.435 stored its description as "Crater the runway at <field> (<n> aircraft)"; today's runway strike reads "OCA: Runway Strike,
     <field> (<n> aircraft)" (`war.py`). Walk the plan, the resolved plan, the pending sortie and the history (their objective dicts) on load and map exactly that pattern, only under the
-    `description` key. The war log keeps what it said at the time."""
+    `description` key (and the plain-text `objective` of a history or pending entry, which holds the same sentence). The war log keeps what it said at the time."""
     def walk(x):
         if isinstance(x, dict):
             for k, v in x.items():
-                if k == "description" and isinstance(v, str):
+                if k in ("description", "objective") and isinstance(v, str):
                     m = _OLD_RUNWAY_TEXT.match(v)
                     if m:
                         x[k] = f"OCA: Runway Strike, {m.group(1)} ({m.group(2)} aircraft)"
