@@ -462,41 +462,41 @@
    "ab_shayrat": 42
   },
   "2": {
-   "ab_bassel": 23,
-   "ab_duhur": 11,
-   "ab_hama": 13,
-   "ab_shayrat": 39,
-   "ab_tiyas": 20,
-   "ab_palmyra": 4,
-   "ab_sayqal": 41,
-   "ab_damascus": 30,
-   "ab_dumayr": 43,
-   "ab_nasiriyah": 14
+   "ab_bassel": 27,
+   "ab_duhur": 13,
+   "ab_hama": 15,
+   "ab_shayrat": 46,
+   "ab_tiyas": 23,
+   "ab_palmyra": 5,
+   "ab_sayqal": 48,
+   "ab_damascus": 45,
+   "ab_dumayr": 51,
+   "ab_nasiriyah": 16
   },
   "3": {
-   "ab_bassel": 23,
-   "ab_duhur": 11,
-   "ab_hama": 13,
-   "ab_shayrat": 39,
-   "ab_tiyas": 20,
-   "ab_palmyra": 4,
-   "ab_sayqal": 41,
-   "ab_damascus": 30,
-   "ab_dumayr": 43,
-   "ab_nasiriyah": 14
+   "ab_bassel": 27,
+   "ab_duhur": 13,
+   "ab_hama": 15,
+   "ab_shayrat": 46,
+   "ab_tiyas": 23,
+   "ab_palmyra": 5,
+   "ab_sayqal": 48,
+   "ab_damascus": 45,
+   "ab_dumayr": 51,
+   "ab_nasiriyah": 16
   }
  },
  "wing_weight": {
-  "ab_bassel": 23,
-  "ab_duhur": 11,
-  "ab_hama": 13,
-  "ab_shayrat": 39,
-  "ab_tiyas": 20,
-  "ab_palmyra": 4,
-  "ab_sayqal": 41,
-  "ab_damascus": 30,
-  "ab_dumayr": 43,
-  "ab_nasiriyah": 14
+  "ab_bassel": 27,
+  "ab_duhur": 13,
+  "ab_hama": 15,
+  "ab_shayrat": 46,
+  "ab_tiyas": 23,
+  "ab_palmyra": 5,
+  "ab_sayqal": 48,
+  "ab_damascus": 45,
+  "ab_dumayr": 51,
+  "ab_nasiriyah": 16
  },
  "field_tier": {
   "ab_bassel": 2,
@@ -1025,22 +1025,20 @@
    "Su_24M": 10
   },
   "2": {
-   "MiG_21Bis": 40,
-   "MiG_23MLD": 58,
-   "MiG_29A": 25,
+   "MiG_21Bis": 44,
+   "MiG_23MLD": 66,
+   "MiG_29A": 36,
    "MiG_25PD": 21,
-   "Su_17M4": 67,
-   "Su_24M": 27
+   "Su_17M4": 50,
+   "Su_24M": 53
   },
   "3": {
-   "MiG_23MLD": 36,
-   "MiG_29A": 16,
-   "MiG_29S": 26,
-   "MiG_25PD": 12,
-   "Su_27": 36,
+   "MiG_29A": 52,
+   "MiG_29S": 58,
+   "Su_27": 60,
    "MiG_31": 8,
-   "Su_17M4": 64,
-   "Su_24M": 40
+   "Su_17M4": 58,
+   "Su_24M": 48
   }
  },
  "extra_sams": [

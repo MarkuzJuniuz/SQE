@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.604, red fields about as many jets as blue at Levels 2 and 3
+On the Caucasus red gets two more air bases (Anapa-Vityazevo and Krasnodar-Center) so it can park about as many jets as the coalition's 284: about 240 at Level 2 and 284 at Level 3 (the bomber wing not counted), with more Su-27 and Su-24M at Level 3 and fewer Su-25. On Syria red grows to 270 jets at Level 2 and 284 at Level 3, with fewer Su-17M4; at Level 3 red flies only fourth-generation fighters (MiG-29, Su-27, MiG-31): the MiG-23s and MiG-25s are gone. New campaigns only; Level 3 stays harder through its types and SAMs, not its count.
+
 ## v0.41.603, an experimental switch for flying on a local DCS dedicated server
 Settings > Mission Build has a new experimental option, off by default, to fly on a DCS dedicated server on your PC (real time only). In this first version it gives your flight lead a client slot and adds the server start / stop code that keeps your own server settings safe; the Fly button does not use it yet.
 

@@ -145,9 +145,21 @@
             "name": "Mineralnye Vody",
             "airport": "Mineralnye Vody",
             "value": 7
+        },
+        {
+            "id": "ab_anapa",
+            "name": "Anapa-Vityazevo",
+            "airport": "Anapa-Vityazevo",
+            "value": 6
+        },
+        {
+            "id": "ab_krasnodar",
+            "name": "Krasnodar-Center",
+            "airport": "Krasnodar-Center",
+            "value": 6
         }
     ],
-    "red_extra_airports": ["Krasnodar-Center", "Krasnodar-Pashkovsky", "Anapa-Vityazevo", "Novorossiysk"],
+    "red_extra_airports": ["Krasnodar-Pashkovsky", "Novorossiysk"],
     "red_keep": {
         "1": [
             "ab_sochi",
@@ -157,12 +169,13 @@
         ]
     },
     "red_roster": {
-        "2": {"MiG_31": 6, "MiG_29S": 24, "MiG_29A": 34, "MiG_23MLD": 17, "Su_25": 100, "Su_24M": 38}
+        "2": {"MiG_31": 6, "MiG_29S": 28, "MiG_29A": 44, "MiG_23MLD": 26, "Su_25": 70, "Su_24M": 66},
+        "3": {"MiG_31": 12, "Su_27": 76, "MiG_29S": 40, "MiG_29A": 24, "Su_25": 28, "Su_24M": 104}
     },
     "red_fill": {
         "1": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_gelen": 8},
-        "2": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_krymsk": 40, "ab_maykop": 40, "ab_nalchik": 13, "ab_beslan": 11, "ab_gelen": 9, "ab_minvody": 20},
-        "3": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_krymsk": 40, "ab_maykop": 40, "ab_nalchik": 13, "ab_beslan": 11, "ab_gelen": 9, "ab_minvody": 20}
+        "2": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_krymsk": 40, "ab_maykop": 40, "ab_nalchik": 13, "ab_beslan": 11, "ab_gelen": 9, "ab_minvody": 20, "ab_anapa": 64, "ab_krasnodar": 39},
+        "3": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_krymsk": 40, "ab_maykop": 40, "ab_nalchik": 13, "ab_beslan": 11, "ab_gelen": 9, "ab_minvody": 20, "ab_anapa": 64, "ab_krasnodar": 39}
     },
     "wing_weight": {
         "ab_sukhumi": 16,
@@ -173,7 +186,9 @@
         "ab_nalchik": 13,
         "ab_beslan": 11,
         "ab_gelen": 9,
-        "ab_minvody": 20
+        "ab_minvody": 20,
+        "ab_anapa": 64,
+        "ab_krasnodar": 39
     },
     "field_tier": {
         "ab_sukhumi": 2,
@@ -185,7 +200,9 @@
         "ab_maykop": 4,
         "ab_gelen": 4,
         "ab_krymsk": 4,
-        "ab_minvody": 4
+        "ab_minvody": 4,
+        "ab_anapa": 4,
+        "ab_krasnodar": 4
     },
     "bomber_base": "ab_mozdok",
     "squadrons": [
