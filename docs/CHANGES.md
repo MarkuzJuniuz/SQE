@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.605, red raid escorts no longer fly in a bomber's lane
+In a test, a red raid escort and a raid bomber collided in mid-air: the escort's formation point sat exactly at another bomber group's altitude. Every escort group now flies on a level of its own, at least 300 m above the highest bomber lane. The raid's route and timing are unchanged.
+
 ## v0.41.604, red fields about as many jets as blue at Levels 2 and 3
 On the Caucasus red gets two more air bases (Anapa-Vityazevo and Krasnodar-Center) so it can park about as many jets as the coalition's 284: about 240 at Level 2 and 284 at Level 3 (the bomber wing not counted), with more Su-27 and Su-24M at Level 3 and fewer Su-25. On Syria red grows to 270 jets at Level 2 and 284 at Level 3, with fewer Su-17M4; at Level 3 red flies only fourth-generation fighters (MiG-29, Su-27, MiG-31): the MiG-23s and MiG-25s are gone. New campaigns only; Level 3 stays harder through its types and SAMs, not its count.
 
