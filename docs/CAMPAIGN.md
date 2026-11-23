@@ -22,7 +22,7 @@ and sites.
 
 There are two maps: the Caucasus (this page's numbers, unless it says otherwise) and Syria 2001 (section 10, which lists what differs). On the Caucasus the coalition (blue) holds the south-east (Senaki, Kutaisi, Kobuleti, a carrier group at sea and
 the rear support base at Kutaisi); red holds the north and the Black Sea coast (Sukhumi, Gudauta, Sochi, Gelendzhik,
-Krymsk, and the northern fields such as Mozdok, Beslan, Nalchik, Maykop and Mineralnye Vody). On Syria blue holds Incirlik and the Cyprus fields and fights down the Hatay coast road.
+Krymsk, Anapa-Vityazevo and Krasnodar-Center behind it, and the northern fields such as Mozdok, Beslan, Nalchik, Maykop and Mineralnye Vody). On Syria blue holds Incirlik and the Cyprus fields and fights down the Hatay coast road.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -33,7 +33,7 @@ You pick the level when you start a campaign. It sets how strong red is and how 
 | | Level 1, Insurgent | Level 2, Regional power | Level 3, Near-peer |
 |---|---|---|---|
 | Red airfields | 4: Sukhumi, Gudauta, Sochi, Gelendzhik | 10, the whole red coast and the north | 10, the whole red coast and the north |
-| Red aircraft at the start | 94, old types kept supplied by a sponsor (MiG-21, MiG-23, Su-25, Su-24M) | 241, mixed (MiG-31, MiG-29, MiG-23, Su-24M, Su-25, plus the Mozdok bombers and escorts) | 254, modern (MiG-31, MiG-29S, Su-27, Su-24M, Su-25, plus the Mozdok bombers and escorts) |
+| Red aircraft at the start | 94, old types kept supplied by a sponsor (MiG-21, MiG-23, Su-25, Su-24M) | 240, mixed (MiG-31, MiG-29, MiG-23, Su-24M, Su-25), plus the Mozdok bombers and escorts | 284, modern (MiG-31, MiG-29S, Su-27, Su-24M, Su-25), plus the Mozdok bombers and escorts |
 | Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA | SA-10, SA-11, SA-6, SA-15, SA-19 |
 | Air defence integration (`iads`) | 0.15 | 0.55 | 0.90 |
 | Red AI skill | Average | Good | High |
@@ -197,9 +197,9 @@ Red flies standing **CAP pairs** over its fighter fields, **Fighter Sweeps** whe
 It holds back **25%** of each squadron's ready fighters as a **reaction reserve** that is the only source of scrambles and
 reinforcements; the rest are free for patrols and raids. Jets that fly go to refit; shot-down jets are gone until replaced.
 
-**How red's jets are laid out.** Each level gives every red field a fixed number of jets, sized to the field's parking. At Level 3 a field is filled to
-about 70% of its parking, which leaves room for squadrons that fall back from a lost field (about 30%). Level 2 has the same number of jets at each
-field as Level 3 (its types are older and weaker), and Level 1 fills its four fields to about 70% (Gelendzhik about 60%). (These are the Caucasus figures; Syria's are in section 10.) The jets are grouped into squadrons of a few types per field, up to 6 jets at
+**How red's jets are laid out.** At Levels 2 and 3 red fields about as many jets as blue (the Tu-22M3 wing not counted): on the Caucasus about 240 at Level 2 and 284 at
+Level 3, on Syria 270 and 284 (blue has 284). Level 3 is harder than Level 2 through its types, its pilots and its SAMs, not through the count. Each field has a fixed
+share of the jets, sized to its parking, and the fields have room left for squadrons that fall back from a lost field. Level 1 fills its four fields to about 70% (Gelendzhik about 60%). (These are the Caucasus figures; Syria's are in section 10.) The jets are grouped into squadrons of a few types per field, up to 6 jets at
 Level 1, and 14 at Levels 2 and 3 (about 10 to 12 is the Soviet and Russian norm, so these are big squadrons), so a field flies one or two types in full squadrons, not
 two or three jets of everything. The Forces screen lists them with in-universe names such as "Sochi-Adler MiG-21Bis Sqn #2"; a squadron that withdraws keeps its name.
 
@@ -327,13 +327,13 @@ Who you fight depends on the level: Level 1 is **the Northern Coastal Command** 
 | | Level 1 | Level 2 | Level 3 |
 |---|---|---|---|
 | Red airfields | 4: Bassel Al-Assad, Abu al-Duhur, Hama, Shayrat | 11, the whole coast road and the interior | 11 |
-| Red aircraft at the start | 94 (MiG-21Bis, MiG-23MLD, Su-17M4, Su-24M) | 238 (adds MiG-29A and MiG-25PD) | 238, plus the bomber wing (MiG-23MLD, MiG-29A and S, MiG-25PD, Su-27, MiG-31, Su-17M4, Su-24M) |
+| Red aircraft at the start | 94 (MiG-21Bis, MiG-23MLD, Su-17M4, Su-24M) | 270 (adds MiG-29A and MiG-25PD) | 284, plus the bomber wing (all fourth-generation fighters: MiG-29A and S, Su-27, MiG-31; Su-17M4, Su-24M; no MiG-23s or MiG-25s left) |
 | Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA, two SA-5 batteries | SA-10, SA-11, SA-6, SA-15, SA-19, three SA-5 batteries |
 | Air defence integration, red counter-attacks, ground pressure | as in section 2 (0.15 / 0.10 / 0.15) | 0.55 / 0.30 / 0.45 | 0.90 / 0.55 / 0.80 |
 | Tu-22M3 bomber wing | none | none | 20 Tu-22M3 (14 at Damascus, 6 at Bassel Al-Assad) with 12 Su-27 escorts (6 at each) |
 | Victory | take Bassel Al-Assad | destroy all of Lutorin Works, or red's supply collapses (see below) | destroy all of Lutorin Works, or red's supply collapses |
 
-Red's jets fill each field's parking to about 75% at Level 1 (four small fields), about 70% at Levels 2 and 3 (the same jets per field; Level 2's types are older, a regional power's. Damascus is held back for the bomber wing at Level 3).
+Red's jets fill each field's parking to about 75% at Level 1 (four small fields) and about 80% at Levels 2 and 3 (270 and 284 jets; the same jets per field; Level 2's types are older, a regional power's, with fewer Su-17M4 than before. Damascus is held back for the bomber wing at Level 3).
 
 Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4** attack jet. At Level 3 the Tu-22M3 wing raids the carrier along the line from the carrier through Damascus, at most 16 bombers at a time (drawn from both bomber fields, a closed one skipped), flown as a set piece with its SEAD in the turn before, as in section 5. The fleet's station moves and it sails out of the raid's reach on the staging day, as in section 5.
 
