@@ -97,7 +97,6 @@ STAND_BACK_NM = {"F-14BU": 12, "F-14B": 12}
 COVER_REACH_NM = {True: 40, False: 30}      # long-range air-to-air shooters (LONG_RANGE_A2A) / the rest
 COVER_REACH_F14_NM = 45
 COMMIT_ALL_MISSION_S = 10 ** 6       # S160: a commit window with no end of its own (the group's own route ends it)
-PHOENIX_ZONE_NM = 35         # the hunting TARCAP's engage circle for the Tomcat (the Eagle's is 25); = TARCAP_COVER_MAX_NM, the largest circle `_cover_circle` will build
 TARCAP_BARCAP_OVERLAP_NM = 4  # v0.41.138: the TARCAP circle reaches this far (less 2 nm of margin) inside the nearest BARCAP circle, so there is no unguarded strip between them (judgment call: a few miles so a bandit crossing from one to the other is always inside one)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
 SLAM_AIMS = 2                # v0.41.309: aim points (buildings) of a SLAM-ER launch, a missile each per jet's two (the Standoff Strike kit carries two AGM-84H a jet)
@@ -951,14 +950,6 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if prev_id is not None:
             self._pkg_units[prev_id] = self._counts()["units"] - prev_
         return out
-
-    def _start_for(self, key) -> StartType:
-        """The first group at a base starts on the runway (or catapult); every other one starts hot on the ramp and taxis. v0.39.24 run: two
-        Tomcat alert pairs were both put on the carrier's catapult and three of the four jets were destroyed at mission start."""
-        if key in self._runway_busy:
-            return StartType.Warm
-        self._runway_busy.add(key)
-        return StartType.Runway
 
     def _alert_group(self, side, name, typ, ap, maintask, start, size, toward, key=None):
         """An alert / scramble group: hot on the ramp, held, and it taxis when called (v0.40.7; the runway stays free for flights that are

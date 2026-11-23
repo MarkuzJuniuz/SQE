@@ -26,11 +26,6 @@ def held_back(ready: int, level: int) -> int:
     return min(int(ready), 2 * max(1, int(k / 2 + 0.5)))
 
 
-def free_for_tasking(q, level: int) -> int:
-    """Ready jets of one squadron (blue Squadron or RedSquadron) that the planner may use this turn: `available` less its hold."""
-    return max(0, int(q.available) - held_back(q.available, level))
-
-
 def apply(ledger, squadrons, level: int) -> dict:
     """Take the hold of each squadron off the ledger's ready pool (`ledger.free`; the later tiers, jets ready only by a later wave, are not held). -> {squadron id: jets held}."""
     out = {}

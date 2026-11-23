@@ -53,7 +53,6 @@ BLUE_REPAIR = 0.10
 # v0.41.140 (XO 2026-10-27, Campaign Revamp): the orders are a fixed feature (no settings), for both sides at every level. A battery moves by air, so
 # it arrives in 1 to 3 days by the sender's supply (1 at 100%, 3 at the 35% floor), and there is no chance roll any more: supply sets the time.
 TRANSFER_SETUP_DAYS = 1                  # v0.41.199 (XO 2026-10-30): a transferred battery needs this many days to be set up on top of the flight (both sides)
-TRANSFER_DAYS = 2                   # v0.41.197 (XO 2026-10-30): a TRANSFER between sites in theatre goes by air, 1 to 3 days by supply (the middle value; transfer_days() has the real time). Judgment call.
 SAM_DEBT = {"long": 0.0, "medium": 0.0, "short": 0.0}       # v0.41.196: supply a side pays for a replacement battery (order or rebuild in place). The mechanism is built but the price is ZERO: the 12-seed L3 sim showed no benefit (1x = 0.06 / 0.03 / 0.02: red SAM days at Sukhumi 49% against 37% with no debt, blue won 6 of 12 against 10 of 12). Raise these to switch it on.
 SAM_DEBT_PAYBACK = 1.5                  # the debt of one purchase pays back in a straight line over this many times the order time (XO's choice)
 SAM_DEBT_CAP = 0.15                     # all open debt of a side together, so a side that keeps losing SA-10s cannot spiral (judgment call)
@@ -170,13 +169,6 @@ def _site(sid, name, b, variant, health, state=None, key=None):
     from .models import EnemyAsset
     x, y = place_blue_site(state, b, key) if state is not None and key else (b.x, b.y)
     return EnemyAsset(sid, name, AssetKind.SAM, x, y, health, BLUE_SITE_VALUE, [], None, variant, 1, b.id)
-
-
-def field_defence(state, b) -> float:
-    """A blue field's air-defence strength, 0..1: the mean health of its three sites (the cache `Base.defense` holds the same number)."""
-    ensure_blue_sams(state)
-    sites = blue_sites(state, b)
-    return sum(a.health for a in sites.values()) / len(sites) if sites else float(getattr(b, "defense", 0.0) or 0.0)
 
 
 def shift_field(state, b, delta: float) -> None:

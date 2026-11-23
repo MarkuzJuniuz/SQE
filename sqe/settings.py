@@ -344,9 +344,3 @@ def restore_mission_scripting(install: str) -> tuple[bool, str]:
     return True, "MissionScripting.lua restored."
 
 
-def scripting_patched_by_us(install: str) -> bool:
-    p = mission_scripting_path(install)
-    try:
-        return bool(install) and p.exists() and bool(_DONE.search(p.read_text(encoding="utf-8", errors="replace")))
-    except OSError:
-        return False

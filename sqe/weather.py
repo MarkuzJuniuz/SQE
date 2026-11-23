@@ -238,10 +238,6 @@ def _finish(state: str, a: dict, b: dict | None, f: float, hour: float, temp_mon
               temp_c=round(temp_month + mix("dt"), 1), preset=preset, base_m=round(base_m), mode=mode)
 
 
-def clear_day(temp_c: float = 20.0) -> Wx:
-    return Wx(temp_c=temp_c)
-
-
 def forecast(mode: str, campaign_id: str, start: date, day: int, hour: float, pack: dict, ils_low_vis: bool = False) -> Wx:
     """The weather at local `hour` on campaign day `day` (1-based) for the active theatre pack."""
     k = max(0, int(day) - 1)

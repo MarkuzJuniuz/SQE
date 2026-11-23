@@ -53,11 +53,6 @@ def chance(tier_self: int, best_cover: int, launch_km: float) -> float:
     return p * min(1.0, (launch_km - BURN_KM) / (FULL_KM - BURN_KM))
 
 
-def jammer_on(unit_name: str) -> bool:
-    """The one place that says whether a jammer is switched on. Always true for now; a future export script can feed the cockpit switch here."""
-    return True
-
-
 # ---- the abstract war (war.py): how much jamming a package brings ------------------------------------------------------------
 SITE_CUT = 0.20                 # a package with full jamming cover cuts the site's strength in the SEAD odds by this much
 LOSS_CUT = 0.15                 # ...and the package's loss chance by this much

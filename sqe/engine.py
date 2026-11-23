@@ -687,10 +687,6 @@ class Session(Merging, SeadTiming):
         """The tasking order of THIS TURN (v0.41.338: `state.plan` holds this turn's packages only). Emergency packages (flown, folded in or settled by odds) are in the plan but are not listed."""
         return [p for p in (Package.from_dict(d) for d in self.state.plan) if not p.extra.get("past") and not p.extra.get("unseen_raid")]      # v0.41.348: an unseen raid is not offered (the war sim resolves it)
 
-    def day_packages(self) -> list:
-        """Kept for tools and tests (v0.41.337 had the whole day here): the same as `packages()` now, since the plan is this turn's."""
-        return self.packages()
-
     def _raid_prep_objectives(self, pb, objs: list) -> tuple:
         """v0.41.305 (XO 2026-11-05: "just offer them as SEAD / SO DEAD packages that go before the fleet defense ... they're tuned already"): for the carrier raid, one SEAD or
         Standoff DEAD job per live SAM site that threatens its intercept line (`tm.raid_inbound_sites`, the same list the raid's own scripted SEAD uses), skipping a site that
@@ -844,12 +840,6 @@ class Session(Merging, SeadTiming):
         if pkg.extra.get("setpiece"):                    # v0.41.293 (XO 2026-11-04: "make the SEAD/DEAD seats not flyable by the player", for now, until the SEAD teams are their own packages): the carrier raid's SEAD is AI-only (v0.41.284: only offered while a SAM was alive)
             opts = [f for f in opts if f.role != Role.SEAD]
         return [f for f in opts if f.squadron_id == self.state.player.squadron_id] if squadron_only else opts
-
-    def _raid_sam_live(self) -> bool:
-        """Is any red SAM site alive that a raid SEAD flight could be sent against (the builder's own filter: a long-range type, not nearly dead)?"""
-        from . import threatmap as tm
-        from .models import AssetKind
-        return any(a.kind == AssetKind.SAM and not a.destroyed and a.health > 0.25 and tm.RANGE_NM.get(a.variant, 0) >= 12 for a in self.state.assets.values())
 
     def _preroll(self, pkgs: list) -> dict:
         """The war sim's verdict on these packages, rolled NOW on a throwaway copy of the state. The mission shows it as ruins, and the same

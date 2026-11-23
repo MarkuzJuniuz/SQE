@@ -111,11 +111,6 @@ class Squadron:
         """S22: the jets the squadron HAS (ready + in refit + resting + held replacements). GUI tables only; the war and planners read `available`."""
         return self.available + len(self.refit) + self.reserve + self.held
 
-    @property
-    def readiness(self) -> float:
-        return self.available / self.authorized if self.authorized else 0.0
-
-
 @dataclass
 class EnemyAsset:
     id: str

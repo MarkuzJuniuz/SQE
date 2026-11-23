@@ -96,14 +96,6 @@ def _name(state, field_id: str) -> str:
     return getattr(o, "name", field_id)
 
 
-def squadron_grounded(state, sq) -> bool:
-    return is_closed(state, sq.base_id)
-
-
-def wing_grounded(state, wing) -> bool:
-    return is_closed(state, wing.base_asset_id)
-
-
 def rectangle(heading_deg: float, half_len: float = RUNWAY_HALF_LEN_M, half_w: float = RUNWAY_HALF_WIDTH_M):
     """(half_len, half_w) kept for symmetry with the Lua test: along = dx*cos(h) + dz*sin(h), across = -dx*sin(h) + dz*cos(h), DCS x north / z east."""
     return half_len, half_w
@@ -165,15 +157,6 @@ def mag_var_deg() -> float:
 
 def _end_number(name: str) -> int:
     return int(str(name).rstrip("LCR"))
-
-
-def runway_end(ap, number: int):
-    """The approach (heading, name) of the runway end `number` of this pydcs airport, or None."""
-    for r in ap.runways:
-        for end in (r.main, r.opposite):
-            if _end_number(end.name) == number:
-                return end
-    return None
 
 
 def _along(x: float, y: float, hdg_deg: float, d: float):

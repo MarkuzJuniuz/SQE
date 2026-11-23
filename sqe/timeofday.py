@@ -41,19 +41,6 @@ def is_night(d: date, hhmm_str: str) -> bool:
     return h < rise - 0.4 or h > sets + 0.4
 
 
-def ato_times(n: int, d: date, night_ops: bool, rng: random.Random) -> list:
-    """n start times spread through the campaign day, ascending."""
-    rise, sets = sun_times(d)
-    if night_ops:
-        lo, hi = rise + 0.5, rise + 0.5 + 22.0
-    else:
-        lo, hi = rise + 1.0, sets - 2.0
-    if n <= 1:
-        return [hhmm((lo + hi) / 2)]
-    step = (hi - lo) / (n - 1)
-    return [hhmm(lo + i * step + rng.uniform(-0.2, 0.2) * (0 if i in (0, n - 1) else 1)) for i in range(n)]
-
-
 WAVE_GAP_MIN = 60            # S110 (XO 2026-11-19): a launch wave an hour, XO's cadence (the campaign rules plan gave a 2-hour turn two waves an hour apart; S25 made the turn 4 hours and left two waves, two hours apart)
 WAVE_OFFSETS_MIN = tuple(range(0, clock.TURN_MIN, WAVE_GAP_MIN))      # S110: the minutes after a turn opens at which its launch waves open: (0, 60, 120, 180). A longer or shorter turn keeps the hourly waves
 NWAVES = len(WAVE_OFFSETS_MIN)                                       # waves are numbered 1 to NWAVES

@@ -25,8 +25,6 @@ AIR_GATE_KM = 100              # v0.41.214 (XO): was 70, the hold sits outside t
 AIR_HOLD_STRIKE_S = 900        # v0.41.235 (XO 2026-11-03): was 360; 15 min, the air fight takes time on every level. ...and holds at most this long (old judgment call: the Day-2 fight of XO's 2026-10-30 run lasted about that), then goes home (v0.41.205: it used to go in all the same and was shot down)
 AIR_HOLD_CAS_S = 900           # v0.41.235 (XO 2026-11-03): was 240, the same 15 min as strikers now (XO overrides the old 'troops are waiting' shorter hold)
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
-SA10_GATE_KM = samtier.get("SA-10", "gate_km")              # (S90 P4: per umbrella system in samtier.SYSTEMS) ...but never inside an SA-10's reach (55 km): against an SA-10 target, or under an SA-10 umbrella, the gate (and so the hold
-                               # orbit) is this far from the SA-10. v0.39.21 run: Hornet 1 held 40 km from the Sukhumi SA-6, 26 km from the SA-10, and was shot down there
 SEAD_WAVE_KM = 60              # SEAD packages in one mission whose targets are this close together reach their HARM points at the same moment (the builder's sync)
 TRACK_RADARS = {"SNR_75V", "snr s-125 tr", "Kub 1S91 str", "S-300PS 40B6M tr", "Tor 9A331", "RPC_5N62V"}          # fire-control / track radars (unit type names as DCS stores them).
 # The Tor carries its radar on the launcher: the vehicle IS the radar, so a Tor battery is blind only when its vehicles are down.
