@@ -74,6 +74,7 @@ _PLAIN = (
     ("fighter_standoff", "fighter_standoff", bool, _REQUIRED),
     ("carcasses", "carcasses", bool, True),
     ("dormant_sites", "dormant_sites", bool, False),
+    ("player_is_client", "dcs_server_fly", bool, False),         # S161a: the server option gives the flight lead a client slot
     ("reactive", "reactive", bool, True),
     ("ecm_script", "ecm_script", bool, False),
     ("ecm_status", "ecm_status", bool, True),

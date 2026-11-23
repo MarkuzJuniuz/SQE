@@ -121,6 +121,12 @@ limit** there (250 by default) lets you trade detail for performance: over it, t
 **Target Area Radius** (15 nm) sets how much of the ground war round your target is built. `--full-map` (alone or with the AI test) builds
 every sortie with everything on the map, as a stress test, not for play.
 
+**Experimental: Fly on the local DCS dedicated server** (Settings > Mission Build, off by default). The idea: the server runs the same mission with the AI at real time and without
+a screen, so it may carry bigger missions than the game on its own, and you join it as a client at 127.0.0.1:10308 (no password). It needs the MissionScripting patch, the
+`DCS_Server` profile folder (start the dedicated server once by hand so DCS creates it), a free port 10308 and real time only: no time acceleration. SQE keeps your own
+`serverSettings.lua` in a backup, and puts it back when the server stops. In this first version only the switch and the server plumbing exist: with the option on, your flight lead
+gets a client slot, and a mission built that way can be flown on a server only, not in single player. The Fly button does not start the server yet.
+
 ---------------------------------------------------------------------------------------------------
 
 ## 5. Compile to an executable (SQE.exe)
