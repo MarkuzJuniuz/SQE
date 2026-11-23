@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.606, the all-AI test's stand-in flight starts in the air
+In the all-AI test mode the flight that stands in for you spent about five and a half minutes taxiing in DCS, so it flew 330 to 400 seconds behind its plan and pulled the whole package's timing with it. It now starts in the air on its first point, like every other AI flight. Your own flight is unchanged.
+
 ## v0.41.605, red raid escorts no longer fly in a bomber's lane
 In a test, a red raid escort and a raid bomber collided in mid-air: the escort's formation point sat exactly at another bomber group's altitude. Every escort group now flies on a level of its own, at least 300 m above the highest bomber lane. The raid's route and timing are unchanged.
 
