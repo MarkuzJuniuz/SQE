@@ -841,8 +841,7 @@ class Session(Merging, SeadTiming):
         if (ruins or cands) and getattr(self.settings, "ruins", True):
             pre = self._preroll([p for p in list(cands) + ruins if not p.extra.get("done_roll") and p.objective.type != ObjectiveType.FLEET_DEFENSE])      # a raid shows no ruins: nothing to roll
             pre.update({p.id: p.extra["done_roll"] for p in ruins if p.extra.get("done_roll")})          # v0.41.337: an earlier turn's package was resolved already: its verdict is what burns
-        from . import limits
-        cap = 10 ** 6 if self.full_map else min(int(self.settings.max_units), limits.unit_ceiling())          # v0.41.131: the unit limit counts the whole mission, merged packages included
+        cap = 10 ** 6 if self.full_map else int(self.settings.max_units)          # v0.41.131: the unit limit counts the whole mission, merged packages included
         secs = []
 
         def build(ext, rui):

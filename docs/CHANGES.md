@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.590, one unit limit: the fixed 500 ceiling is gone
+A mission's size is now limited only by the Mission Build setting "units max". The separate hidden ceiling of 500 units (a file you could edit, `limits.json`) never applied at the default, because the setting was always lower, and it is removed. Nothing changes at the default limit of 250.
+
 ## v0.41.589, fighters back off a little earlier from SAM rings and stop switching
 An AI fighter that is chasing an enemy now breaks off 5 nm before the other side's SAM rings and only starts a chase when it is 8 nm outside them, so it no longer flips between attacking and backing off at the ring edge. After breaking off from a pair because it ran toward the rings, went out of reach or lost a jet, it leaves that pair alone for two minutes (five after a loss), and a flight that loses a jet breaks off at once. Your own flight is unchanged.
 
