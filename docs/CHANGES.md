@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.608, Syria Level 1 is a longer war: free the cities
+On Syria, Level 1 is no longer won by one base: you take Bassel Al-Assad, Rene Mouawad and Shayrat, one after another, and the push after each fall waits one day instead of nine. A war nobody flies now lasts about two weeks at Level 1 (it was three days), about 18 days at Level 2 (it was 8: the Lutorin Works are much harder to destroy there) and a month or more at Level 3. The Level 1 story is rewritten as a march through the cities. A campaign already in progress keeps its old pace and goal.
+
 ## v0.41.607, a turn tries the next candidate jobs when one cannot be crewed
 When a job the planner named could not be flown (no stand-off jets free, a target out of reach, no SEAD seat), the turn used to be one package short. It now tries the planner's next candidates, a few at a time, so a turn builds about as many packages as it aims at. On day 1 that is about one more package on the Caucasus; on Syria Level 3 the crews are the limit and nothing changes.
 
