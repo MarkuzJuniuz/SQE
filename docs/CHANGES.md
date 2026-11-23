@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.601, an old save's runway-strike line in the sortie history reads as today's
+A save made before the runway job was renamed still showed "Crater the runway at ..." in its sortie history (and in an unfinished sortie). Opening it now maps that line to "OCA: Runway Strike, ..." like the rest of the plan.
+
 ## v0.41.600, a CAS flight sent home flies through its egress point
 When an AI CAS flight is sent home (its target group is destroyed, or it strayed too far), it now flies the leg into its egress point instead of turning straight for home, so it keeps to the route that avoids SAMs.
 
