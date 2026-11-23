@@ -53,13 +53,6 @@ class Merging:
             cx, cy = t[0] + (cx - t[0]) * R / d, t[1] + (cy - t[1]) * R / d
         return cx, cy
 
-    def _inside_merge(self, anchor: Package, other: Package) -> bool:
-        """Is `other`'s target inside the merge circle around `anchor`'s?"""
-        if self.settings.merge_mode != "area":
-            return False
-        c, t = self.merge_center(anchor), self._pkg_xy(other) or self._raid_xy(other)
-        return c is not None and t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= self.area_radius_m()
-
     def _raid_way(self, p: Package):
         """S39: a land raid's way in, ((x0, y0), (x1, y1)): from the bomber wing's field to the point it is going for. None for any other package (the carrier raid stays out)."""
         t = self._raid_xy(p)

@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.609, internal clean-up: unused code removed
+Twenty functions and ten constants that nothing in the program used any more were deleted (about 190 lines). Nothing changes in play.
+
 ## v0.41.608, Syria Level 1 is a longer war: free the cities
 On Syria, Level 1 is no longer won by one base: you take Bassel Al-Assad, Rene Mouawad and Shayrat, one after another, and the push after each fall waits one day instead of nine. A war nobody flies now lasts about two weeks at Level 1 (it was three days), about 18 days at Level 2 (it was 8) and about two months at Level 3 (it was one): the war against Lutorin is now won only when all five works have stayed destroyed for 11 days (Level 2) or 12 days (Level 3), while his stockpile runs out. The Level 1 story is rewritten as a march through the cities. A campaign already in progress keeps its old pace and goal.
 

@@ -23,7 +23,6 @@ from .loadouts import BOMBER_TYPES
 NM = 1852.0
 BASE_LOSS = 0.06              # airfield defence lost per bomber that gets through
 RAID_PRIORITY = 8.0
-RAIDERS = BOMBER_TYPES + ("Su_25",)  # (v0.41.361, Phase 10d: the Su-34 too) attack types a raid can fly (bombers for fields; Su-25s lead against troops and, since v0.41.359, supply sites)
 ATTACK_TYPES = ("Su_25",)      # S90 J5c: the cheap attack type(s) that lead raids on troops, garrisons and supply sites: the Caucasus value, replaced by a pack's `raid_attack_types` (`attack_types()`)
 
 
@@ -112,10 +111,6 @@ def raider_wings(state, kind: str = "field", budget: bool = True, pref=None) -> 
         if t:
             out.append((w, t))
     return out
-
-
-def _bomber_wings(state) -> list:
-    return [w for w, _ in raider_wings(state)]
 
 
 def aim_xy(state, aim: str, base):

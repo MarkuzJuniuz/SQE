@@ -12,7 +12,6 @@ from .samtier import RANGE_NM, UMBRELLA_VARIANTS      # S90 P4: the long-range t
 from .routes import AVOID_NM, RAID_SA11_NM, RAID_THREAT_OUT_NM, dist, offset
 
 NM = 1852.0
-UMBRELLA_KM = samtier.get("SA-10", "reach_km")     # what an SA-10 reaches in practice (it opened fire on jets at 52-56 km in every run); each umbrella system has its own: samtier.get(variant, "reach_km")
 
 
 def umbrella_site(state, target_asset, reach_km: float | None = None):
@@ -332,28 +331,6 @@ def nearest_threat_bearing(state, x, y, fallback: float) -> float:
         return fallback
     ex, ey = min(fb, key=lambda e: math.hypot(e[0] - x, e[1] - y))
     return math.degrees(math.atan2(ey - y, ex - x)) % 360
-
-
-def forward_tanker_spot(state, base_xy, egr_xy, target_xy, field_margin_nm: float = 15, ring_margin_nm: float = 15):
-    """v0.41.7: the tanker track centre on the way home: as far toward the egress point as it can go (half way at most), sideways off the line
-    if it has to, while it stays ring_margin_nm outside every SAM ring and outside every enemy field's scramble circle with a margin. When nothing
-    forward is clear, the nearest clear spot behind the base (up to 30 nm). None when nothing is."""
-    bx, by = base_xy
-    ex, ey = egr_xy
-    h = math.degrees(math.atan2(ey - by, ex - bx))
-    for f in (0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.05, 0.0):
-        cx, cy = bx + (ex - bx) * f, by + (ey - by) * f
-        for side in (0, 10, -10, 20, -20):
-            x, y = cx + side * NM * math.cos(math.radians(h + 90)), cy + side * NM * math.sin(math.radians(h + 90))
-            if spot_slack(state, x, y, target_xy, ring_margin_nm, field_margin_nm) >= 0:
-                return x, y
-    for back in (5, 10, 15, 20, 25, 30):
-        for side in (0, 10, -10, 20, -20):
-            x = bx - back * NM * math.cos(math.radians(h)) + side * NM * math.cos(math.radians(h + 90))
-            y = by - back * NM * math.sin(math.radians(h)) + side * NM * math.sin(math.radians(h + 90))
-            if spot_slack(state, x, y, target_xy, ring_margin_nm, field_margin_nm) >= 0:
-                return x, y
-    return None
 
 
 TANKER_CAP_NM = 40          # v0.41.26: a tanker track stays this far from every red patrol station

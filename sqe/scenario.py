@@ -161,60 +161,6 @@ def _disperse_blue(st, th: dict, terrain, player_squadron=None) -> None:
             q.base_id = dest
 
 
-def red_squadrons(aid: str, wing_name: str, types: list, jets: int, max_size: int, pool: list | None = None, rng=None) -> list:
-    """v0.41.52: cut a wing into typed squadrons. ceil(jets / max_size) squadrons, split as evenly as possible (never over max_size), one aircraft
-    type each. `types` is the wing's old mixed type pool; it is kept in force so red raids as before (XO 2026-10-21: keep raid strength):
-    - 2+ squadrons: the types are dealt fighter, attack, fighter, attack ... so a mixed wing keeps one of each; every wing has a fighter squadron.
-    - 1 squadron, mixed pool: it flies an attack type with the chance (attack types / pool types), from `rng` (a wing of its own, no draw from the world's).
-    Attack = not in ENEMY_FIGHTERS (Su-24M, Su-25)."""
-    from .loadouts import ENEMY_FIGHTERS
-    n = max(1, -(-jets // max(1, max_size)))                    # ceil without math
-    fig = [t for t in types if t in ENEMY_FIGHTERS]
-    atk = [t for t in types if t not in ENEMY_FIGHTERS]
-    if n == 1 and fig and atk and rng is not None:
-        order = [atk[0]] if rng.random() < len(atk) / len(types) else [fig[0]]
-    elif n == 1:
-        order = [(fig or atk)[0]]
-    else:
-        order = []
-        for k in range(max(len(fig), len(atk))):
-            order += fig[k:k + 1] + atk[k:k + 1]
-    if not any(t in ENEMY_FIGHTERS for t in order):             # every wing keeps a fighter squadron: swap in the level's first fighter type
-        fighter = next((t for t in (pool or []) if t in ENEMY_FIGHTERS), None)
-        if fighter and n > 1:
-            order = [fighter] + order[1:]
-        elif fighter and not fig:
-            order = [fighter]
-    base, extra = divmod(jets, n)
-    return [RedSquadron(f"{aid}_{i + 1}", f"{wing_name} {i + 1}", order[i % len(order)], base + (1 if i < extra else 0)) for i in range(n)]
-
-
-def _disperse_red(st, terrain, plan_w: list) -> None:
-    """[[asset id, types, count, squadrons]]: a wing bigger than its field can park keeps what fits; the rest is dispersed to the nearest
-    enemy fields with room (as their aircraft). The total stays the same unless no field has room."""
-    cap = {}
-    for row in plan_w:
-        a = st.assets[row[0]]
-        c = _slots(terrain, a.airport, row[1]) if a.airport else None
-        cap[row[0]] = c
-    for row in sorted(plan_w, key=lambda r: -r[2]):
-        c = cap[row[0]]
-        if c is None or row[2] <= c:
-            continue
-        extra, row[2] = row[2] - max(2, c), max(2, c)
-        a = st.assets[row[0]]
-        for other in sorted(plan_w, key=lambda r: math.hypot(st.assets[r[0]].x - a.x, st.assets[r[0]].y - a.y)):
-            if extra <= 0:
-                break
-            co = cap[other[0]]
-            if other is row or co is None or other[2] >= co:
-                continue
-            k = min(extra, co - other[2])
-            other[2] += k; extra -= k
-            st.note(f"{k} enemy aircraft from {a.name} are dispersed to {st.assets[other[0]].name}: {a.name} cannot park them.")
-        row[2] += max(0, extra)                          # nowhere to go: they stay (and spawn wherever they can)
-
-
 def _extra_sams(st, th: dict, d, ap, live: set, tiers: dict) -> None:
     """S90 J5: the pack's `extra_sams` ([{id, site, x/y or near + bearing + dist_m, levels, parent?, tier?, jitter_m?}]): fixed SAM sites for this level, registered like any red site (the SA-5 sites of Syria:
     the long-range tier is fixed by the theatre, not drawn per field). A site with a `parent` red field that is not in this level's roster is left out. Own random stream (only the optional `jitter_m` uses

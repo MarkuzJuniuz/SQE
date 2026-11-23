@@ -64,7 +64,6 @@ RAID_LAUNCH_WINDOW_S = 120    # ...the attack task runs this long after the bomb
 # Pt. 2" (medium firmness, one article): a regiment's takeoff took about half an hour, then a cruise formation, the split about 500 km from the task force, and a salvo had to land
 # within 1 min (best) or 2 min (satisfactory).
 RAID_STAGE_ON = True          # False = the old raid (airborne at its marshal from the start, no runway takeoffs; the engage order still starts at the PUSH)
-RAID_MARSHAL_FRAC = 0.5       # (no longer used by the fleet raid, see RAID_BOMBERS_UP) share of the groups already airborne on the marshal at the start
 RAID_BOMBERS_UP = 1           # v0.41.274 (XO 2026-11-04: intelligence has spotted the movement): this many bomber groups (a pair each) are airborne on the marshal at the start...
 RAID_GUARD_UP = 1             # ...with this many escort groups (up to 4 jets) guarding them; every other group takes off, the bombers first and the rest of the escorts last
 RAID_MEET_LEAD_S = 120        # v0.41.280 (XO 2026-11-04: blue got over Mozdok while the bombers were still taking off and shot the raid on the ramp): the interceptors are timed to be on the intercept point this long before the bombers' planned arrival there (their push + the flight from the marshal). Judgment call

@@ -37,11 +37,6 @@ def load(th: dict):
     return d
 
 
-def clear_cache() -> None:
-    _CACHE.clear()
-    _SPOTS.clear()
-
-
 _SPOTS: dict = {}
 
 

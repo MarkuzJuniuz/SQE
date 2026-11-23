@@ -461,11 +461,6 @@ def push(state) -> None:
             a.health = 0.0 if r < MIN_FORCE else min(1.0, r / MAX_FORCE)
 
 
-def facility_health(assets, kinds):
-    hs = [a.health for a in assets if a.kind in kinds]
-    return sum(hs) / len(hs) if hs else None
-
-
 def set_supply_counts(state) -> None:
     """The Force Index bookkeeping of a NEW campaign: the supply sites each side starts with (sup_n), and, for red on Level 1, the split into inner sites (the fixed
     fuel / depot sites near the fields) and road sites (rsup_...) with the flag sup_grp. v0.41.408 (S49, XO 2026-11-12). Old saves have no flag: the old formula."""
