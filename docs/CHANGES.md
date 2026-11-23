@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.593, carrier and base patrol fighters stay near what they guard, hurt fighters hold back
+The fighters that guard a carrier group or an airfield are now kept within 25 nm (carrier) or 15 nm (base) of their station, so they no longer chase enemy fighters out of the reach of their own ships' and SAMs' cover. A fighter flight that breaks off a fight because it lost a jet now commits on nothing for five minutes, for both sides, so a hurt pair no longer goes straight for the strikers. Your own flight is unchanged.
+
 ## v0.41.592, cover fighters no longer park inside a live SAM ring
 When every point within 20 nm behind a package was covered by an enemy SAM ring, the escort and the TARCAP kept their old station, inside the ring, and the SAM shot them down. They now stand on the first clear point further back, up to 60 nm behind the package. Packages whose cover already found a clear point are unchanged.
 

@@ -773,6 +773,23 @@ timer.scheduleFunction(function(_, t)
       end
     end)
   end
+  -- S160c: blue's ships too (the carrier group), every 30 s, at most 120 points a group, so a test can measure how far the BARCAP fought from the fleet
+  pcall(function()
+    for _, g in ipairs(coalition.getGroups(coalition.side.BLUE, Group.Category.SHIP) or {}) do
+      local gn = g:getName()
+      for _, u0 in ipairs(g:getUnits() or {}) do
+        if u0:isExist() then
+          local p0 = u0:getPoint()
+          local tr = TRACK[gn] or {}
+          TRACK[gn] = tr
+          if #tr < 120 then
+            tr[#tr + 1] = { math.floor(timer.getTime()), math.floor(p0.x), math.floor(p0.z), 0, -1, -1 }
+          end
+          break
+        end
+      end
+    end
+  end)
   dump(); return t + 30
 end, nil, timer.getTime() + 30)
 -- call-outs for the player's flight: scheduled radio calls from the other flights and the support aircraft, plus weapon and result calls
