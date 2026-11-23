@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.595, F-15C patrol jets carry eight AIM-120C
+The F-15Cs that fly TARCAPs, sweeps and the carrier or base patrols now carry eight AIM-120C and three fuel tanks, where they carried four AIM-120C and four Sidewinders. In tests the four-missile jets fired everything and then hung about on station with only Sidewinders. The F-15C escorts keep four AIM-120C and four Sidewinders, because they are the ones that get into the close fight. A TARCAP or escort you fly in an F-15C gets the same kit. Other aircraft are unchanged.
+
 ## v0.41.594, red Su-24M SEAD jets now carry the pod they need to fire
 A red Su-24M sent to hit your air defences with Kh-31P anti-radiation missiles now carries its L-081 Fantasmagoria pod. Without it the jets flew to their launch point and went home without firing. In a test the eight Su-24Ms fired all sixteen missiles at a Patriot and HAWK site. The Su-17M4s, which carry the longer-range Kh-58U, still do not fire.
 
