@@ -1840,7 +1840,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _make_group(self, f, spec, base, wps, act_s, csname, fno):
         """The DCS group: hot on the runway for your own flight, already airborne for an AI flight, facing its way; callsigns. -> (g, first, cs_names)."""
         pt = self._pt
-        if f.is_player:       # hot on the runway / catapult
+        if f.is_player and self.o.player_is_ai:
+            # S170 (XO 2026-11-23): the all-AI test's stand-in for the player starts AIRBORNE on its first route point, like every other AI flight. "From Runway" made DCS taxi the group
+            # about 330 s at 16 kt (2.9 to 3.9 km, T7r3 / T1fix7 / S160c tracks) before its takeoff roll, so it was 330 to 400 s late against its plan and every timeline built round it shifted.
+            # The route and its ETAs are the person's own (`first` = 0: every route point is added after this start point); only the all-AI test takes this branch.
+            s0 = wps[0]
+            g = self.m.flight_group(self.usa, f.callsign, spec.dcs_type, None, pt(s0.x, s0.y), altitude=s0.alt_ft * FT,
+                                    speed=s0.speed_kts * KPH, maintask=MAIN_TASK[f.role], group_size=f.count)
+            first = 0
+        elif f.is_player:       # hot on the runway / catapult
             if base.kind == BaseKind.CARRIER:
                 g = self.m.flight_group_from_unit(self.usa, f.callsign, spec.dcs_type, self.ship[base.id], maintask=MAIN_TASK[f.role],
                                                   start_type=StartType.Runway, group_size=f.count)
@@ -1865,7 +1873,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             self._late(g, act_s, "support relief" if f.tag else "activate")                                # they 'depart' on their own schedule, not at mission start
         if getattr(f, "relief", None) and f.relief.get("flag") and not f.is_player:
             self._late_flag(g, f.relief["flag"])                # v0.41.79: a replacement waits hidden until the hook calls it
-        if first == 1 and (not f.tag or getattr(f, "relief", None)):   # face the way they are going (in-flight groups spawn pointing north)
+        if (first == 1 and (not f.tag or getattr(f, "relief", None))) or (f.is_player and self.o.player_is_ai):   # face the way they are going (in-flight groups spawn pointing north); S170: the stand-in too
             nxt = next((w for w in wps[1:] if dist(wps[0].x, wps[0].y, w.x, w.y) > 100), None)
             if nxt is not None:
                 hdg = bearing(wps[0].x, wps[0].y, nxt.x, nxt.y)
