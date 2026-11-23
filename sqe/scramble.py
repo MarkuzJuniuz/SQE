@@ -36,7 +36,10 @@ def red_covered(state, x, y, extra_nm: float = 0.0) -> bool:
     for a in state.assets.values():
         if a.kind != AssetKind.SAM or a.destroyed or a.health <= 0.25 or getattr(a, "suppressed", False):
             continue
-        reach = samtier.get(a.variant, "reach_km") / 1.852 if a.variant in tm.UMBRELLA_VARIANTS else tm.RANGE_NM.get(a.variant, 0)
+        if a.variant in tm.UMBRELLA_VARIANTS:
+            reach = samtier.get(a.variant, "reach_km") / 1.852
+        else:
+            reach = tm.RANGE_NM.get(a.variant, 0)
         if reach >= 3 and dist(x, y, a.x, a.y) <= (reach + extra_nm) * NM:
             return True
     return False
@@ -53,7 +56,12 @@ def _walk(frm, to, step_nm=STEP_NM):
     n = max(1, int(dist(*frm, *to) / (step_nm * NM)))
     d = dist(*frm, *to)
     b = bearing(*frm, *to)
-    return [offset(frm[0], frm[1], b, d * k / n) for k in range(n + 1)] if d > 1 else [frm]
+    if d <= 1:
+        return [frm]
+    points = []
+    for k in range(n + 1):
+        points.append(offset(frm[0], frm[1], b, d * k / n))
+    return points
 
 
 def red_station(state, field_xy, tx, ty):
@@ -73,11 +81,18 @@ def raid_origin(state, pkg, tx, ty):
     a = state.assets.get((getattr(pkg, "extra", None) or {}).get("bomber_wing") or "")
     if a is not None:
         return (a.x, a.y)
-    wings = [state.assets[w.base_asset_id] for w in state.enemy_air if w.base_asset_id in state.assets and not state.assets[w.base_asset_id].destroyed and not runways.is_closed(state, w.base_asset_id)]
+    wings = []                                          # the red fighter wings' fields that are standing and open
+    for wing in state.enemy_air:
+        field = state.assets.get(wing.base_asset_id)
+        if field is not None and not field.destroyed and not runways.is_closed(state, wing.base_asset_id):
+            wings.append(field)
     if not wings:
         return None
-    w = min(wings, key=lambda a_: dist(a_.x, a_.y, tx, ty))
-    return (w.x, w.y)
+    nearest = wings[0]                                  # the one nearest the target (the first of equals, as `min` did)
+    for field in wings[1:]:
+        if dist(field.x, field.y, tx, ty) < dist(nearest.x, nearest.y, tx, ty):
+            nearest = field
+    return (nearest.x, nearest.y)
 
 
 STATION_SA10_NM = samtier.get("SA-10", "scramble_nm")      # (S90 P4: per umbrella system in samtier.SYSTEMS) judgment call (v0.41.114): a defender sits under its own cover, so it keeps less room from red's SA-10 than a sweep (45)
@@ -131,7 +146,9 @@ def blue_station(state, tx, ty, origin_xy):
     fwd = offset(tx, ty, bearing(tx, ty, *origin_xy), min(DEFENDER_FWD_MAX_NM * NM, dist(tx, ty, *origin_xy)))
     for p in reversed(_walk((tx, ty), fwd)):                       # furthest forward first
         if blue_covered(state, *p) and clear_for_sweep(state, *p):
-            return p, ("target" if dist(*p, tx, ty) < 1 * NM else "forward")
+            if dist(*p, tx, ty) < 1 * NM:
+                return p, "target"
+            return p, "forward"
     if clear_for_sweep(state, tx, ty):
         return (tx, ty), "target"
     back = offset(tx, ty, bearing(tx, ty, *origin_xy) + 180, DEFENDER_FWD_MAX_NM * NM)
