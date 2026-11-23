@@ -32,7 +32,7 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   ils_runway {airport: runway number}   -> runways.ils_runways()                    (default runways.ILS_RUNWAY)
 #   mag_var_deg number                    -> runways.mag_var_deg()                    (default runways.MAG_VAR_DEG)
 #   win_supply {level: {below, days}}     -> ground.update_supply_win / war.update_status (default none: red's Force Index at or below `below` on `days` consecutive days wins the level)
-#   works {label, damage, levels {level: {push, rebuild_days, supply_total?, teams?}}, sites [{id wks_.., name, x, y}]} -> works.build / war / ground.push_factor (S111: Lutorin's works, special blue targets; the win when all are destroyed. Default none: the Caucasus)
+#   works {label, damage, levels {level: {push, rebuild_days, supply_total?, teams?, hold_days?}}, sites [{id wks_.., name, x, y}]} -> works.build / war / ground.push_factor (S111: Lutorin's works, special blue targets; the win when all are destroyed. Default none: the Caucasus)
 #   start_hour 0|4|8|12|16|20             -> CampaignState.start_hour, clock.use()    (default 8: Day 1 / turn 0 starts at 08:00; Syria 0)
 #   opening_strike {levels, kill, text?, fill?}  -> scenario._opening_strike          (default none: every red site of the variant `kill` starts the campaign destroyed, rebuilt by the normal rule; `fill`: what the F-117A pairs left over hit, S104d)
 #   raid_attack_types [type, ...]         -> raids.attack_types()                     (default ("Su_25",): leads raids on troops, garrisons, supply sites)
@@ -158,9 +158,9 @@ def _check_hooks(d: dict, src) -> None:
             bad("works.damage must be a number above 0 and up to 1 (the share of a depot's strike damage a works takes)")
         levels_of("works.levels", w.get("levels"))
         for lv, r in w["levels"].items():
-            if (not isinstance(r, dict) or not {"push", "rebuild_days"} <= set(r) or set(r) - {"push", "rebuild_days", "damage", "supply_total", "teams"} or not num(r["push"]) or r["push"] < 0
-                    or not num(r["rebuild_days"]) or r["rebuild_days"] <= 0 or ("damage" in r and (not num(r["damage"]) or not 0.0 < r["damage"] <= 1.0)) or ("supply_total" in r and (not isinstance(r["supply_total"], int) or isinstance(r["supply_total"], bool) or r["supply_total"] < 1)) or ("teams" in r and (not isinstance(r["teams"], int) or isinstance(r["teams"], bool) or r["teams"] < 1))):
-                bad(f"works.levels {lv} must be {{\"push\": a number, 0 or more, \"rebuild_days\": a number above 0, \"damage\": optional, a number above 0 and up to 1, \"supply_total\": optional, a whole number, red's supply sites counted for the Force Index with the works, \"teams\": optional, a whole number, 1 or more: how many destroyed works are rebuilt at once, default 1}}")
+            if (not isinstance(r, dict) or not {"push", "rebuild_days"} <= set(r) or set(r) - {"push", "rebuild_days", "damage", "supply_total", "teams", "hold_days"} or not num(r["push"]) or r["push"] < 0
+                    or not num(r["rebuild_days"]) or r["rebuild_days"] <= 0 or ("damage" in r and (not num(r["damage"]) or not 0.0 < r["damage"] <= 1.0)) or ("supply_total" in r and (not isinstance(r["supply_total"], int) or isinstance(r["supply_total"], bool) or r["supply_total"] < 1)) or ("teams" in r and (not isinstance(r["teams"], int) or isinstance(r["teams"], bool) or r["teams"] < 1)) or ("hold_days" in r and (not isinstance(r["hold_days"], int) or isinstance(r["hold_days"], bool) or r["hold_days"] < 0))):
+                bad(f"works.levels {lv} must be {{\"push\": a number, 0 or more, \"rebuild_days\": a number above 0, \"damage\": optional, a number above 0 and up to 1, \"supply_total\": optional, a whole number, red's supply sites counted for the Force Index with the works, \"teams\": optional, a whole number, 1 or more: how many destroyed works are rebuilt at once, default 1, \"hold_days\": optional, a whole number, 0 or more: days every works must STAY destroyed before the win, default 0}}")
             if "works_win" not in (((d.get("stories") or {}).get(lv) or {}).get("beats") or {}):
                 bad(f"works.levels {lv}: the level's story needs the beat works_win (the text of the win)")
         sites = w.get("sites")

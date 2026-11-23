@@ -923,13 +923,14 @@
   "levels": {
    "2": {
     "push": 2.0,
-    "damage": 0.15,
+    "hold_days": 11,
     "rebuild_days": 30,
     "teams": 2,
     "supply_total": 25
    },
    "3": {
     "push": 4.75,
+    "hold_days": 12,
     "rebuild_days": 30,
     "teams": 2,
     "supply_total": 25
