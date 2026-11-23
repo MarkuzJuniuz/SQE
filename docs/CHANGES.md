@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.600, a CAS flight sent home flies through its egress point
+When an AI CAS flight is sent home (its target group is destroyed, or it strayed too far), it now flies the leg into its egress point instead of turning straight for home, so it keeps to the route that avoids SAMs.
+
 ## v0.41.599, red raids keep out of a Patriot's real reach
 In tests a Patriot fired at jets up to 54 nm away at medium altitude and 63 nm at high altitude, further than the 40 nm red's raids kept to. Red raid routes now bend round your Patriot fields at 54 nm (raids at 12,000 to 20,000 ft) or 63 nm (SEAD and fleet raids at 30,000 ft). SEAD raids still launch their missiles from about 50 nm, inside that reach.
 

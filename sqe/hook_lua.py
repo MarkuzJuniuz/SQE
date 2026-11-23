@@ -1589,7 +1589,8 @@ local function casGo(d, why, alive)
     if not c then error("no group") end
     c:resetTask()
     pcall(function() c:setOption(AI.Option.Air.id.ROE, AI.Option.Air.val.ROE.RETURN_FIRE) end)
-    c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = 1, goToWaypointIndex = d.to } })
+    -- S102: the leg is the one INTO the EGR point (from the point before it), not from waypoint 1: with from = 1 the run 2026-11-16_19-54-36 flew a straight line home, 43 km from EGR (judgment, untested in DCS)
+    c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = math.max(1, d.to - 1), goToWaypointIndex = d.to } })
   end)
   for _, gs in ipairs(gorder) do
     local all = #gs.gates > 0
