@@ -12,7 +12,7 @@ How it works (everything numeric lives in the pack's `works` block, so a theatre
   a team that finishes takes the next destroyed works in the pack's order. A damaged works does not mend. State: `ground["works"]["teams"]` = [{id, left}] (an older save's single `team` / `left` is read as one entry).
 * Red's push: the works feed the war on the Hatay front. `edge` = 1 + the level's `push` x (works standing / works built) multiplies red's surge factor in `ground.resolve_day` (reinforcements, attack
   chance) and the raid rate (`raids`), so every works lost takes strength from the push, and none left leaves red at its plain strength.
-* Win: every works destroyed at once is a VICTORY (`war.update_status`); the pack's `works_win` story beat tells it. Judgment calls, no public figure: every number in the block (tuned on the
+* Win: every works destroyed at once is a VICTORY (`war.update_status`); a level's `hold_days` (S172, default 0) makes it every works destroyed and STAYING destroyed that many days (Lutorin's stockpile has to run out); the pack's `works_win` story beat tells it. Judgment calls, no public figure: every number in the block (tuned on the
   real sim, tools probe `works_probe.py`).
 """
 from __future__ import annotations
@@ -44,7 +44,8 @@ def params(state):
     if not lv:
         return None
     return {"label": b.get("label", "The Works"), "damage": float(lv.get("damage", b.get("damage", DEFAULT_DAMAGE))), "push": float(lv.get("push", 0.0)),
-            "rebuild_days": float(lv.get("rebuild_days", 60.0)), "teams": max(1, int(lv.get("teams", 1)))}
+            "rebuild_days": float(lv.get("rebuild_days", 60.0)), "teams": max(1, int(lv.get("teams", 1))),
+            "hold_days": max(0, int(lv.get("hold_days", 0)))}
 
 
 def ids(state) -> list:
@@ -92,9 +93,18 @@ def damage_factor(state, a) -> float:
 
 
 def gone(state) -> bool:
-    """Every works the campaign started with is destroyed (the coalition's win where the pack has them)."""
+    """Every works the campaign started with is destroyed (the coalition's win where the pack has them). S172: and, where the level has `hold_days`, they have STAYED destroyed that many days
+    (Lutorin's stockpile has to run out: `rebuild` notes the day the last one fell in `ground["works"]["gone_since"]` and forgets it if one is rebuilt). 0 (the default) = at once, as before."""
     n = ids(state)
-    return bool(n) and params(state) is not None and standing(state) == 0
+    p = params(state)
+    if not n or p is None or standing(state) != 0:
+        return False
+    if p["hold_days"] <= 0:
+        return True
+    gone_since = ((getattr(state, "ground", None) or {}).get("works") or {}).get("gone_since")
+    if gone_since is None:
+        return False
+    return int(state.day) - int(gone_since) >= p["hold_days"]
 
 
 def _teams(w: dict) -> list:
@@ -139,6 +149,10 @@ def rebuild(state, rng: random.Random) -> list:
         w["built"] = int(w.get("built", 0)) + 1
         w["seen"] = [i for i in w["seen"] if i != a.id]
         out += [f"{a.name} is operational again"] + story.beat(state, "works_back")
+    if standing(state) == 0:                                                 # S172: the night the last works is down starts the stockpile clock
+        w.setdefault("gone_since", int(state.day))
+    else:
+        w.pop("gone_since", None)
     return out
 
 
@@ -171,6 +185,8 @@ def line(state):
         return None
     s = standing(state)
     word = ("all operational" if s == n else "most of them still operational" if s * 2 > n else "only a few still operational" if s > 0 else "all destroyed")
+    if s == 0 and p["hold_days"] > 0:
+        word += ", Lutorin's stockpile is running out"
     w = state.ground.get("works") or {}
     k = len(_teams(w)) if w and s < n else 0
     return f"{p['label']}: {word}" + (f", {'one' if k == 1 else 'two' if k == 2 else k} being rebuilt" if k else "")

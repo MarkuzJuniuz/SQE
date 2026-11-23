@@ -522,7 +522,7 @@ def check_hook_lua():
 
 
 # ---- 6. soak (in the default run; `--only soak` alone) ------------------------------------------------------------------------------------------------------------
-SOAK_CASES = [("caucasus", 1, 5), ("caucasus", 2, 3), ("caucasus", 3, 7), ("syria", 2, 4), ("syria", 3, 6)]      # (theatre, level, seed); S126: Syria has paths the Caucasus never runs (works rebuild, grace week, opening strike, carrier evade)
+SOAK_CASES = [("caucasus", 1, 5), ("caucasus", 2, 3), ("caucasus", 3, 7), ("syria", 1, 2), ("syria", 2, 4), ("syria", 3, 6)]      # (theatre, level, seed); S126: Syria has paths the Caucasus never runs (works rebuild, grace week, opening strike, carrier evade)
 SOAK_MAX_SKIPS = 300                                          # a loop bound, not a game rule
 SOAK_FLY_EVERY = 20                                           # every N skips the player flies a fake sortie, if anything is flyable
 SOAK_RELOAD_EVERY = 25                                        # every N skips: save, reopen, carry on with the reopened session

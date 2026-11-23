@@ -140,7 +140,7 @@ reinforcements, scaled by their **Force Index** (see below), and a dug-in **garr
 Blue's CAS and strike work lowers red's force in a sector and lowers its Force Index; red's raids do the same to blue. When
 blue holds a sector in front of a red airfield and red has nothing organised there, **the airfield falls**: it and its
 ground units go down for good, its jets withdraw to the nearest standing red field with 30% lost, and its depots and fuel
-farms change sides with their stock. The next push then waits for the takeover (9 days) and red's own attacks wait 3.
+farms change sides with their stock. The next push then waits for the takeover (9 days; 1 day on Level 1 in Syria) and red's own attacks wait 3.
 
 ### The Force Index
 
@@ -352,7 +352,7 @@ then on the squadron flies as described in section 5. You do not fly it; you wil
 
 ### Winning and losing in Syria
 
-* **Level 1:** victory is the ground war, as in section 6: take **Bassel Al-Assad**.
+* **Level 1:** victory is the ground war, as in section 6, a march through the cities in three stages: take **Bassel Al-Assad** (the Latakia coast), then **Rene Mouawad**, then **Shayrat** (the Homs gap). After a city falls the next push waits only one day (the takeover is 9 days at the other levels). A war with nobody flying lasts about two weeks at Level 1, about 18 days at Level 2 and about two months at Level 3; flying shortens it.
 * **Levels 2 and 3:** no ground victory. The war is won in one of two ways, neither of them a conquest. **Lutorin Works** (below): all of them destroyed at the same time. Or **red's Force Index** (its supply, section 5) at or below 40% for **three nights in a row** (the Overview shows how close it is in a word: distant, approaching, close, under way); that is the depots, fuel farms and road sites, not the cities. The coalition's stated intent is to break Syria's supply and air defence. With red's air defence as strong as it is, the works are the more likely way.
 * **Defeat:** the coalition's air component below 15% of its strength (as in section 6), or **one** airfield of yours lost (the Caucasus allows three).
 
@@ -362,7 +362,7 @@ At Levels 2 and 3 five special plants stand in the Syrian rear: two near Palmyra
 
 * **They are special targets.** The planner offers a strike on a Lutorin Works plant ahead of the ordinary supply strikes. A plant is a fixed target, so it is hit with stand-off weapons: SLAM-ER Hornets released far out and low, with no SEAD or DEAD job in front of it and without the flight route being stopped by the belt, for as long as a Hornet squadron has two jets to send. With none, the usual rules apply (behind the SEAD or DEAD on the air defence that covers it). The Palmyra plants sit under the long-range umbrella, so the odds there are the worst. A plant is hunted until it is destroyed (a damaged supply site is left alone to mend, a plant does not mend). **They are red's depots too:** each plant counts as a supply site in the Force Index (a site of the 25 red has at Levels 2 and 3: 12 fixed sites, 8 road sites and the 5 works), so a strike on a plant lowers the Force Index as much as one on a depot, and the nightly repair that mends depots does not mend them.
 * **They are very hard to rebuild.** Two teams rebuild two destroyed plants at a time (at both levels), and each takes weeks (about a month); a third destroyed plant waits for a team to finish. At both levels one good strike puts a works out, as it would a depot. A damaged plant never repairs.
-* **They feed the war on the front.** While the plants stand, the enemy's reinforcements, attacks and raids are stronger, so the more of them you destroy the weaker the push on Hatay. If every one of them is destroyed at the same moment the war is won ("Lutorin Works is gone"). The other ending is the one the campaign already has: if Hatay falls, the war is lost.
+* **They feed the war on the front.** While the plants stand, the enemy's reinforcements, attacks and raids are stronger, so the more of them you destroy the weaker the push on Hatay. If every one of them is destroyed at the same moment and they all **stay** destroyed for a while (11 days at Level 2, 12 at Level 3: Lutorin's stockpile has to run out; the Overview says so) the war is won ("Lutorin Works is gone"). The other ending is the one the campaign already has: if Hatay falls, the war is lost.
 * Your own flying counts as for any other strike: the plants are tasked like every other job, and a plant you hit yourself takes damage from the buildings you really destroy.
 
 ### Long-range air defence

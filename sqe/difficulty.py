@@ -43,6 +43,7 @@ class Difficulty:
     ground_red: tuple = (70, 55, 15, 0, 0)    # ground war (ground.py): Red strength per sector at the start of the campaign (0-100)
     ground_blue: tuple = (0, 0, 60, 70, 50)  # Blue strength per sector at the start. S145 (XO 2026-11-22): the second value is 0 at every level: a blue remnant (10 to 20) inside red's first sector would be cut off and destroyed, and showed as a detached company on the front map (it was 15 / 20 / 10)
     red_attack: float = 0.30             # daily chance that Red attacks a contested sector it is not clearly losing (x its strength ratio)
+    takeover_days: int = 9               # S172: days after a base falls before our next attack (ground.CLOCK_DAYS was 9 for everybody: the default keeps it); a pack's `level_overrides` can set it per level (Syria L1: 1)
     red_reinf: float = 5.0               # strength points Red adds a day at the zone in contact (x supply)
     blue_reinf: float = 5.0              # the same for Blue
     raid_rate: float = 0.40              # S37: no longer read by raids.py (red raids by jet budget, `raids.RAID_SHARE`); `ground.py` still reads it for the abstract supply strikes

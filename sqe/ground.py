@@ -1057,6 +1057,13 @@ def taken_field_lose(state, rid: str) -> list:
     return lines
 
 
+def _takeover_days(state) -> int:
+    """S172: the takeover clock after a base falls, for this campaign's level (`Difficulty.takeover_days`, default `CLOCK_DAYS` 9; a pack's `level_overrides` can shorten it for one level)."""
+    from . import difficulty
+    value = getattr(difficulty.get(int(getattr(state, "level", 2))), "takeover_days", CLOCK_DAYS)
+    return max(1, int(value))
+
+
 def _check_red_bases(state) -> list:
     """A red base falls while we hold the sector on our side of it and the enemy has nothing there; it is retaken when the enemy holds that sector again."""
     g, lines = state.ground, []
@@ -1067,9 +1074,10 @@ def _check_red_bases(state) -> list:
         if rid not in g["taken"] and ours:
             g["taken"].append(rid)
             g["taken_day"][rid] = state.day
-            g["clock"] = state.day + CLOCK_DAYS
+            takeover_days = _takeover_days(state)
+            g["clock"] = state.day + takeover_days
             g["red_clock"] = state.day + RED_CLOCK_DAYS
-            lines.append(f"{rb['name'].upper()} HAS FALLEN: our forces hold it. The next push waits for the takeover ({CLOCK_DAYS} days)")
+            lines.append(f"{rb['name'].upper()} HAS FALLEN: our forces hold it. The next push waits for the takeover ({takeover_days} day{'s' if takeover_days != 1 else ''})")
             lines += apply_red_fall(state, rb)
             lines += taken_field_start(state, rid)
             lines += story.beat(state, "fall_" + rid)
