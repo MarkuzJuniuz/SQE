@@ -39,9 +39,9 @@ def bomber_types() -> tuple:
 
 
 def sead_types() -> tuple:
-    """B2 (XO 2026-11-21): the red types that fly SEAD packages: the pack's bomber types (the Su-24M: Kh-31P or Kh-58U) and any of its attack types that carries the Kh-58U (`loadouts.ARM58_PER_JET`: Syria's Su-17M4, always a Kh-58U package). The Caucasus's attack type is the Su-25: it carries neither, so its SEAD is the Su-24M's as before."""
-    from .loadouts import ARM58_PER_JET
-    return bomber_types() + tuple(t for t in attack_types() if t in ARM58_PER_JET and t not in bomber_types())
+    """B2 (XO 2026-11-21), S167 (XO 2026-11-22: "Su24m only. Just let the su17s do the CAS and bombing work"): the red types that fly SEAD packages: the pack's bomber types only (the Su-24M: Kh-31P or Kh-58U, each with the L-081 pod,
+    `loadouts.ARM_POD`). The Su-17M4 carried a Kh-58U but never fired it in the server runs (T3b / T3c: no ELINT pod exists for it, XO checked in the Mission Editor), so it no longer flies SEAD; it keeps its land-strike, runway, troops and CAS kits."""
+    return bomber_types()
 
 
 SU25_SUPPLY = True            # v0.41.359 (campaign rules plan Phase 10c): a Su-25 pair is the first pick for a raid on an uncovered supply site; the Su-24M keeps the fields (they need its SEAD group) and is the fallback

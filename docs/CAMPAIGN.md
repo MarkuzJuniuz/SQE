@@ -217,14 +217,14 @@ offer it yet, so the supply kit is still the FAB one.) On Syria the Su-17M4 carr
 (268 PTAB-1M each) on troops and four FAB-500 on a supply site. Red's front-line strike on a blue column carries the troops kit.
 Kh-59M raids, the Su-25's eight FAB-500 and the Tu-22M3 (three Kh-22 on the carrier raid, four racks of nine OFAB-250 on a land
 strike: DCS's Kh-22 is an anti-ship missile and the AI does not fire it at land) are as before. Red's SEAD packages fire the
-Kh-58U (65 nm) and the Kh-31P (50 nm), as described below; red's Tu-22M3 fields (Mozdok, Damascus, Bassel Al-Assad) are repaired in two
+Kh-31P (50 nm), as described below; red's Tu-22M3 fields (Mozdok, Damascus, Bassel Al-Assad) are repaired in two
 turns after a runway hit, see Runways.
 Red's **SEAD raids** go after blue's Patriot and HAWK sites with anti-radiation missiles: a full Patriot is attacked
 by three packages (two at Level 3, where a raid never flies more than 16 jets), a HAWK by two, escorted and preceded (at
 Levels 2 and 3) by a fighter sweep that tries to draw blue's fighters away. A package is 4 jets (8 at Level 3) with two
-missiles a jet. The packages alternate: the first, and every second one, fires **Kh-58U** missiles from about 65 nm out,
-the others **Kh-31P** from 50 nm, and the launch times are set so that every package's missiles reach the site together.
-On Syria the Su-17M4 flies SEAD too, always with the Kh-58U.
+missiles a jet. Every package fires the **Kh-31P** from about 50 nm out, and the launch times are set so that every package's
+missiles reach the site together. 
+Only the **Su-24M** flies SEAD (it carries the pod its anti-radiation missiles need); the Su-17M4 does the CAS and bombing work.
 
 At Levels 2 and 3 the **Tu-22M3 bomber wing** (at Mozdok on the Caucasus, split over Damascus and Bassel Al-Assad in Syria) can raid the carrier, after a quiet day, and then not again for 8 days (5 when it is desperate). At Level 3 red sends it when it
 estimates a window it judges safe or when it is desperate; at Level 2 only when desperate (red's air arm or command structure is badly
