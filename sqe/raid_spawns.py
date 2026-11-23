@@ -16,7 +16,7 @@ from dcs.point import PointAction
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import blue_commit, callsigns, reactive, scramble
+from . import blue_commit, callsigns, reactive, samtier, scramble
 from . import seacheck as seac
 from . import threatmap as tm
 from .difficulty import ai_skill
@@ -41,7 +41,7 @@ RAID_GROUP_GAP_S = 60         # v0.41.108: the bomber groups of a big raid follo
 RAID_ROUTE_SAMS = 99            # v0.41.256: red SAM sites along a fleet raid's way in that are built in the mission (judgment call: the default is 2; the unit limit still binds)
 RAID_SWEEP_LEAD_S = 90        # ...and the raid's sweep escorts fly this far ahead of the first bomber group (judgment call)
 SEAD_SWEEP_LEAD_S = 60        # S66 (XO 2026-11-13): the fighter sweep ahead of a SEAD raid flies this far ahead of the SEAD flights on the same route and clock, so blue's intercepts commit to it before the Kh-31P salvo (judgment call). It stops SEAD_SWEEP_STOP_NM from the site, 20 nm short of the launch point (about 160 s at the raid's speed), so it passes its last point about 3 minutes before the salvo
-SEAD_SWEEP_STOP_NM = 70       # ...and its last point is this far from the site: outside a Patriot's 40 nm ring (raids.PATRIOT_NM) by the 20 nm margin the blue sweep uses (sweep.SWEEP_RING_MARGIN_NM); the SEAD flights go on to ARM_LAUNCH_NM (judgment call)
+SEAD_SWEEP_STOP_NM = 70       # ...and its last point is this far from the site: outside a Patriot's base 40 nm ring (raids.PATRIOT_NM) by the 20 nm margin the blue sweep uses (sweep.SWEEP_RING_MARGIN_NM); the SEAD flights go on to ARM_LAUNCH_NM (judgment call)
 RAID_HOLD_MAX_S = 600         # ...and one with plenty of time appears at most 10 min before it must push
 RAID_EGRESS_NM = 30           # ...off target it turns 40 degrees off its way in and leaves this far before heading home     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
 ARM_LAUNCH_NM = 50            # S107 (XO 2026-11-18): 50 nm, was 40 (v0.41.84: the edge of a Patriot's 40 nm ring); the Kh-31P is the longer-ranged missile and a high launch adds to that. Public figure about 110 km (60 nm) at a high launch, launch envelope 100 m to 15 km (Wikipedia Kh-31, the Russian export catalog esp.fsvts.gov.ru; medium firmness; the DCS value was not found: its forum pages could not be read), so 50 nm keeps 10 nm of margin, like KH59_LAUNCH_NM 50 against 62 (judgment call). v0.41.84: a red SEAD flight fires its Kh-31P this far from the SAM site (S36b: the standoff launch of the SEAD raid) (judgment call: inside the 60 nm the Kh-31 page gives, with margin for a low launch)
@@ -496,17 +496,18 @@ class RaidSpawns:
         self._leash_fleet_cap(pts, 0, geom.tx, geom.ty)
         return (pts[0].x, pts[0].y)
 
-    def _raid_bend(self, pts, raided):
+    def _raid_bend(self, pts, raided, alt_ft=20000):
         """v0.41.29: a red raid's legs bend round blue's Patriot fields (raids.PATRIOT_NM; the field it raids is the one it goes for, so not that
         one), and (v0.41.31) round the carrier group (FLEET_RAID_AVOID_NM). Only fields whose defences are standing (defense >= 0.15, the rule _place_base builds by). -> the points with turn points added."""
-        from .raids import PATRIOT_NM
-        circles = [(b.x, b.y, PATRIOT_NM) for b in self.state.bases.values()
+        # S171: the Patriot's ring against a jet at the raid's altitude (samtier.ring_nm: 40 low, 54 from 9,843 ft, 63 from 26,247 ft; measured, see samtier)
+        patriot_ring_nm = samtier.ring_nm("Patriot", alt_ft)
+        circles = [(b.x, b.y, patriot_ring_nm) for b in self.state.bases.values()
                    if b.kind == BaseKind.AIRFIELD and b.id != raided.id and b.defense >= 0.15]
         # v0.41.31: and round the carrier group (its escorts' SM-2s), unless the fleet is what it is raiding
         circles += [(b.x, b.y, FLEET_RAID_AVOID_NM) for b in self.state.bases.values() if b.kind == BaseKind.CARRIER and b.id != raided.id]
         if not circles or len(pts) < 2:
             return list(pts)
-        wps = [Wpt("P", x, y, 20000, 450) for x, y in pts]
+        wps = [Wpt("P", x, y, alt_ft, 450) for x, y in pts]
         for _ in range(4):                  # a leg straight through a big circle needs more than one turn point (two passes per call)
             n0 = len(wps)
             avoid_circles(wps, circles, 24, 1)
@@ -957,7 +958,7 @@ class RaidSpawns:
             if dist(*mshl, dx, dy) > dist(*w1, dx, dy) + 15 * NM:
                 lane.append(w1)
             launch = self._raid_launch(package, station, w1)
-            path = self._raid_bend(lane, cvb) + [launch]
+            path = self._raid_bend(lane, cvb, 30000) + [launch]          # a fleet raid flies at 30,000 ft (S171)
             L = sum(dist(*path[i], *path[i + 1]) for i in range(len(path) - 1))
             stg = self._raid_stage(ex, ba, path, arrive, V, dx, dy, L) if staged_ok else None
             self._rclock[package.id]["t_leave"] = stg["T_push"] if stg else arrive - L / V
@@ -972,6 +973,13 @@ class RaidSpawns:
             return
         cvb = st.bases[package.objective.target_id]
         aim = ex.get("aim", "") or ""
+        # S171: the altitude the raid flies (the `alt` further down: land raids 12,000 / 20,000, SEAD raids SEAD_ALT_FT, fleet raids 30,000): the Patriot ring it bends round depends on it
+        if not ex.get("land"):
+            bend_alt_ft = 30000
+        elif ex.get("sead"):
+            bend_alt_ft = SEAD_ALT_FT
+        else:
+            bend_alt_ft = 20000
         sead_r = bool(ex.get("sead"))                            # S36b (XO 2026-11-11): a SEAD raid on a blue SAM site: its "bombers" are the SEAD flights, they fire from standoff and turn home
         from . import raids as _raids48
         from .raids import raid_members, escort_members
@@ -1008,10 +1016,10 @@ class RaidSpawns:
         launch = self._raid_launch(package, station, w1) if standoff else None
         if standoff:
             t_tgt = arrive                                      # (the launch point, not the carrier)
-            lane = self._raid_bend(lane, cvb) + [launch]
+            lane = self._raid_bend(lane, cvb, bend_alt_ft) + [launch]
             path = lane
         else:
-            lane = self._raid_bend(lane, cvb) + [station]
+            lane = self._raid_bend(lane, cvb, bend_alt_ft) + [station]
             path = lane + [(dx, dy)]
             if sead_r or kh59_r:                                # the way in without the points inside the launch ring, ending on the Kh-31P launch point ARM_LAUNCH_NM from the site (S48: the Kh-59M launch point KH59_LAUNCH_NM from the aim)
                 ring_ = KH59_LAUNCH_NM if kh59_r else ARM_LAUNCH_NM
@@ -1061,7 +1069,7 @@ class RaidSpawns:
         egr_ = offset(ox, oy, bearing(ox, oy, *remaining[-2] if len(remaining) > 1 else (sx, sy)) + 40, RAID_EGRESS_NM * NM)
         def home_of(aid_):                                       # S46: a pooled raid's members each go home to their OWN field (the lead's is `ba`)
             a_ = st.assets.get(aid_) or ba
-            return self._raid_bend([egr_, (a_.x, a_.y)], cvb)[1:]
+            return self._raid_bend([egr_, (a_.x, a_.y)], cvb, bend_alt_ft)[1:]
         home_ = home_of(ex["bomber_wing"])                       # turn points round blue's Patriot fields, then its own field
         home_n = {}                                              # group name -> how many of its last points are the way home
         pooled_ = bool(ex.get("pool") or ex.get("esc_pool"))
@@ -1111,7 +1119,7 @@ class RaidSpawns:
         def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0, lateral_nm=0.0, home=None, path_=None, L_=None, stop_short=False):
             pos, rem, hold, act = start_at(shift, path_, L_)
             fin = fin_
-            if stop_short and launch_ is not None and len(path) > 2 and rem and rem[-1] == launch_:          # S66: a SEAD raid's sweep never flies the last leg (same route and clock as the SEAD flights, `shift` s ahead): the launch point is ARM_LAUNCH_NM from the site, on the edge of a Patriot's ring (raids.PATRIOT_NM 40); its last point is SEAD_SWEEP_STOP_NM out, on the line site - last way-in point (the launch point lies on it), and it turns home from there
+            if stop_short and launch_ is not None and len(path) > 2 and rem and rem[-1] == launch_:          # S66: a SEAD raid's sweep never flies the last leg (same route and clock as the SEAD flights, `shift` s ahead): the launch point is ARM_LAUNCH_NM from the site, on the edge of a Patriot's low 40 nm ring (raids.PATRIOT_NM; S171, XO 2026-11-23: INSIDE its 63 nm ring against a 30,000 ft jet, accepted: the Kh-31P reaches about 50 nm, T3c-T3e lost no Su-24M); its last point is SEAD_SWEEP_STOP_NM out, on the line site - last way-in point (the launch point lies on it), and it turns home from there
                 stop_ = offset(dx, dy, bearing(dx, dy, *path[-2]), SEAD_SWEEP_STOP_NM * NM) if dist(*path[-2], dx, dy) > (SEAD_SWEEP_STOP_NM + 1) * NM else None
                 rem, fin = rem[:-1] + ([stop_] if stop_ is not None else []), "ING"
                 if hold is None and dist(*pos, dx, dy) < SEAD_SWEEP_STOP_NM * NM:          # (it would have spawned inside that ring: it starts on its last point and only turns for home)

@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.599, red raids keep out of a Patriot's real reach
+In tests a Patriot fired at jets up to 54 nm away at medium altitude and 63 nm at high altitude, further than the 40 nm red's raids kept to. Red raid routes now bend round your Patriot fields at 54 nm (raids at 12,000 to 20,000 ft) or 63 nm (SEAD and fleet raids at 30,000 ft). SEAD raids still launch their missiles from about 50 nm, inside that reach.
+
 ## v0.41.598, escorts hold a station again instead of following the strikers
 In tests the AI escort that was meant to fly with the lead striker never did: it ran ahead of its leader while the strikers were still taxiing, ended up 55 to 60 nm away on its own and was shot down by a SAM. Escorts of strike and CAS packages now hold a covering station near the strikers again, as before the follow mode was added. In the test the escort survived and shot down a fighter.
 
