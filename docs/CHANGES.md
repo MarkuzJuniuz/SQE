@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.602, a jet that lands at a field that is not yours is lost
+A blue jet (AI or yours) that put down at an enemy field is now captured, and one that put down at a neutral field is interned: both count as a lost airframe, with a line in the debrief. Landing at your own fields and on your carrier is unchanged.
+
 ## v0.41.601, an old save's runway-strike line in the sortie history reads as today's
 A save made before the runway job was renamed still showed "Crater the runway at ..." in its sortie history (and in an unfinished sortie). Opening it now maps that line to "OCA: Runway Strike, ..." like the rest of the plan.
 

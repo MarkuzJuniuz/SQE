@@ -107,3 +107,34 @@ if __name__ == "__main__":
     from sqe import debrief as db
     print(run(db.lua_hook("c", 1, "p", [], "Viper 1-1", "Viper 1", flights={"Viper 1-2": "VIPER 1-2"}, tune_flags=[9101], tune_mhz=262.5, awacs_unit="Magic 1-1",
                           dmg={"Viper 1-2": "VIPER 1-2", "Magic 1-1": "*MAGIC"}, dmg_on=True, awacs="Magic")))
+
+
+# S130b: landings. Same stub DCS; each case is (unit name, place name, the place's getCoalition answer or -9 for "the call raises an error"). The hook's state-file text is read back:
+# the "landings" object says, per unit, the place and the coalition number (c) it stored.
+LANDING_TAIL = r"""
+local fn, err = load(src, "hook", "t", env)
+if not fn then return "COMPILE: " .. tostring(err) end
+local ok, e1 = pcall(fn)
+if not ok then return "RUN: " .. tostring(e1) end
+local lastdump
+env.io = {open = function() return {write = function(_, s) lastdump = s end, close = function() end} end}
+local errs = {}
+for _, c in ipairs(CASES) do
+  local place = {getName = function() return c[2] end}
+  if c[3] ~= -9 and c[3] ~= -8 then place.getCoalition = function() return c[3] end end
+  if c[3] == -9 then place.getCoalition = function() error("no coalition") end end
+  local okf, ef = pcall(function() handler:onEvent({id = ev.S_EVENT_LAND, initiator = unit(c[1]), place = place}) end)
+  if not okf then errs[#errs+1] = tostring(ef) end
+end
+return (#errs > 0 and table.concat(errs, " | ") or "ok") .. " | " .. tostring(lastdump and lastdump:match('"landings":(%b{})'))
+"""
+
+
+def run_landings(src: str, cases: list) -> str:
+    """cases: [(unit, place, coalition)]; coalition -9 = getCoalition raises, -8 = the place has no getCoalition. -> "ok | {"unit":{"t":..,"p":"..","c":N}, ...}"."""
+    import lupa
+    rt = lupa.LuaRuntime(unpack_returned_tuples=True)
+    head = DRIVER[:DRIVER.index("local fn, err = load(src")]
+    driver = head.replace("local src, ALLOWED = ...", "local src, ALLOWED, CASES = ...") + LANDING_TAIL
+    table = rt.table_from([rt.table_from(list(c)) for c in cases])
+    return rt.eval("function(d) return load(d) end")(driver)(src, None, table)

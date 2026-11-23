@@ -1179,6 +1179,8 @@ class Session(Merging, SeadTiming):
         pl["landings"] += 1 if out["player"] == "recovered" else 0
         if out["player"] == "ejected":
             pl["rescues"] += 1; pl["airframes_lost"] += 1
+        elif out["player"] in ("captured", "interned"):             # S130b: you walked away, the jet is gone: an airframe lost, no rescue
+            pl["airframes_lost"] += 1
         pl["last_date"] = str(st.campaign_date())
         st.pilot = pl
         out["objective"], out["objective_type"] = pend["objective"], pend["objective_type"]

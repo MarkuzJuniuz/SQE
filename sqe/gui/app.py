@@ -711,7 +711,7 @@ class PilotPage(QWidget):
         for k, (v, s) in vals.items():
             self.cards[k].set(v, s)
         hist = list(reversed(st.history)); self.hist.setRowCount(len(hist))
-        nice = {"recovered": "Recovered", "ejected": "Bailed out, rescued", "airborne": "Airborne at end"}
+        nice = {"recovered": "Recovered", "ejected": "Bailed out, rescued", "captured": "Landed at an enemy field, captured", "interned": "Landed at a neutral field, interned", "airborne": "Airborne at end"}
         for i, e in enumerate(hist):
             for j, v in enumerate((e.get("date", f"day {e['day']}"), e["sortie"], e["objective"], nice.get(e["player"], e["player"]),
                                    e.get("kills", 0), e.get("flight_min", 0), e["blue_air_lost"])):
