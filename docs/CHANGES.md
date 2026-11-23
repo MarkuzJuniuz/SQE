@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.594, red Su-24M SEAD jets now carry the pod they need to fire
+A red Su-24M sent to hit your air defences with Kh-31P anti-radiation missiles now carries its L-081 Fantasmagoria pod. Without it the jets flew to their launch point and went home without firing. In a test the eight Su-24Ms fired all sixteen missiles at a Patriot and HAWK site. The Su-17M4s, which carry the longer-range Kh-58U, still do not fire.
+
 ## v0.41.593, carrier and base patrol fighters stay near what they guard, hurt fighters hold back
 The fighters that guard a carrier group or an airfield are now kept within 25 nm (carrier) or 15 nm (base) of their station, so they no longer chase enemy fighters out of the reach of their own ships' and SAMs' cover. A fighter flight that breaks off a fight because it lost a jet now commits on nothing for five minutes, for both sides, so a hurt pair no longer goes straight for the strikers. Your own flight is unchanged.
 

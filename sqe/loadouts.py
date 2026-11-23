@@ -238,6 +238,7 @@ STRIKE_PER_JET = {"Su_17M4": 4}             # FAB-500 (B3: or the kit's bomb, `S
 #  before it, and ONLY with the APK-9 datalink pod on pylon 4 (without it the Su-24M kept its ammo and flew home): KH59_POD. Missiles flew 55 to 58.6 nm and hit about 335 to 355 s later; the jets turned for home within about 25 s of the second missile.
 KH59_PER_JET = {"Su_24M": 2}   # Kh-59M per jet: every pylon that takes one (pydcs: 2 and 7 / 4 and 9, a balanced pair); the rest stay empty (judgment call: 930 kg each, the pair is the load)
 KH59_POD = {"Su_24M": 4}   # the APK-9 pod (pydcs `APK_9_Datalink_Pod`, clsid {APK_9}) a type needs on this pylon before the AI fires its Kh-59M (the Su-34 needs none). It is not a weapon: `_limit` and the "unarmed" warning count only the missiles
+ARM_POD = {"Su_24M": 5}   # T3b (XO 2026-11-22, server run: Su-24M and Su-17M4 with Kh-31P / Kh-58U flew to the launch point and turned home without firing; XO saw no Fantasmagoria pod on the jet): the L-081 Fantasmagoria ELINT pod (pydcs `L_081_Fantasmagoria_ELINT_pod`, pylon 5) the Su-24M carries with its anti-radiation missiles. Precedent: the Kh-59M fired only with its APK-9 pod (`KH59_POD`, XO's s48 probe). A HYPOTHESIS, not proven for the ARMs: the rerun shows it. The Su-17M4 has no such pod in pydcs
 
 
 def gbu_count(load: dict) -> int:
@@ -306,7 +307,14 @@ def enemy_arm_loadout(cls_name: str, weapon: str = "Kh_31P") -> dict:
         w = _find(P, weapon) if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
-    return _limit(out, per.get(cls_name))
+    out = _limit(out, per.get(cls_name))
+    pod = ARM_POD.get(cls_name)
+    if out and pod:                                                              # T3b: the Su-24M's ELINT pod rides with its missiles; a pod the pydcs table lacks leaves the kit as it was
+        P = getattr(cls, f"Pylon{pod}", None)
+        w = _find(P, "L_081") if P is not None else None
+        if w is not None:
+            out[pod] = {"CLSID": w[1]["clsid"]}
+    return out
 
 
 def enemy_standoff_loadout(cls_name: str) -> dict:
