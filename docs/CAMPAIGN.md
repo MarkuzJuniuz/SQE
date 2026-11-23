@@ -118,9 +118,10 @@ Only the attack legs (IP to target to egress) go in as the job requires; your IP
 
 **Package merging** (Settings > Mission build): when you fly, every package that starts inside the time windows (15 minutes
 before and 30 after yours by default, Later Packages up to a whole turn) flies in the same mission, wherever its target is,
-nearest to yours first, each still keeping its own time on target. The unit limit (250 by default) trades detail for
-performance: over it the furthest packages are left out first, a Fighter Sweep stays while a package it covers stays, and
-your own package and the ground war round your target keep their share before the others. The **Target Area Radius** (15 nm)
+nearest to yours first, each still keeping its own time on target. The mission is limited to 1,200 units (fixed; a regular
+mission holds roughly 500 to 750, so the limit rarely bites): over it the furthest packages are left out first, a Fighter
+Sweep stays while a package it covers stays, and your own package and the ground war round your target keep their share
+before the others. If DCS runs slowly, turn Package Merging off. The **Target Area Radius** (15 nm)
 is that area: the supply sites and the ground war built round your target, the ruins of earlier strikes, and the packages the
 Missions list shows together.
 

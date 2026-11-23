@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.591, the mission size limit is fixed at 1,200 units
+A mission is now limited to 1,200 units and the "units max" box in Settings is gone (an old settings file's value is ignored). A regular mission holds roughly 500 to 750 units, so packages are no longer left out of a merged mission for size and the wrecks and ground sites are no longer trimmed to 250; only a full-map mission goes past it. In tests on a dedicated server, missions of 490 to 590 units ran at real-time speed using 0.4 to 0.8 CPU cores. If DCS runs slowly for you, turn Package Merging off.
+
 ## v0.41.590, one unit limit: the fixed 500 ceiling is gone
 A mission's size is now limited only by the Mission Build setting "units max". The separate hidden ceiling of 500 units (a file you could edit, `limits.json`) never applied at the default, because the setting was always lower, and it is removed. Nothing changes at the default limit of 250.
 

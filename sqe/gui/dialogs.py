@@ -239,17 +239,16 @@ class SettingsDialog(QDialog):
         v = page("Mission Build")
         self.merge = QComboBox(); self.merge.addItem("Off (One Package per Mission)", "off"); self.merge.addItem("On (Nearest First, Up to the Unit Limit)", "area")
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
-        self.mmax = StepSpin(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.max_units))
-        row(v, "Package Merging", self.merge, self.mmax)
+        row(v, "Package Merging", self.merge)
         hint(v, "Packages that start inside the time windows below fly in the same mission (AI-flown, one shared ground world and support), wherever their target is, "
-                "nearest to your target first. The unit limit counts the whole mission: over it, the furthest packages are left out first (a Fighter Sweep stays while a package it "
+                "nearest to your target first. The mission is limited to 1,200 units (fixed): over it, the furthest packages are left out first (a Fighter Sweep stays while a package it "
                 "covers stays). Your own package and the ground war round your target get the unit budget before the others, so a crowded mission is built up to three times and "
                 "takes longer. The waiting window shows the unit count so you can compare performance.")
         self.mrad = StepSpin(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "target_area_radius_nm", 15)))
         row(v, "Target Area Radius", self.mrad)
         hint(v, "The area round your target where the supply sites and the ground war are built, where earlier strikes show as ruins, and whose packages are listed "
                 "together in the Missions list. The circle is centred on your target, slid inward so it never hangs over the edge of the map's targets. A bigger radius builds more "
-                "of the ground world and costs units. It no longer limits which packages fly with you: the time windows and the unit limit do.")
+                "of the ground world and costs units. It no longer limits which packages fly with you: the time windows and the 1,200 unit limit do.")
         self.mraids = QCheckBox("Merge raids")
         self.mraids.setChecked(bool(getattr(settings, "merge_raids_all", True))); v.addWidget(self.mraids)
         hint(v, "Only changes the Missions list: on, every raid that starts inside the time windows is listed inside the mission it flies with; off, a raid is listed there only "
@@ -383,7 +382,7 @@ class SettingsDialog(QDialog):
         self.s.hot_ramp_scrambles = self.hotramp.isChecked()
         self.s.hot_runway_starts = not self.hot_none.isChecked()
         self.s.hot_runway_own_field = self.hot_own.isChecked()
-        self.s.merge_mode = self.merge.currentData(); self.s.max_units = int(self.mmax.value())
+        self.s.merge_mode = self.merge.currentData()
         self.s.merge_earlier_min = int(self.mback.value()); self.s.merge_later_min = int(self.mfwd.value())
         self.s.target_area_radius_nm = int(self.mrad.value()); self.s.merge_raids_all = bool(self.mraids.isChecked())
         self.s.ruins = bool(self.ruins.isChecked())
