@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.611, internal clean-up: the start of the mission builder in plain Python
+Fourteen lambdas and one-line loops in the first part of the mission builder were rewritten as plain loops and small named functions. Nothing changes in play: 125 test missions come out identical.
+
 ## v0.41.610, internal clean-up: the station and ring code in plain Python
 The helpers that decide where a fighter station may stand (outside SAM rings) were rewritten as plain loops with full names. Nothing changes in play.
 
