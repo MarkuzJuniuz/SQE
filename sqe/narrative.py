@@ -176,6 +176,8 @@ _PLAYER = {"recovered": [""],                         # v0.41.414 (XO): nothing 
            "ejected": ["You ejected and are being recovered.", "You punched out. Search-and-rescue is on the way."],
            "lost": ["Your aircraft was lost. The squadron will write to your family if you are not found.",
                     "You did not return."],
+           "captured": ["You landed at an enemy field and were taken prisoner. The jet is lost.", "You put down at a field the enemy holds. You and your jet are captured."],
+           "interned": ["You landed at a neutral field and were interned. The jet is lost.", "You put down at a neutral field: you are interned and the jet stays there."],
            "airborne": [""]}
 _FOLLOW = {"great": ["Command wants more of the same tomorrow.", "That one will hurt them."],
            "good": ["The picture is improving.", "It was enough. Rest, and get ready for tomorrow."],

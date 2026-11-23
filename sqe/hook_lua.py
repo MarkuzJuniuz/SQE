@@ -31,7 +31,8 @@ local RUINS = { __RUINS__ }
 local GATES = { __GATES__ }
 local pl = { takeoff = nil, landed = nil, ka = 0, kg = 0, ks = 0 }
 local dead, ejected, landed, ended = {}, {}, {}, false
-local landAt = {}                -- unit name -> {t, p}: the time and the place (airbase or ship) of its landing
+local landAt = {}                -- unit name -> {t, p, c}: the time, the place (airbase or ship) and that place's coalition (0 neutral, 1 red, 2 blue, -1 unknown) of its landing
+local BLUEPLACES = { __BLUEPLACES__ }   -- S130b: the names of blue's own airfields and ships, used only when the game cannot tell a place's coalition
 -- v0.41.334 (campaign rules plan, Phase 1): declared up here, before the event handler that writes them (the v0.41.217 "DMGL" rule: a local further down is invisible to it)
 local limped = {}                -- unit name -> hit points left, percent, of every aircraft that landed below LIMP_LIFE: it limps, its refit is doubled (refit.py)
 local LIMP_LIFE = 0.90           -- landed with less than this share of its hit points = limping (judgment call, plan section 7)
@@ -173,7 +174,7 @@ if #CRATERS > 0 then
 end
 local function landJson()
   local o = {}
-  for n, v in pairs(landAt) do o[#o + 1] = string.format('"%s":{"t":%d,"p":"%s"}', esc(n), math.floor(v.t or 0), esc(v.p or "")) end
+  for n, v in pairs(landAt) do o[#o + 1] = string.format('"%s":{"t":%d,"p":"%s","c":%d}', esc(n), math.floor(v.t or 0), esc(v.p or ""), v.c or -1) end
   return "{" .. table.concat(o, ",") .. "}"
 end
 local function limpJson()
@@ -524,7 +525,10 @@ function H:onEvent(e)
       landed[n] = true
       local pn = nil
       if e.place and e.place.getName then local okp, pv = pcall(function() return e.place:getName() end); if okp then pn = pv end end
-      landAt[n] = { t = timer.getTime(), p = pn }                    -- v0.41.257: when and where (a sunk carrier takes what landed on it before it went down)
+      local pc = -1                                                  -- S130b: whose place was it? the game's own answer first, our list of blue places as the fallback
+      if e.place and e.place.getCoalition then local okc, cv = pcall(function() return e.place:getCoalition() end); if okc and type(cv) == "number" then pc = cv end end
+      if pc < 0 and pn and BLUEPLACES[pn] then pc = 2 end
+      landAt[n] = { t = timer.getTime(), p = pn, c = pc }            -- v0.41.257: when and where (a sunk carrier takes what landed on it before it went down)
       pcall(function()                                               -- v0.41.334: it landed hurt? (tested here, before any despawn below; every call in a pcall)
         local u = e.initiator
         local l, l0 = u:getLife(), u:getLife0()

@@ -115,9 +115,10 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__COVER__", ", ".join(f'{{g={_lq(c["g"])}, n={int(c["n"])}, bf={int(c["bf"])}, rf={int(c["rf"])}, u={float(c["u"]):.0f}}}' for c in (cover or [])))
             .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}, sq={_lq(a.get("sq", ""))}}}' for a in (alerts or [])))
             .replace("__PHOME__", ("{ x = %.1f, z = %.1f }" % tuple((cfg or {})["phome"])) if (cfg or {}).get("phome") else "nil")
+            .replace("__BLUEPLACES__", ", ".join(f"[{_lq(n_)}]=true" for n_ in (cfg or {}).get("blue_places", [])))
             .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
             .replace("__RECOV__", _recov_lua((cfg or {}).get("recov")))
-            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov", "rwys", "craters")}).replace("'", "")))
+            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov", "rwys", "craters", "blue_places")}).replace("'", "")))
 
 
 def _recov_lua(rs) -> str:
@@ -430,9 +431,30 @@ def kill_log(manifest: Manifest, data: dict) -> list[str]:
     return out
 
 
+def stranded_jets(manifest: Manifest, data: dict) -> dict:
+    """S130b (XO 2026-11-22): a blue jet that landed at a field that is not blue's is lost: captured at a red field, interned at a neutral one. -> {unit name: (place, "captured" or "interned")}.
+    The hook writes the place's coalition under `landings[unit]["c"]` (0 neutral, 1 red, 2 blue, -1 it could not tell). A save, state file or landing without that number counts as blue (no change)."""
+    out = {}
+    landings = data.get("landings") or {}
+    for g in manifest.groups:
+        if g["kind"] != "friendly":
+            continue
+        for unit_name in g["units"]:
+            landing = landings.get(unit_name)
+            if not landing:
+                continue
+            coalition = int(landing.get("c", 2))
+            if coalition == 1:
+                out[unit_name] = (landing.get("p") or "a red field", "captured")
+            elif coalition == 0:
+                out[unit_name] = (landing.get("p") or "a neutral field", "interned")
+    return out
+
+
 def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     """Player-flown package: results are applied 1:1 (no dice). Returns a structured outcome for the debrief screen."""
-    lost = set(data.get("dead", [])) | set(data.get("ejected", []))
+    stranded = stranded_jets(manifest, data)                 # S130b: landed at a red or neutral field: counts as lost (never twice: a jet that is also dead / ejected is in the set once)
+    lost = set(data.get("dead", [])) | set(data.get("ejected", [])) | set(stranded)
     lost_all = lost
     landed = set(data.get("landed", []))
     out = {"blue_losses": [], "red_assets": [], "red_air_lost": 0, "blue_air_lost": 0, "target_damage": 0.0,
@@ -454,6 +476,10 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             if dead:
                 out["blue_losses"].append({"callsign": g.get("callsign", g["ref"]), "lost": len(dead), "total": len(g["units"])})
                 out["lines"].append(f"{g.get('callsign', g['ref'])}: lost {len(dead)}/{len(g['units'])} ({sq.name}: {sq.available}/{sq.authorized} left)")
+            for unit_name in g["units"]:
+                if unit_name in stranded:
+                    place, fate = stranded[unit_name]
+                    out["lines"].append(f"{g.get('callsign', g['ref'])} landed at {place} and is lost ({fate})")
         elif g["kind"] == "friendly_ground" and str(g.get("ref", "")).startswith("sector:"):
             if g["units"]:                                         # S81/S83: a front battle staged under a flight that is not its CAS: its losses cost the sector's Blue strength like red's column's cost its Red
                 from . import ground as _gr3
@@ -667,6 +693,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         out["player"] = "ejected"
     elif pu in data.get("dead", []):
         out["player"] = "lost"
+    elif pu in stranded:
+        out["player"] = stranded[pu][1]                 # S130b: "captured" or "interned": you walked away from it, the jet is gone
     elif pu in landed:
         out["player"] = "recovered"
     out["lines"] += _fleet.apply_debrief(state, manifest, data)             # v0.41.257: ships sunk in the mission (the carrier, its escorts)

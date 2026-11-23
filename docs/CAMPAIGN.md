@@ -261,7 +261,7 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
   the Tu-22M3 and E-3 take 8, the F-117A 16). A sortie lasts about 100 minutes, so a jet that flew in a turn's first wave is ready about
   40 to 65 minutes into the next turn (its second or third wave), one from the second wave 100 to 125 minutes in (third wave), one from
   the third wave 160 to 185 in (fourth wave), and one from the fourth wave not before the turn after. A jet that comes back damaged ("limping", under 90% health) takes twice as long to refit.
-  A jet that was shot down is gone.
+  A jet that was shot down is gone, and so is one that lands at a field that is not yours: it is captured at an enemy field, interned at a neutral one (the debrief says so, and the squadron loses the airframe).
 * **Replacements** arrive as a pair every 24 hours at a Force Index of 100% (slower below that, see the Force Index). The Tu-22M3 and the E-3 are replaced one airframe every
   48 hours and the F-117A one every 96 hours, regardless of the Force Index.
 * A planned turn draws its jets from the **ledger**: the jets ready now (wave 1), and for each later wave the jets whose refit

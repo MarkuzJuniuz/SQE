@@ -711,7 +711,7 @@ class PilotPage(QWidget):
         for k, (v, s) in vals.items():
             self.cards[k].set(v, s)
         hist = list(reversed(st.history)); self.hist.setRowCount(len(hist))
-        nice = {"recovered": "Recovered", "ejected": "Bailed out, rescued", "airborne": "Airborne at end"}
+        nice = {"recovered": "Recovered", "ejected": "Bailed out, rescued", "captured": "Landed at an enemy field, captured", "interned": "Landed at a neutral field, interned", "airborne": "Airborne at end"}
         for i, e in enumerate(hist):
             for j, v in enumerate((e.get("date", f"day {e['day']}"), e["sortie"], e["objective"], nice.get(e["player"], e["player"]),
                                    e.get("kills", 0), e.get("flight_min", 0), e["blue_air_lost"])):
@@ -1183,7 +1183,18 @@ def run():
         elif settings.auto_patch_scripting and not settings.dcs_install:
             QMessageBox.information(w, "MissionScripting.lua", "No DCS install folder is set (Settings), so MissionScripting.lua can't be patched automatically. "
                                     "Debriefing needs it.")
-    app.aboutToQuit.connect(lambda: S.restore_mission_scripting(settings.dcs_install) if settings.dcs_install and settings.auto_patch_scripting else None)
+    def restore_scripting_on_exit():
+        """S161a: a DCS server that SQE started may still be running its mission after SQE closes: it needs the patch to write the results, so the patch stays (the marker finds it at the next start)."""
+        if not (settings.dcs_install and settings.auto_patch_scripting):
+            return
+        from .. import dcs_server
+        if getattr(settings, "dcs_server_fly", False) and dcs_server.server_processes():
+            return
+        S.restore_mission_scripting(settings.dcs_install)
+    app.aboutToQuit.connect(restore_scripting_on_exit)
+    if getattr(settings, "dcs_server_fly", False) and settings.dcs_saves:
+        from .. import dcs_server as _srv
+        _srv.recover(settings.dcs_saves)                         # S161a: a crash left the server settings changed with no server running: put the user's file back
     def start():
         if not settings.patch_asked:
             r = QMessageBox.question(w, "Debrief results", "To read mission results, SQE can temporarily edit DCS's MissionScripting.lua "

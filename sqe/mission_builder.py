@@ -775,7 +775,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
                               "cvrec": self._wing_recovery(pbase, ptot), "recov": list(self._recov),
                               "phome": ([self._pt(pbase.x, pbase.y).x, self._pt(pbase.x, pbase.y).y] if pbase.kind == BaseKind.AIRFIELD else None),
-                              "rwys": runways.fields_for_hook(st, self.t), "craters": self._crater_blasts})
+                              "rwys": runways.fields_for_hook(st, self.t), "craters": self._crater_blasts,
+                              "blue_places": self._blue_places()})
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -806,6 +807,22 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """v0.41.18: does an AI flight going home to this base get recovered short of it instead of landing (Settings: AI landings)?"""
         mode = (self.o.ai_land_carrier if base.kind == BaseKind.CARRIER else self.o.ai_land_field) or "never"
         return mode == "always" or (mode == "home" and base.id == getattr(self, "_main_base", None))
+
+    def _blue_places(self) -> list:
+        """S130b: the names of blue's own landing places in this mission: every airfield painted blue and every blue ship. The hook asks the game whose a place is; this list
+        is only its fallback when that call fails. A jet that lands anywhere else (a red or a neutral field) is captured or interned (`debrief.stranded_jets`)."""
+        names = []
+        for blue_base in self.state.bases.values():
+            if blue_base.kind == BaseKind.AIRFIELD and blue_base.airport:
+                names.append(blue_base.airport)
+        painted_blue = (theatres.active().get("painted_airports") or {}).get("blue", [])
+        for airport_name in painted_blue:
+            if airport_name in self.t.airports:
+                names.append(airport_name)
+        for ship_group in self.ship.values():
+            for ship_unit in ship_group.units:
+                names.append(ship_unit.name)
+        return sorted(set(names))
 
     def _wing_recovery(self, pbase, tot_s):
         """v0.41.18: the hook's watch on your wingmen: recovered at your home base (10 nm) once you are back after your TOT, when that base type is

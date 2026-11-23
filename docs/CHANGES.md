@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.603, an experimental switch for flying on a local DCS dedicated server
+Settings > Mission Build has a new experimental option, off by default, to fly on a DCS dedicated server on your PC (real time only). In this first version it gives your flight lead a client slot and adds the server start / stop code that keeps your own server settings safe; the Fly button does not use it yet.
+
+## v0.41.602, a jet that lands at a field that is not yours is lost
+A blue jet (AI or yours) that put down at an enemy field is now captured, and one that put down at a neutral field is interned: both count as a lost airframe, with a line in the debrief. Landing at your own fields and on your carrier is unchanged.
+
 ## v0.41.601, an old save's runway-strike line in the sortie history reads as today's
 A save made before the runway job was renamed still showed "Crater the runway at ..." in its sortie history (and in an unfinished sortie). Opening it now maps that line to "OCA: Runway Strike, ..." like the rest of the plan.
 

@@ -119,6 +119,7 @@ class AppSettings:
     autoskip_night: bool = False          # ...also night turns, even when a flight is on offer
     autoskip_crew_rest: bool = False      # ...stop after autoskip_crew_rest_hours of campaign time (unticked: no limit, a week at most)
     autoskip_crew_rest_hours: int = 12  # 4 to 24, step 4 (S25: a turn is four hours; `load` rounds an older value to a multiple of 4)
+    dcs_server_fly: bool = False          # S161a (Experimental, default OFF): Fly builds the sortie with a client slot for the flight lead and runs it on the local DCS dedicated server (sqe/dcs_server.py)
     persist: bool = True          # False in tests: never write %APPDATA%\\SQE\\settings.json
 
     # ---- derived paths ------------------------------------------------------------------

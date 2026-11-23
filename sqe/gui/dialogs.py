@@ -309,6 +309,10 @@ class SettingsDialog(QDialog):
         _row = QFormLayout(); _row.addRow("AI Landings, Carrier", self.land_cv); _row.addRow("AI Landings, Airfields", self.land_af); v.addLayout(_row)
         hint(v, "Skip: AI flights going home are recovered short of the base (10 nm from the boat, 8 nm from a field), count as landed and leave the mission, "
                 "so DCS's landing queue never runs them dry or fills your pattern. Your own wingmen are recovered too once you are back. Land for real: DCS landings.")
+        self.server_fly = tick("Fly on the Local DCS Dedicated Server (Experimental)", getattr(settings, "dcs_server_fly", False),           # S161a
+            "Off by default. On: your flight lead gets a client slot and the sortie is meant to run on a DCS dedicated server on this PC, which you join at 127.0.0.1:10308 (no password). "
+            "Needs the MissionScripting patch (DCS Integration), the DCS_Server profile (start the dedicated server once by hand), a free port 10308 and real time only (no time acceleration). "
+            "SQE keeps your own serverSettings.lua in a backup and puts it back when the server stops. In this first version only the client slot is switched on: a mission built with this on can be flown on a server only, not in single player.")
         self.ruins = QCheckBox("Ruins: Show What Earlier Packages Already Hit (Smoke and Fire); Struck Flights Fly Home")
         self.ruins.setChecked(bool(getattr(settings, "ruins", True))); v.addWidget(self.ruins)
         hint(v, "Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
@@ -396,6 +400,7 @@ class SettingsDialog(QDialog):
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.carcasses = bool(self.carc.isChecked()); self.s.wreck_static_weight_pct = int(self.cw.value())
         self.s.dormant_sites = bool(self.dorm.isChecked())
+        self.s.dcs_server_fly = bool(self.server_fly.isChecked())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.ils_low_vis = bool(self.ilslv.isChecked())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
