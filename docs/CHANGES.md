@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.596, red SEAD raids: Su-24M only, one missile
+Red's SEAD raids against your Patriot and HAWK sites are now flown by Su-24Ms only, all firing the Kh-31P from about 50 nm out. The Su-17M4, which could never fire its Kh-58U, goes back to CAS and bombing work only. Raids at 30,000 ft now fly as designed, because the Su-17M4 no longer pulls the whole raid down to 12,000 ft. Expect about half as many SEAD raids, as the Su-24M is the smaller pool.
+
 ## v0.41.595, F-15C patrol jets carry eight AIM-120C
 The F-15Cs that fly TARCAPs, sweeps and the carrier or base patrols now carry eight AIM-120C and three fuel tanks, where they carried four AIM-120C and four Sidewinders. In tests the four-missile jets fired everything and then hung about on station with only Sidewinders. The F-15C escorts keep four AIM-120C and four Sidewinders, because they are the ones that get into the close fight. A TARCAP or escort you fly in an F-15C gets the same kit. Other aircraft are unchanged.
 

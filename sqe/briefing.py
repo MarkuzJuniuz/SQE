@@ -68,7 +68,8 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
             from .raids import raid_members as _rm, sead_n as _sn
             _k = set(sead_packages(_rm(e), _sn(_gdb(state.level)))[1])
             arm_ = (("Kh-58U and Kh-31P anti-radiation missiles", f" They will fire from about {ARM58_LAUNCH_NM} nm (Kh-58U) and {ARM_LAUNCH_NM} nm (Kh-31P) out and turn for home; stop them before they launch.") if len(_k) > 1
-                    else ("Kh-58U anti-radiation missiles", f" They will fire from about {ARM58_LAUNCH_NM} nm out and turn for home; stop them before they launch."))
+                    else (("Kh-58U anti-radiation missiles", f" They will fire from about {ARM58_LAUNCH_NM} nm out and turn for home; stop them before they launch.") if "Kh_58U" in _k
+                          else ("Kh-31P anti-radiation missiles", f" They will fire from about {ARM_LAUNCH_NM} nm out and turn for home; stop them before they launch.")))      # S167: a one-missile raid names its own missile
         sit += ["", (f"Intelligence reports {rtype_n if e.get('pool') else str(e['bombers']) + ' ' + rtype} with {arm_[0] if e.get('sead') else 'Kh-59M cruise missiles' if kh59_ else 'free-fall bombs'} inbound toward {what}, "
                      f"approaching from a bearing of about {e['brg']:.0f} degrees."
                      + (arm_[1] if e.get("sead") else " They will fire from about 50 nm out and turn for home; stop them before they launch." if kh59_ else "") if e.get("land") else

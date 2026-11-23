@@ -162,14 +162,21 @@ def sead_package_sizes(n, per):
     return out
 
 
+SEAD_ONE_MISSILE = "Kh_31P"   # S167 (XO 2026-11-22: "why not have the same sead missile for all?" and "Just use the longer range missile"): every package of a SEAD raid fires this missile, from `arm_ring_nm(kind)` out. None = the B2 alternation (Kh-58U, Kh-31P, ...). XO chose the Kh-58U (65 nm), BUT the server runs T3d / T3e showed it never lands: 46 launches from Su-24Ms with the pod at 60.5 to 62.3 nm (plan 65), ZERO impacts or blasts; the Kh-31P at 48.9 to 50.5 nm (plan 50) lands (T3d: 14 impact rows, T3c: units killed). So the one missile is the Kh-31P until XO says otherwise: "Kh_58U" here (and a closer `ARM58_LAUNCH_NM`) flips it back
+
+
 def sead_packages(members, per):
-    """B2 (XO 2026-11-21): a SEAD raid's packages and the kind of each: ([jets, ...], ["Kh_58U" | "Kh_31P", ...]). The jets are cut into packages as `sead_package_sizes` does; the packages ALTERNATE, the first (and every second) one is a Kh-58U package (launch
-    `ARM58_LAUNCH_NM`), the others Kh-31P (`ARM_LAUNCH_NM`). A package with a jet that cannot carry the Kh-31P (the Su-17M4) is a Kh-58U package whatever its place. `members` = `raids.raid_members(extra)`: [(wing, type, jets)]."""
+    """B2 (XO 2026-11-21), S167: a SEAD raid's packages and the kind of each: ([jets, ...], ["Kh_58U" | "Kh_31P", ...]). The jets are cut into packages as `sead_package_sizes` does. S167: every package fires `SEAD_ONE_MISSILE`
+    (the Kh-31P, from `ARM_LAUNCH_NM`); with SEAD_ONE_MISSILE None the packages alternate, the first (and every second) one a Kh-58U package, the others Kh-31P (`ARM_LAUNCH_NM`), and a package with a jet that cannot carry
+    the Kh-31P is a Kh-58U package whatever its place. `members` = `raids.raid_members(extra)`: [(wing, type, jets)]."""
     flat = [t for _a, t, n in members for _j in range(int(n))]
     sizes = sead_package_sizes(len(flat), per)
     kinds, i0 = [], 0
     for k, sz in enumerate(sizes):
         chunk = set(flat[i0:i0 + sz]); i0 += sz
+        if SEAD_ONE_MISSILE:
+            kinds.append(SEAD_ONE_MISSILE)
+            continue
         long_only = any(not enemy_arm_loadout(t, "Kh_31P") for t in chunk)
         kinds.append("Kh_58U" if (k % 2 == 0 or long_only) else "Kh_31P")
     return sizes, kinds
