@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.610, internal clean-up: the station and ring code in plain Python
+The helpers that decide where a fighter station may stand (outside SAM rings) were rewritten as plain loops with full names. Nothing changes in play.
+
 ## v0.41.609, internal clean-up: unused code removed
 Twenty functions and ten constants that nothing in the program used any more were deleted (about 190 lines). Nothing changes in play.
 

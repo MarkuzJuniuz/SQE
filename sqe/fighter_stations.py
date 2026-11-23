@@ -32,7 +32,17 @@ TRANSIT_CIRCLES_MAX = 4       # S156: at most this many engage circles along a c
 COVER_AXIS_SPLIT_NM = 10.0    # S154: flights whose launch points (or IPs) are farther apart than this are on different axes, each with its own cover. The JSOW flight flies
                               # 30 deg off the HARM axis (routes.JSOW_AXIS_DEG): at a 30 nm launch range that is about 15 nm apart; two SEAD lanes are 1.5 to 4.5 nm apart. Judgment call
 OVERWATCH_FAR_MAX_NM = 60     # S163: when nothing is clear within the 20 nm cap, a cover station may stand up to this far behind the protect point. Judgment call (XO's prompt, 2026-11-22): beyond the AIM-120's reach the cover cannot protect, so the caller reports the distance
-TARCAP_AXIS_SWINGS =tuple(v for k in range(0, 13) for v in ((0,) if k == 0 else (15 * k, -15 * k)))   # v0.41.119: degrees the TARCAP station may swing off the threat axis when SAM rings block it, smallest first, up to 180 (judgment call: a Sukhumi SA-10 sat on the axis in the 2026-10-22 probes, so the station takes the clear point nearest the axis; the old station is kept when that is no nearer)
+def _axis_swings() -> tuple:
+    """0, then +15 and -15, +30 and -30 ... up to +180 and -180 degrees: the smallest swing first."""
+    swings = [0]
+    for step in range(1, 13):
+        swings.append(15 * step)
+        swings.append(-15 * step)
+    return tuple(swings)
+
+
+# v0.41.119: degrees the TARCAP station may swing off the threat axis when SAM rings block it, smallest first, up to 180 (judgment call: a Sukhumi SA-10 sat on the axis in the 2026-10-22 probes, so the station takes the clear point nearest the axis; the old station is kept when that is no nearer)
+TARCAP_AXIS_SWINGS = _axis_swings()
 
 
 def axis_station(centre, threat, jsow_xy, near_nm, min_jsow_nm, clear, cur=None):
@@ -41,7 +51,10 @@ def axis_station(centre, threat, jsow_xy, near_nm, min_jsow_nm, clear, cur=None)
     TARCAP_AXIS_SWINGS that is `clear(x, y)` of SAM rings and at least `min_jsow_nm` from the JSOW launch point. With `cur` (the station it would
     replace) it returns None unless the new point is nearer the axis than `cur`. -> (x, y) or None."""
     b0 = bearing(centre[0], centre[1], threat[0], threat[1])
-    cur_dev = abs((bearing(centre[0], centre[1], cur[0], cur[1]) - b0 + 180) % 360 - 180) if cur is not None else 999.0
+    if cur is not None:
+        cur_dev = abs((bearing(centre[0], centre[1], cur[0], cur[1]) - b0 + 180) % 360 - 180)      # how far the station it would replace is off the axis
+    else:
+        cur_dev = 999.0
     for sw in TARCAP_AXIS_SWINGS:
         if abs(sw) >= cur_dev:
             return None
@@ -61,8 +74,14 @@ class FighterStations:
         its cover up for the longest hold the gate allows: AIR_HOLD_STRIKE_S for the air gate, HOLD_S (12 min, in the Lua hook) for the radar gate.
         A stand-off job and the SEAD aims have no gate."""
         o = package.objective
-        if o.aim in ("STANDOFF", "SEAD") and (not (o.type == ObjectiveType.STRIKE and o.aim == "STANDOFF") or any(getattr(f_, "kit", "") for f_ in package.flights)):      # S60: a stand-off EWR strike with no kit flight (a person's) keeps the air gate's slack
-            return 0
+        if o.aim in ("STANDOFF", "SEAD"):
+            is_standoff_strike = o.type == ObjectiveType.STRIKE and o.aim == "STANDOFF"
+            has_kit_flight = False
+            for flight in package.flights:
+                if getattr(flight, "kit", ""):
+                    has_kit_flight = True
+            if not is_standoff_strike or has_kit_flight:      # S60: a stand-off EWR strike with no kit flight (a person's) keeps the air gate's slack
+                return 0
         if o.type in (ObjectiveType.STRIKE, ObjectiveType.CAS):
             return GATE_AIR_HOLD_S
         if o.type == ObjectiveType.DEAD:
@@ -75,16 +94,28 @@ class FighterStations:
         (1,600-2,500 s) and only the F-14s were left. At most HOLD_EXTEND_MAX_S longer; bingo fuel sends them home anyway."""
         for h in self._holds:
             hx, hy = h["tgt"]
-            near_ = [t_ for (ex, ey), t_ in events if t_ is not None and dist(ex, ey, hx, hy) <= HOLD_AREA_KM * 1000]
+            near_times = []                                    # when each package over this area is off target
+            for (event_x, event_y), event_time in events:
+                if event_time is not None and dist(event_x, event_y, hx, hy) <= HOLD_AREA_KM * 1000:
+                    near_times.append(event_time)
             if h.get("first"):
-                later_ = [t_ for t_ in near_ if t_ > h.get("eta", 0) + 60]
-                last = min(later_) if later_ else 0
+                later_times = []
+                for event_time in near_times:
+                    if event_time > h.get("eta", 0) + 60:
+                        later_times.append(event_time)
+                if later_times:
+                    last = min(later_times)
+                else:
+                    last = 0
             else:
-                last = max(near_ + [0])
+                last = max(near_times + [0])
             want = last + h["after"] + h.get("gate_s", 0)
             if h["after"] == ESCORT_AFTER_TOT_S:         # an escort sticks to the last striker until it is out (egress point), like a shepherd
-                eg_ = [t_ for (ex, ey), t_ in egr_events if dist(ex, ey, hx, hy) <= HOLD_AREA_KM * 1000]
-                want = max(want, max(eg_ + [0]) + ESCORT_AFTER_EGR_S)
+                egress_times = []
+                for (event_x, event_y), event_time in egr_events:
+                    if dist(event_x, event_y, hx, hy) <= HOLD_AREA_KM * 1000:
+                        egress_times.append(event_time)
+                want = max(want, max(egress_times + [0]) + ESCORT_AFTER_EGR_S)
             new = int(min(h["end"] + HOLD_EXTEND_MAX_S, max(h["end"], want)))
             if new <= h["end"]:
                 continue
@@ -102,8 +133,14 @@ class FighterStations:
         (DCS measures it from the aircraft, so a bandit running home is chased as far as it runs)."""
         if (not nm or nm <= 0) and until_s is None and zone is None:
             return
-        meters = int(nm * 1852) if (nm and nm > 0) else None
-        old = [t for t in g.points[0].tasks if getattr(t, "Id", "") in ("EngageTargets", "EngageTargetsInZone")]
+        if nm and nm > 0:
+            meters = int(nm * 1852)
+        else:
+            meters = None
+        old = []
+        for t in g.points[0].tasks:
+            if getattr(t, "Id", "") in ("EngageTargets", "EngageTargetsInZone"):
+                old.append(t)
         for t in old:
             g.points[0].tasks.remove(t)
         if zone is not None:                                        # engage only inside a circle (x, y, radius nm): the real leash
@@ -131,15 +168,29 @@ class FighterStations:
                                  agm88_deg=self._agm88_deg(package, geom), rel=self._rel_kind(package, f))
             except ValueError:
                 continue
-            lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)
-            if lp_ is not None:
-                out.append((lp_.x, lp_.y))
+            launch_point = None                                # the HARM or JSOW launch point, else the IP
+            for w in wps:
+                if w.action in ("SEAD", "JSOW"):
+                    launch_point = w
+                    break
+            if launch_point is None:
+                for w in wps:
+                    if w.name == "IP":
+                        launch_point = w
+                        break
+            if launch_point is not None:
+                out.append((launch_point.x, launch_point.y))
         return out
 
     def _station_clear(self, x, y, sites) -> bool:
         """S141b: True when (x, y) is outside every live medium / long-range SAM ring in `sites` (`profiles._cover_sites`), an SA-10 / SA-5 at its station_nm instead of its table ring + margin
         (v0.41.118: the TARCAP / escort station rule, so the orbit's near end stays outside the avoid ring)."""
-        return all(dist(x, y, a.x, a.y) > (samtier.get(a.variant, "station_nm") * NM if a.variant in tm.UMBRELLA_VARIANTS else r) for a, r in sites)
+        for site, ring_m in sites:
+            if site.variant in tm.UMBRELLA_VARIANTS:
+                ring_m = samtier.get(site.variant, "station_nm") * NM      # an SA-10 / SA-5 keeps its own station ring, not the table ring
+            if not dist(x, y, site.x, site.y) > ring_m:
+                return False
+        return True
 
     def _overwatch_station(self, package, geom, f, alt_ft, pp, back_nm):
         """S141b (XO 2026-11-22: TARCAPs and station escorts guard the package): the overwatch station of a TARCAP / station escort. P = the package's protect point nearest red's approach
@@ -151,12 +202,23 @@ class FighterStations:
         self._ow_why = "no protect points"                  # why it fell back (probe)
         if not pp:
             return None
-        cx, cy = sum(q[0] for q in pp) / len(pp), sum(q[1] for q in pp) / len(pp)
+        sum_x = 0.0
+        sum_y = 0.0
+        for protect_point in pp:
+            sum_x += protect_point[0]
+            sum_y += protect_point[1]
+        cx, cy = sum_x / len(pp), sum_y / len(pp)
         thr = self._red_approach(cx, cy)
         self._ow_why = "no red approach point"
         if thr is None:
             return None
-        px, py = min(pp, key=lambda q: dist(q[0], q[1], thr[0], thr[1]))
+        px, py = pp[0]                                      # the protect point nearest red's approach
+        nearest_m = dist(px, py, thr[0], thr[1])
+        for protect_point in pp[1:]:
+            distance_m = dist(protect_point[0], protect_point[1], thr[0], thr[1])
+            if distance_m < nearest_m:
+                px, py = protect_point
+                nearest_m = distance_m
         b = bearing(thr[0], thr[1], px, py)
         sites = profiles._cover_sites(self.state, alt_ft)
         for n in range(0, int(back_nm) + 1):
