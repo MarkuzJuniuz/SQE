@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from .models import AssetKind, Role
 from . import relief, threatmap as tm
-from .samtier import LONG_RANGE_NM      # S90 P4: the long-range threshold lives with the tier table
+from .samtier import LONG_RANGE_NM, ring_nm      # S90 P4: the long-range threshold lives with the tier table
 
 NM = 1852.0
 # (lowest, highest) altitude in ft at which the system realistically engages. Hand-set.
@@ -304,7 +304,7 @@ def _cover_sites(state, alt_ft, margin_nm=STANDOFF_MARGIN_NM):
     for a in state.assets.values():
         if a.kind != AssetKind.SAM or a.destroyed:
             continue
-        r = tm.RANGE_NM.get(a.variant, 0)
+        r = ring_nm(a.variant, alt_ft)                      # S168: the ring against a jet at this altitude (the SA-11 reaches 24 to 26 nm up high, not 18)
         if r > 0 and hits(a.variant, alt_ft):
             out.append((a, (r + margin_nm) * NM))
     return out

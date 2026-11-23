@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.597, SAM rings follow what the SAMs really fire
+In tests an SA-11 Buk fired at jets up to 28 nm away, and the ships' SM-2 missiles up to 78 nm, further than the rings the AI kept to. Your fighter cover and escorts now keep out of an SA-11's real reach for their altitude (18 nm low down, 24 nm from 10,000 ft and 26 nm from 26,000 ft up) and out of 78 nm round the carrier group. This moves a few cover stations and turn points, yours included when you fly cover. Strike routes and the Patriot ring are unchanged.
+
 ## v0.41.596, red SEAD raids: Su-24M only, one missile
 Red's SEAD raids against your Patriot and HAWK sites are now flown by Su-24Ms only, all firing the Kh-31P from about 50 nm out. The Su-17M4, which could never fire its Kh-58U, goes back to CAS and bombing work only. Raids at 30,000 ft now fly as designed, because the Su-17M4 no longer pulls the whole raid down to 12,000 ft. Expect about half as many SEAD raids, as the Su-24M is the smaller pool.
 

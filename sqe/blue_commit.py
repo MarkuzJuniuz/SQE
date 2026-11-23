@@ -36,11 +36,12 @@ SAM_BREAK_BUFFER_NM = 5.0       # S160b: break off when the lead is within this 
 SAM_COMMIT_BUFFER_NM = 8.0      # S160b: commit only when the lead is more than this outside every enemy SAM circle: 3 nm of hysteresis, so a flight does not flap on the line. Judgment call
 COMMIT_COOLDOWN_S = 120         # S160b: no recommit on the same group this long after a sam / far / leash break-off (T1fix6: Enfield 1 / 2 flapped four times on Alert 12). Judgment call
 COMMIT_HURT_COOLDOWN_S = 300    # S160b: ...and this long after a flight lost a jet and broke off (reason hurt). Judgment call
+COMMIT_ALT_FT = 30000             # S168: the altitude blue's cover fighters fly at (F-15C 33,000 ft, the rest 25,000 to 30,000): the commit script's SAM rings are the rings against a jet this high (`samtier.ring_nm`)
 SAM_RING_MARGIN_NM = 3.0        # an enemy SAM ring counts this much bigger (scramble.STATION_RING_MARGIN_NM, the defender's margin)
 HAVCAP_REACH_NM = 25            # S160: a tanker / AWACS guard commits only this far (judgment call; its normal circle is the guard ring)
 HAVCAP_LEASH_NM = 30            # ...and never more than this from its station (judgment call: it must stay with what it guards)
 BARCAP_REACH_NM = 30            # S160c (T1fix7 Caucasus: two F-14BU carrier BARCAP jets, reach 45 nm, fought away from the fleet and died): a base / carrier BARCAP guard commits only this far (judgment call, like HAVCAP_REACH_NM)
-BARCAP_LEASH_FLEET_NM = 25      # ...and never more than this from its station. A carrier station is `barcap.STATION_FLEET_NM` 35 nm out; 35 + 25 = 60 nm from the boat stays inside the ships' SM-2 reach (`barcap.FLEET_REACH_NM` 70, measured 51 to 67 nm). Judgment call
+BARCAP_LEASH_FLEET_NM = 25      # ...and never more than this from its station. A carrier station is `barcap.STATION_FLEET_NM` 35 nm out; 35 + 25 = 60 nm from the boat stays inside the ships' SM-2 reach (`barcap.FLEET_REACH_NM` 78, measured p90 77.5 nm in S168). Judgment call
 BARCAP_LEASH_BASE_NM = 15       # ...a base station is `barcap.STATION_BASE_NM` 25 nm out; 25 + 15 = 40 nm from the field, the Patriot's ring (HAWK edge inside it). Judgment call
 COMMIT_HURT_QUIET_S = 300       # S160c (T1fix7 Syria: Alert 10 broke off "hurt", then went straight for the strikers and a Tiyas MiG-29 killed Viper 3-4): after a hurt break-off the flight commits on NOTHING for this long, not only on the group it left. Both sides. Judgment call
 RED_REACH_EXTRA_NM = 10         # S160: red's reach = its engage circle (`a2a_zone_nm`) + this, at most RED_REACH_MAX_NM (judgment call:
@@ -59,7 +60,7 @@ def red_sam_circles(state) -> list:
         if asset.variant in tm.UMBRELLA_VARIANTS:
             radius_nm = samtier.get(asset.variant, "scramble_nm")
         else:
-            ring_nm = tm.RANGE_NM.get(asset.variant, 0)
+            ring_nm = samtier.ring_nm(asset.variant, COMMIT_ALT_FT)
             if ring_nm < 3:
                 continue
             radius_nm = ring_nm + SAM_RING_MARGIN_NM

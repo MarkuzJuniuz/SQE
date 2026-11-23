@@ -30,7 +30,7 @@ STATION_MAX_NM = 50            # (v0.41.113: was 30) never further from the asse
 SAM_MARGIN_NM = 8              # a station stays this far outside an enemy SAM ring (judgment call)
 SECTOR_MERGE_DEG = 40          # hostile bases within this many degrees of each other share one area (judgment call)
 MAX_SECTORS = 3
-FLEET_REACH_NM = 70            # a carrier group's SM-2 reach (measured: red CAP pairs were killed 51-67 nm out; raids.FLEET_NM)
+FLEET_REACH_NM = 78            # S168 (XO: resize rings): was 70; 87 SM-2ER launches in the server runs (73 at jets above 8 km): median 72.4 / p90 77.5 / max 78.2 nm. A carrier group's SM-2 reach (measured: red CAP pairs were killed 51-67 nm out; raids.FLEET_NM)
 THREAT_REACH_NM = 300          # a hostile base further than this cannot send anything at the asset (judgment call)
 
 

@@ -304,7 +304,7 @@ def pick_aim(state, d, rng: random.Random):
 
 
 PATRIOT_NM = 40          # v0.41.20: a full-strength field's Patriot covers its own field and what lies this close to it
-FLEET_NM = 70            # v0.41.31: ...and the carrier group's SM-2 reach (measured: CAP pairs killed 51-67 nm out; mission_builder.FLEET_RAID_AVOID_NM)
+FLEET_NM = 78            # S168: was 70 (the measured SM-2ER launches: p90 77.5, max 78.2 nm, `barcap.FLEET_REACH_NM`). v0.41.31: ...and the carrier group's SM-2 reach (measured: CAP pairs killed 51-67 nm out; mission_builder.FLEET_RAID_AVOID_NM)
 HAWK_NM = 25             # ...and a field's HAWK battery (v0.41.30: every full-strength field has one, not only yours)
 
 
