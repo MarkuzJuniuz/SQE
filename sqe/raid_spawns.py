@@ -1184,9 +1184,9 @@ class RaidSpawns:
                         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
                         if sead_tgt is not None:
                             ca_ = task.ControlledTask(task.AttackGroup(sead_tgt.id, weapon_type=task.WeaponType.ARM, group_attack=True, expend=task.Expend.All))      # v0.41.399: all Kh-31P at the site in one go (the Auto default fired one a jet at any radar), then home
-                            ca_.stop_after_time(int(hit_s + ARM_WINDOW_S)); wp.tasks.append(ca_)          # S59a: every group's window ends at T + ARM_WINDOW_S
+                            ca_.stop_after_duration(int(ARM_WINDOW_S)); wp.tasks.append(ca_)          # S59a / S178: the window runs ARM_WINDOW_S from when the group REACHES the ARM point (it was an absolute time: a group delayed by an evasive dive arrived after it had ended and never fired, S174)
                         zt_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(dx, dy), int(SEAD_ZONE_NM * NM), [task.Targets.All.GroundUnits.AirDefence]))      # S59a: the fallback, after the AttackGroup: the site's own air defence, inside SEAD_ZONE_NM
-                        zt_.stop_after_time(int(hit_s + ARM_WINDOW_S)); wp.tasks.append(zt_)
+                        zt_.stop_after_duration(int(ARM_WINDOW_S)); wp.tasks.append(zt_)          # S178: the same duration for the fallback zone task
                     elif kh59_r:                                # S48: the Kh-59M flight fires its missiles at the aim from the launch point (the point task chosen by KH59_TASK), then turns home
                         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
                         tk_ = (task.AttackMapObject(mapping.Vector2(dx, dy), group_attack=True) if KH59_TASK == "AttackMapObject"
