@@ -27,6 +27,27 @@ ORDER_DAYS_FAST, ORDER_DAYS_SLOW = 5, 7  # v0.41.337 (XO 2026-11-06, queue S3: "
 ORDER_DAYS = ORDER_DAYS_SLOW             # the debt's payback span (add_debt, debt) uses the slow end: it must not depend on the Force Index it lowers (judgment call; it was 14)
 
 
+# S150: the sort keys this module uses (they were lambdas)
+def _asset_id(asset):
+    return asset.id
+
+
+def _first_three(row):
+    return row[:3]
+
+
+def _largest_first_then_second(row):
+    return (-row[0], row[1])
+
+
+def _highest_tier_then_id(asset):
+    return (-asset.tier, asset.id)
+
+
+def _tier_then_value_then_id(asset):
+    return (asset.tier, -asset.value, asset.id)
+
+
 def order_days(fi: float) -> float:
     """Days an order from home takes at this Force Index: ORDER_DAYS_FAST at 1.0, ORDER_DAYS_SLOW at the floor (ground.SUPPLY_FLOOR), a straight line between."""
     from . import ground
@@ -374,10 +395,10 @@ def red_asks(state, d, rng: random.Random) -> list:
     sup = ground.supply(state, "red") if ground.active(state) else 0.85
     sites = [x for x in state.assets.values() if x.kind == AssetKind.SAM and not x.id.startswith("fsam_")]
     needy = sorted((a for a in sites if a.destroyed and not _parent_down(state, a)
-                    and a.id not in busy and a.id not in vacated), key=lambda a: (a.tier, -a.value, a.id))
+                    and a.id not in busy and a.id not in vacated), key=_tier_then_value_then_id)
     for a in needy[:ASKS_PER_NIGHT if (not orders and RED_BORROW) else 0]:           # v0.41.196: one order in flight per side (v0.41.269: none while RED_BORROW is off)
         donors = sorted((x for x in sites if x.variant == a.variant and not x.destroyed and x.health >= BLUE_FULL_DEF and x.tier > a.tier
-                         and x.id not in busy and not _parent_down(state, x)), key=lambda x: (-x.tier, x.id))
+                         and x.id not in busy and not _parent_down(state, x)), key=_highest_tier_then_id)
         if not donors:
             continue
         src = donors[0]
@@ -395,7 +416,7 @@ def relocate(state, d, rng: random.Random) -> list:
     r = _rec(state)
     p = float(getattr(d, "sam_scoot", 0.0))
     lines = []
-    for a in sorted((x for x in state.assets.values() if x.kind == AssetKind.SAM), key=lambda x: x.id):
+    for a in sorted((x for x in state.assets.values() if x.kind == AssetKind.SAM), key=_asset_id):
         if a.id.startswith("fsam_") or a.variant not in MOBILE or a.destroyed or a.health > HURT or r["moves"].get(a.id, 0) >= MAX_MOVES:
             continue
         if rng.random() >= p:
@@ -458,13 +479,19 @@ def retreat(state, d, rng: random.Random) -> list:
         return lines
     sup = ground.supply(state, "red") if ground.active(state) else 0.85
     scale = float(getattr(d, "sam_retreat", 1.0))
-    for a in sorted((x for x in state.assets.values() if _long_range(state, x)), key=lambda x: x.id):
+    for a in sorted((x for x in state.assets.values() if _long_range(state, x)), key=_asset_id):
         if a.destroyed or a.id in r["pulled"] or a.health > RETREAT_HEALTH:
             continue
         p = min(0.8, 0.30 + (RETREAT_HEALTH - a.health) * 1.5) * (0.6 + 0.4 * sup) * scale
         if rng.random() >= p:
             continue
-        nb = min(fields, key=lambda b: math.hypot(b.x - a.x, b.y - a.y))
+        nb = None
+        nearest_field_m = None
+        for candidate_field in fields:
+            candidate_field_m = math.hypot(candidate_field.x - a.x, candidate_field.y - a.y)
+            if nearest_field_m is None or candidate_field_m < nearest_field_m:
+                nb = candidate_field
+                nearest_field_m = candidate_field_m
         away = math.atan2(a.y - nb.y, a.x - nb.x)
         step = rng.uniform(*RETREAT_NM) * NM
         for da in (0, 25, -25, 50, -50):
@@ -534,11 +561,11 @@ def blue_asks(state, d, rng: random.Random) -> list:
     sup = ground.supply(state, "blue") if ground.active(state) else 1.0
     needy = sorted(((_threat_nm(state, b), b.id, k, b) for b in fields for k in blue_sites(state, b)
                     if blue_sites(state, b)[k].destroyed and blue_site_id(b.id, k) not in busy and blue_site_id(b.id, k) not in vacated),
-                   key=lambda t: t[:3])
+                   key=_first_three)
     for thr, _bid, k, b in needy[:ASKS_PER_NIGHT if not orders else 0]:          # v0.41.196: one order in flight per side
         donors = sorted(((_threat_nm(state, f), f.id, f) for f in fields if f.id != b.id
                          and k in blue_sites(state, f) and blue_sites(state, f)[k].health >= BLUE_FULL_DEF and blue_site_id(f.id, k) not in busy
-                         and _threat_nm(state, f) >= thr + ORDER_MIN_GAP_NM), key=lambda t: (-t[0], t[1]))
+                         and _threat_nm(state, f) >= thr + ORDER_MIN_GAP_NM), key=_largest_first_then_second)
         if not donors:
             continue
         f = donors[0][2]
@@ -565,7 +592,7 @@ def rebuild_blue_sites(state, d, rng: random.Random) -> list:
     wait = order_days(fi_b)                                         # v0.41.337: 5 to 7 days by Force Index
     busy = _blue_asked(state)                                                     # a battery is on its way there: no new build
     cands = sorted((a for aid, day0 in r["down"].items() for a in [state.blue_sams.get(aid)]
-                    if a is not None and a.destroyed and state.day - day0 >= wait and a.guards not in fallen and aid not in busy), key=lambda a: a.id)
+                    if a is not None and a.destroyed and state.day - day0 >= wait and a.guards not in fallen and aid not in busy), key=_asset_id)
     rng.shuffle(cands)
     lines = []
     for a in cands:
@@ -598,7 +625,13 @@ def red_threat_axis(state, x: float, y: float, fallback: float = 60.0) -> float:
     bases = list(getattr(state, "bases", {}).values())
     if not bases:
         return fallback
-    b = min(bases, key=lambda e: math.hypot(e.x - x, e.y - y))
+    b = None
+    nearest_base_m = None
+    for candidate_base in bases:
+        candidate_base_m = math.hypot(candidate_base.x - x, candidate_base.y - y)
+        if nearest_base_m is None or candidate_base_m < nearest_base_m:
+            b = candidate_base
+            nearest_base_m = candidate_base_m
     return math.degrees(math.atan2(b.y - y, b.x - x)) % 360
 
 

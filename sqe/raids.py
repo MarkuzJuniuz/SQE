@@ -26,6 +26,23 @@ RAID_PRIORITY = 8.0
 ATTACK_TYPES = ("Su_25",)      # S90 J5c: the cheap attack type(s) that lead raids on troops, garrisons and supply sites: the Caucasus value, replaced by a pack's `raid_attack_types` (`attack_types()`)
 
 
+# S150: the sort keys this module uses (they were lambdas)
+def _asset_id(asset):
+    return asset.id
+
+
+def _first_two(row):
+    return row[:2]
+
+
+def _first_three(row):
+    return row[:3]
+
+
+def _most_available_first(squadron):
+    return -squadron.available
+
+
 def attack_types() -> tuple:
     """S90 J5c: the red attack types that lead raids on troops, garrisons and supply sites (the Su-25's role): the active pack's `raid_attack_types`, else ATTACK_TYPES (the Caucasus)."""
     return tuple(theatres.hook("raid_attack_types", ATTACK_TYPES))
@@ -191,7 +208,14 @@ def _tu_reach(state, x: float, y: float):
 def _nearest_field(state, x: float, y: float):
     fallen = set((state.ground or {}).get("fallen", []))
     fs = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and b.id not in fallen and not b.divert] or [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD]          # Phase 9a: a divert field is nobody's home
-    return min(fs, key=lambda b: math.hypot(b.x - x, b.y - y)) if fs else None
+    nearest_field = None
+    nearest_field_m = None
+    for candidate_field in fs:
+        candidate_field_m = math.hypot(candidate_field.x - x, candidate_field.y - y)
+        if nearest_field_m is None or candidate_field_m < nearest_field_m:
+            nearest_field = candidate_field
+            nearest_field_m = candidate_field_m
+    return nearest_field
 
 
 def patriots_over_attack_point(state, site, wing) -> int:
@@ -247,7 +271,7 @@ def candidates(state, kind: str, tu: bool = False, d_=None) -> list:
                 continue
             out.append((b, "", max(0.15, 1.0 - r[0] / 330.0) * (0.6 + 0.8 * (1.0 - getattr(b, "defense", 0.5)))))
     elif kind in ("supply", "garrison"):
-        for a in sorted(getattr(state, "blue_assets", {}).values(), key=lambda a: a.id):
+        for a in sorted(getattr(state, "blue_assets", {}).values(), key=_asset_id):
             if a.destroyed:
                 continue
             if (kind == "garrison") != (a.id.startswith(("bgar_", "bfwd_"))):
@@ -268,7 +292,7 @@ def candidates(state, kind: str, tu: bool = False, d_=None) -> list:
             out.append((home, a.id, max(0.15, 1.0 - r[0] / 330.0) * (0.5 + 0.5 * a.health) * (a.value / 5.0) * wt_))
     elif kind == "sam":
         sam_cover = []                  # S183: per candidate, how many other live Patriots reach its attack point
-        for a in sorted((getattr(state, "blue_sams", None) or {}).values(), key=lambda a: a.id):          # S36b: a blue Patriot or HAWK site a SEAD package can fire on (the AAA is not a target)
+        for a in sorted((getattr(state, "blue_sams", None) or {}).values(), key=_asset_id):          # S36b: a blue Patriot or HAWK site a SEAD package can fire on (the AAA is not a target)
             if a.destroyed or a.id.rsplit("_", 1)[1] not in ("pat", "hawk"):
                 continue
             home = state.bases.get(a.guards)
@@ -365,7 +389,7 @@ def covering_fields(state, x: float, y: float) -> list:
         dn = math.hypot(b.x - x, b.y - y) / NM
         if (bt["patriot_ln"] and dn <= PATRIOT_NM) or (bt["hawk"] and dn <= HAWK_NM):
             out.append((dn, b.id, b))
-    return [b for _, _, b in sorted(out, key=lambda t: t[:2])]
+    return [b for _, _, b in sorted(out, key=_first_two)]
 
 
 def cover_field(state, x: float, y: float):
@@ -383,7 +407,9 @@ def sam_reach(state, d, x: float, y: float, budget: bool = True):
     (`raid_arm` 0) has no SEAD doctrine. The wing must have the package's jets free (`redair.ready_of`)."""
     if getattr(d, "raid_arm", 0) <= 0:
         return None
-    return _reach(state, "sam", x, y, budget, only=sead_types(), fits=lambda w, t: redair.ready_of(state, w, (t,)) >= sead_n(d))
+    def has_a_package_free(wing, aircraft_type):
+        return redair.ready_of(state, wing, (aircraft_type,)) >= sead_n(d)
+    return _reach(state, "sam", x, y, budget, only=sead_types(), fits=has_a_package_free)
 
 
 def reach_for(state, kind: str, x: float, y: float, budget: bool = True, d=None, want: int = 0, only=None):
@@ -503,7 +529,10 @@ def _escort_for(state, bw, ax: float, ay: float, rnd: random.Random, alone: bool
     from . import bombers
     held_ = bombers.escorts_held(state)                                             # v0.41.355 (Phase 10a): the Mozdok escort squadron escorts land raids too, unless a carrier raid is staged
     first = None
-    for w in ([] if alone else sorted(state.enemy_air, key=lambda w: math.hypot(state.assets[w.base_asset_id].x - ax, state.assets[w.base_asset_id].y - ay))):
+    def wing_distance_to_aim(wing):
+        wing_field = state.assets[wing.base_asset_id]
+        return math.hypot(wing_field.x - ax, wing_field.y - ay)
+    for w in ([] if alone else sorted(state.enemy_air, key=wing_distance_to_aim)):
         a = state.assets[w.base_asset_id]
         if w is bw or a.destroyed:
             continue
@@ -541,7 +570,7 @@ def _pool_partners(state, kind: str, lead, ax: float, ay: float, need: int, take
         if math.hypot(a.x - la.x, a.y - la.y) / NM > POOL_NM or math.hypot(a.x - ax, a.y - ay) / NM > ENEMY_RADIUS_NM[t] * 0.85:
             continue
         cands.append((-redair.ready_of(state, w, (t,)), w.base_asset_id, w, t))
-    for _neg, _id, w, t in sorted(cands, key=lambda c: c[:2]):
+    for _neg, _id, w, t in sorted(cands, key=_first_two):
         if len(out) >= POOL_PARTNERS or need < 2:
             break
         n = min(need, -_neg)
@@ -569,7 +598,7 @@ def _pool_escorts(state, taken, lead_wing, ax: float, ay: float, need: int) -> l
             if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm and redair.ready_of(state, w, (t,)) >= 2:
                 cands.append((-redair.ready_of(state, w, (t,)), w.base_asset_id, t, w))
     out, seen = [], set()
-    for _neg, _id, t, w in sorted(cands, key=lambda c: c[:3]):
+    for _neg, _id, t, w in sorted(cands, key=_first_three):
         if len(out) >= POOL_PARTNERS or need < 2:
             break
         if _id in seen:
@@ -970,7 +999,7 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
     if b.kind != BaseKind.CARRIER:
         from .sams import hit_field
         gone = hit_field(state, b, BASE_LOSS * ke * shield * (1.0 - 0.4 * ad))     # v0.41.30: batteries soak part of the damage (judgment call)
-    sqs = sorted((s for s in state.squadrons.values() if s.base_id == base_id and s.available > 0), key=lambda s: -s.available)
+    sqs = sorted((s for s in state.squadrons.values() if s.base_id == base_id and s.available > 0), key=_most_available_first)
     lines = [f"   bombs fell on {b.name}: its defences are {strength_word(b.defense)}{' (' + ', '.join(gone) + ' destroyed)' if gone else ''}" if b.kind != BaseKind.CARRIER else f"   missiles hit {b.name}"]
     if sqs:
         sq = sqs[0]
