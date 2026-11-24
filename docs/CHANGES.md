@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.647, the ECM settings sit tidier
+In Settings > DCS Integration the "Show ECM Status" box is now right under "ECM Script", and the Install / Update ECM Script button keeps one width, so Remove no longer shifts when its label changes.
+
 ## v0.41.646, the dedicated-server option moves to the DCS Integration tab
 "Fly on the Local DCS Dedicated Server (Experimental)" was a checkbox far down the Mission Build tab; it is now at the bottom of the DCS Integration tab, with the other DCS settings.
 
