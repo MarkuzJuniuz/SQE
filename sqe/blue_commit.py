@@ -40,6 +40,15 @@ COMMIT_ALT_FT = 30000             # S168: the altitude blue's cover fighters fly
 SAM_RING_MARGIN_NM = 3.0        # an enemy SAM ring counts this much bigger (scramble.STATION_RING_MARGIN_NM, the defender's margin)
 HAVCAP_REACH_NM = 30            # S160: a tanker / AWACS guard commits only this far (judgment call; its normal circle is the guard ring). S176a (v0.41.616): was 25 (46 km); red's escorts fired R-27ERs first from 41 to 56 km in 8 of 14 HAVCAP fights while the guard committed at 42 to 43 km (37 server runs, `.claude/s176-barcap-havcap-evidence.md`); 30 nm = the base / carrier BARCAP reach. Judgment call
 HAVCAP_LEASH_NM = 30            # ...and never more than this from its station (judgment call: it must stay with what it guards)
+# S176b (XO 2026-11-24: "tanker pilots should be able to move away from danger ... let them save themselves if they need to move off track"): a tanker or an AWACS
+# pulls back from enemy fighters. The idea is the brevity pair RETROGRADE ("Withdraw(ing) while executing defensive procedures in response to a threat") and
+# SCRAM ("FRIENDLY asset is in immediate danger. Withdraw clear in the direction indicated for survival"), ATP 1-02.1 (2023). The distances are judgment calls
+# (no public figure found): the S174 / S177 / S182 server runs lost the tanker to raid escorts about 7 minutes after they came within 40 nm.
+HVAA_SCRAM_NM = 60              # an enemy fighter in the air this close: the aircraft leaves its track (an R-27ER shot from about 25 to 30 nm in the runs: 60 nm is about 4 minutes of closure)
+HVAA_RETRO_NM = 40              # it flies this far straight away from that fighter and orbits there
+HVAA_CLEAR_NM = 80              # no enemy fighter within this for HVAA_QUIET_S: it goes back to its track
+HVAA_QUIET_S = 300
+HVAA_REPLAN_S = 120             # while away and still threatened, a new point away from the nearest fighter at most this often
 BARCAP_REACH_NM = 30            # S160c (T1fix7 Caucasus: two F-14BU carrier BARCAP jets, reach 45 nm, fought away from the fleet and died): a base / carrier BARCAP guard commits only this far (judgment call, like HAVCAP_REACH_NM)
 BARCAP_LEASH_FLEET_NM = 25      # ...and never more than this from its station. A carrier station is `barcap.STATION_FLEET_NM` 35 nm out; 35 + 25 = 60 nm from the boat stays inside the ships' SM-2 reach (`barcap.FLEET_REACH_NM` 78, measured p90 77.5 nm in S168). Judgment call
 BARCAP_LEASH_BASE_NM = 15       # ...a base station is `barcap.STATION_BASE_NM` 25 nm out; 25 + 15 = 40 nm from the field, the Patriot's ring (HAWK edge inside it). Judgment call
@@ -89,7 +98,7 @@ def _lua_string(text) -> str:
     return '"' + str(text).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def commit_lua(side, flights, sams) -> str:
+def commit_lua(side, flights, sams, hvaa=None) -> str:
     """The mission script for one side ("blue" or "red").
     `flights`: [{"g": group name, "reach": m, "t0": s, "t1": s, optional "ax", "az", "leash" (m), optional "bx", "bz" (the far end of the patrol's race-track; the leash is round the segment)}], `sams`: [(x, z, radius m)] of the ENEMY's cover."""
     if side == "blue":
@@ -110,6 +119,9 @@ def commit_lua(side, flights, sams) -> str:
         flight_rows.append("{g=%s, reach=%d, t0=%d, t1=%d, ax=%d, az=%d, bx=%d, bz=%d, leash=%d}" % (
             _lua_string(flight["g"]), int(flight["reach"]), int(flight["t0"]), int(flight["t1"]),
             anchor_x, anchor_z, end_x, end_z, leash))
+    hvaa_rows = []                  # S176b: the group names of the side's tankers and AWACS that may pull back
+    for group_name in (hvaa or []):
+        hvaa_rows.append("{g=%s}" % _lua_string(group_name))
     sam_rows = []
     for x, z, radius in sams:
         sam_rows.append("{%d, %d, %d}" % (int(x), int(z), int(radius)))
@@ -117,6 +129,9 @@ def commit_lua(side, flights, sams) -> str:
             % (table, _lua_string(side), _lua_string(own), _lua_string(enemy), ewr, COMMIT_STEP_S, repr(float(COMMIT_BREAK_FACTOR)),
                COMMIT_MAX_PER_TARGET, int(SAM_BREAK_BUFFER_NM * 1852), int(SAM_COMMIT_BUFFER_NM * 1852), COMMIT_COOLDOWN_S, COMMIT_HURT_COOLDOWN_S, COMMIT_HURT_QUIET_S,
                ", ".join(flight_rows), ", ".join(sam_rows)))
+    data += ("\n%s.hvaa = {%s}\n%s.scram = %d\n%s.retro = %d\n%s.clear = %d\n%s.hvaaquiet = %d\n%s.replan = %d"
+             % (table, ", ".join(hvaa_rows), table, int(HVAA_SCRAM_NM * 1852), table, int(HVAA_RETRO_NM * 1852), table, int(HVAA_CLEAR_NM * 1852),
+                table, HVAA_QUIET_S, table, HVAA_REPLAN_S))
     return data + "\n" + COMMIT_BODY.replace("__TABLE__", table)
 
 
@@ -249,10 +264,81 @@ local function breakOff(f, g, why, now)
   env.info("SQECOMMIT " .. C.side .. " " .. f.g .. " breaks off " .. f.on .. " (" .. why .. ") at " .. math.floor(now))
   f.on = nil
 end
+-- S176b: a tanker or an AWACS pulls back from enemy fighters (RETROGRADE / SCRAM) and goes back to its track when they are gone.
+local function nearestFighter(p)
+  local best = nil
+  local bestPoint = nil
+  for _, eg in ipairs(coalition.getGroups(ENEMY, Group.Category.AIRPLANE)) do
+    if eg and eg:isExist() then
+      for _, u in ipairs(eg:getUnits()) do
+        if u and u:isExist() and u:inAir() and (u:hasAttribute("Fighters") or u:hasAttribute("Interceptors") or u:hasAttribute("Multirole fighters")) then
+          local up = u:getPoint()
+          local d = dist(p, up)
+          if best == nil or d < best then
+            best = d
+            bestPoint = up
+          end
+        end
+      end
+    end
+  end
+  return best, bestPoint
+end
+local function pullBack(h, g, lead, p, threat, d, now)
+  local dx = p.x - threat.x
+  local dz = p.z - threat.z
+  local length = math.sqrt(dx * dx + dz * dz)
+  if length < 1 then return end
+  local v = lead:getVelocity()
+  local speed = math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+  local point = {x = p.x + dx / length * C.retro, y = p.z + dz / length * C.retro}
+  local task = {id = "Orbit", params = {pattern = "Circle", point = point, speed = speed, altitude = p.y}}
+  if h.away then pcall(function() g:getController():popTask() end) end
+  local ok = pcall(function() g:getController():pushTask(task) end)
+  if ok then
+    if not h.away then
+      env.info("SQECOMMIT " .. C.side .. " " .. h.g .. " pulls back, fighter at " .. math.floor(d / 1000) .. " km, t " .. math.floor(now))
+      pcall(function() trigger.action.outTextForCoalition(OWN, string.upper(h.g) .. ": moving off track, bandits " .. math.floor(d / 1852) .. " miles.", 10) end)
+    end
+    h.away = true
+    h.pushed = now
+    h.clearAt = nil
+  end
+end
+local function hvaaTick(now, seenBySide)
+  for _, h in ipairs(C.hvaa or {}) do
+    local g = Group.getByName(h.g)
+    if g and g:isExist() then
+      local lead = firstUnit(g)
+      if lead and lead:inAir() then
+        local p = lead:getPoint()
+        local d, threat = nearestFighter(p)
+        local known = seenBySide or (d ~= nil and d <= C.scram / 2)      -- the side's radar picture, or close enough for its own warning receiver
+        if not h.away then
+          if d ~= nil and known and d <= C.scram then pullBack(h, g, lead, p, threat, d, now) end
+        elseif d ~= nil and d <= C.scram and now - (h.pushed or 0) >= C.replan then
+          pullBack(h, g, lead, p, threat, d, now)
+        elseif d == nil or d > C.clear then
+          if not h.clearAt then h.clearAt = now + C.hvaaquiet end
+          if now >= h.clearAt then
+            pcall(function() g:getController():popTask() end)
+            h.away = false
+            h.clearAt = nil
+            env.info("SQECOMMIT " .. C.side .. " " .. h.g .. " returns to its track at " .. math.floor(now))
+            pcall(function() trigger.action.outTextForCoalition(OWN, string.upper(h.g) .. ": back on track.", 10) end)
+          end
+        else
+          h.clearAt = nil
+        end
+      end
+    end
+  end
+end
 local function tick(_, t)
   local now = timer.getTime()
   NOWT = now
   local seenBySide = sideSees()
+  pcall(hvaaTick, now, seenBySide)      -- S176b: never lets an error here stop the commits
   for _, f in ipairs(C.flights) do
     if not f.cool then f.cool = {} end
     local g = Group.getByName(f.g)
