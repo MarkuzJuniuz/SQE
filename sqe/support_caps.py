@@ -109,7 +109,18 @@ class SupportCaps:
         cover_ = [(b_.x, b_.y, TANKER_COVER_NM) for b_ in st.bases.values()
                   if b_.kind == BaseKind.AIRFIELD and self.o.base_defenses and getattr(b_, "defense", 0) >= 0.15] + \
                  [(b_.x, b_.y, TANKER_COVER_NM) for b_ in st.bases.values() if b_.kind == BaseKind.CARRIER]
-        fwd = tm.tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty), caps_, lanes_, cover_, track_hdg=g.hdg - 90)
+        raid_lines = self._raid_route_lines([package] + list(extras))                # S188: the red raids' routes, known before they are spawned
+        fwd = tm.tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty), caps_, lanes_, cover_, track_hdg=g.hdg - 90, raid_lines=raid_lines)
+        awacs_track_points = [(ax, ay)]
+        for awacs_side in (fh + 90, fh - 90):
+            awacs_track_points.append(offset(ax, ay, awacs_side, 20 * NM))
+        awacs_too_close = False
+        for point_x, point_y in awacs_track_points:
+            for line in raid_lines:
+                if tm._seg_nm(point_x, point_y, *line) < tm.AWACS_RAID_NM:
+                    awacs_too_close = True
+        if awacs_too_close:
+            self.warns.append("S188: the AWACS station is within %d nm of a red raid's route (no clear spot behind it)" % tm.AWACS_RAID_NM)
         self._tanker_c = None
         self._tanker_race = 30 * NM
         for s in package.support:
@@ -138,6 +149,17 @@ class SupportCaps:
                 else:                                                        # nothing forward is clear: behind the AWACS anchor, as before
                     back = 12 if s.slot == "TANKER1" else 24
                     x, y = offset(*offset(ax, ay, g.hdg + 180, back * NM), g.hdg - 90, 15 * NM); race = 30 * NM
+                    for more_back in range(0, 70, 10):             # S188: the fallback track also keeps tm.TANKER_RAID_NM from the red raids' routes: back along the axis until clear (stays where it was when none is)
+                        trial_x, trial_y = offset(x, y, g.hdg + 180, more_back * NM)
+                        trial_far_end = offset(trial_x, trial_y, g.hdg + 90, race)
+                        too_close = False
+                        for end_x, end_y in ((trial_x, trial_y), trial_far_end):
+                            for line in raid_lines:
+                                if tm._seg_nm(end_x, end_y, *line) < tm.TANKER_RAID_NM:
+                                    too_close = True
+                        if not too_close:
+                            x, y = trial_x, trial_y
+                            break
                     if awacs_xy is not None and dist(x, y, *awacs_xy) < 15 * NM:         # S19: the fixed AWACS must not sit on the tanker
                         x, y = offset(x, y, bearing(*awacs_xy, x, y) if dist(x, y, *awacs_xy) > 1 else g.hdg + 180, 15 * NM - dist(x, y, *awacs_xy))
                     if s.slot == "TANKER1":

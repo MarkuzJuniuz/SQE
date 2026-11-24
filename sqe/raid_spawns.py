@@ -521,6 +521,49 @@ class RaidSpawns:
                 break
         return [(w.x, w.y) for w in wps]
 
+    def _layer_exempt_fields(self, ex) -> set:
+        """S183 rule 2: the airfield ids whose Patriot ring a second SEAD wave does not bend round (the outer Patriot's field, `extra["layer_sites"]`)."""
+        exempt = set()
+        for layer_id in (ex.get("layer_sites") or []):
+            layer_site = (self.state.blue_sams or {}).get(layer_id)
+            if layer_site is not None:
+                exempt.add(layer_site.guards)
+        return exempt
+
+    def _raid_route_lines(self, packages) -> list:
+        """S188: [(x1, y1, x2, y2)] the lines the red raids of this mission fly BEFORE they are spawned: from each wing that flies in a raid (raiders, escorts, sweep, pooled wings) to the raid's target, bent round
+        blue's Patriot fields by the same `_raid_bend` the spawner uses. A raid that is already under way at mission start flies along the same line, so it is covered. Fleet (carrier) raids have no
+        land target here and are left out. The tanker track keeps `threatmap.TANKER_RAID_NM` from these lines."""
+        st = self.state
+        lines = []
+        for package in packages:
+            ex = package.extra or {}
+            if package.objective.type != ObjectiveType.FLEET_DEFENSE or not ex.get("land") or not ex.get("dest"):
+                continue
+            raided = st.bases.get(package.objective.target_id)
+            if raided is None:
+                continue
+            layer_of = ex.get("layer_of")
+            if layer_of and layer_of not in getattr(self, "_layer_present", {layer_of}):
+                continue                                          # S183: a second wave whose first wave is not in the mission is not built
+            altitude_ft = SEAD_ALT_FT if ex.get("sead") else 20000
+            wing_ids = {ex.get("bomber_wing"), ex.get("escort_wing"), ex.get("sweep_wing")}
+            for partner in (ex.get("pool") or []):
+                wing_ids.add(partner.get("wing"))
+            for partner in (ex.get("esc_pool") or []):
+                wing_ids.add(partner.get("wing"))
+            self._bend_exempt = self._layer_exempt_fields(ex)
+            dest = (float(ex["dest"][0]), float(ex["dest"][1]))
+            for wing_id in sorted(w for w in wing_ids if w):
+                field = st.assets.get(wing_id)
+                if field is None:
+                    continue
+                path = self._raid_bend([(field.x, field.y), dest], raided, altitude_ft)
+                for index in range(len(path) - 1):
+                    lines.append((path[index][0], path[index][1], path[index + 1][0], path[index + 1][1]))
+        self._bend_exempt = set()
+        return lines
+
     def _face_patriots_to_raid(self, route, package_routes) -> None:
         """S179c (XO 2026-11-24): every blue field Patriot within reach of a red raid's route turns to face the part of the route it can reach. A DCS Patriot
         sees and shoots only inside its radar's sector (about 45 degrees either side, measured), and the builder faces it to the nearest enemy fighter field,
@@ -1032,11 +1075,7 @@ class RaidSpawns:
         if layer_of and (layer_of in getattr(self, "_layer_gone", set()) or layer_of not in getattr(self, "_layer_present", {layer_of})):
             self.warns.append(f"package #{package.number}: the second SEAD wave is not in this mission (wave 1 is not flown in it)")
             return
-        self._bend_exempt = set()                                # S183 rule 2: the field of the outer Patriot a second wave strips past: the route does not bend round it (that crossing is the point of the layers); every other live Patriot's ring is still avoided
-        for layer_id in (ex.get("layer_sites") or []):
-            layer_site = (st.blue_sams or {}).get(layer_id)
-            if layer_site is not None:
-                self._bend_exempt.add(layer_site.guards)
+        self._bend_exempt = self._layer_exempt_fields(ex)        # S183 rule 2: the field of the outer Patriot a second wave strips past: the route does not bend round it (that crossing is the point of the layers); every other live Patriot's ring is still avoided
         sead_fly_s = 0.0                                         # S183: the longest missile flight of the raid's packages (all its packages' missiles land together); 0 for a raid that is not a SEAD raid
         cvb = st.bases[package.objective.target_id]
         aim = ex.get("aim", "") or ""
