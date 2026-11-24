@@ -21,6 +21,15 @@ JET_CAS_FACTOR = 0.7       # v0.41.188: an AI-flown F-16C / F/A-18C CAS sortie c
 ROLE_WEIGHT = {Role.STRIKE: 1.0, Role.SEAD: 0.9, Role.TARCAP: 0.6, Role.ESCORT: 0.7, Role.SWEEP: 0.7, Role.CAP: 0.6, Role.CAS: 1.0}
 
 
+# S150: the sort keys this module uses (they were lambdas)
+def _first_item(row):
+    return row[0]
+
+
+def _wing_available(wing):
+    return wing.available
+
+
 def _suppressor(f, pkg=None) -> bool:
     """A flight that works on the radars: a SEAD flight. A JSOW flight is the DEAD strike of a Standoff DEAD package (radars, launchers and
     Tors); in any other package (older saves: the SEAD package's JSOW slingers) it works on the radars."""
@@ -40,7 +49,9 @@ def long_range_site(state, site) -> bool:
     from . import threatmap as tm
     if site.variant in GATE_VARIANTS and not site.destroyed:
         return True
-    live = lambda a: a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not a.suppressed       # a suppressed SA-10 has no radars to shoot with
+    def live(a):
+        return a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not a.suppressed
+    # a suppressed SA-10 has no radars to shoot with
     return live(site) or any(live(a) and a.id != site.id and math.hypot(a.x - site.x, a.y - site.y) <= samtier.get(a.variant, "reach_km") * 1000 for a in state.assets.values())
 
 
@@ -179,7 +190,8 @@ class ObjectivePlanner:
         """The jobs of ONE turn (v0.41.338, Phase 4; `limit` = how many). `bomber`: look at the carrier raid this turn (the day's raid turn only: `Session._begin_day` picks it, so the
         raid is offered once a day and not every turn). `skip`: target ids not to plan this turn (the re-tasking rule, `Session._retask_skip`). `waves` (v0.41.367): take the SAM / EWR / runway wave of SAM_WAVE for the level (not for the player's extra-jobs call)."""
         cand = []                                  # (priority, objective, blockers); v0.41.371: no depth gate, the belt rule and covering_sams are the only blockers
-        alive = lambda aid: not state.assets[aid].destroyed
+        def alive(aid):
+            return not state.assets[aid].destroyed
         for a in state.assets.values():
             if a.destroyed or a.id in skip:
                 continue
@@ -326,7 +338,7 @@ class ObjectivePlanner:
             auth = sum(x.authorized for x in state.enemy_air) or 1
             pr = 3.0 + 4.0 * tot / auth
             pool.append((pr, Objective("", ObjectiveType.BARCAP, fleet.id, pr, f"Combat air patrol over {fleet.name}")))
-        scored = sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in pool), key=lambda t: t[0], reverse=True)
+        scored = sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in pool), key=_first_item, reverse=True)
         picked, seen, taken = [], set(), set()
         used = set()                                           # v0.41.345 (scaled tasking, Phase B): ground sectors that already have a job: a second job in one comes only when no unused sector has a candidate
         sec = {id(o): job_sector(state, o) for _, o in scored}
@@ -336,13 +348,17 @@ class ObjectivePlanner:
                 used.add(sec[id(scored[k][1])])
         def best(ok):                                          # the best-scored candidate of an unused sector, else of any
             c = [k for k in range(len(scored)) if k not in taken and ok(scored[k][1])]
-            return min(c, key=lambda k: (sec[id(scored[k][1])] in used, k), default=None)      # scored is sorted best first, so the index is the score rank
+            def used_sector_then_rank(k):
+                return (sec[id(scored[k][1])] in used, k)
+            return min(c, key=used_sector_then_rank, default=None)      # scored is sorted best first, so the index is the score rank
         if waves and self.d is not None:
             rwy_belt = {x.id for _, o_, bl_ in cand if o_.type == ObjectiveType.STRIKE and o_.aim == "RUNWAY"
                         and axis_of(state.assets[o_.target_id]) == "MOUNTAIN" for x in bl_}      # v0.41.375: the sites that stand in front of a northern runway job
             limit += self._wave_pass(state, scored, take, rwy_belt)
         while len(picked) < limit:                             # one of each objective type first, for variety
-            k = best(lambda o: o.type not in seen)
+            def type_not_seen(o):
+                return o.type not in seen
+            k = best(type_not_seen)
             if k is None:
                 break
             take(k); seen.add(scored[k][1].type)
@@ -351,12 +367,14 @@ class ObjectivePlanner:
         for _, o in picked:
             per[o.type] = per.get(o.type, 0) + 1
         while len(picked) < limit:
-            k = best(lambda o: per.get(o.type, 0) < cap)
+            def type_under_cap(o):
+                return per.get(o.type, 0) < cap
+            k = best(type_under_cap)
             if k is None:
                 break
             take(k); per[scored[k][1].type] = per.get(scored[k][1].type, 0) + 1
-        picked.sort(key=lambda t: t[0], reverse=True)
-        picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=lambda t: t[0], reverse=True), limit, cap)
+        picked.sort(key=_first_item, reverse=True)
+        picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=_first_item, reverse=True), limit, cap)
         picked = self._stage_dead(state, picked, limit)
         out = []
         for i, (_, o) in enumerate(picked, 1):
@@ -423,9 +441,9 @@ class ObjectivePlanner:
                 weak = [(t, p) for t, p in picked if p.type != ObjectiveType.DEAD and not p.after and per[p.type] > 1 and t < s]
                 if not weak:
                     continue
-                picked.remove(min(weak, key=lambda t: t[0]))
+                picked.remove(min(weak, key=_first_item))
             picked.append((s, o))
-        picked.sort(key=lambda t: t[0], reverse=True)
+        picked.sort(key=_first_item, reverse=True)
         return picked
 
     def _stage_dead(self, state, picked: list, limit: int) -> list:
@@ -464,7 +482,9 @@ def job_sector(state, o):
     a = state.assets.get(o.target_id)
     if not cs or a is None:
         return None
-    return min(range(len(cs)), key=lambda i: math.hypot(a.x - cs[i][0], a.y - cs[i][1]))
+    def distance_to_centre(i):
+        return math.hypot(a.x - cs[i][0], a.y - cs[i][1])
+    return min(range(len(cs)), key=distance_to_centre)
 
 
 def chance(rng: random.Random, p: float, variance: float) -> bool:
@@ -591,8 +611,10 @@ class WarSimulator:
         import math
         d, rng = self.d, self.rng
         t = state.assets[pkg.objective.target_id]
+        def wing_distance_to_target(w):
+            return math.hypot(state.assets[w.base_asset_id].x - t.x, state.assets[w.base_asset_id].y - t.y)
         wings = sorted([w for w in state.enemy_air if w.available > 0 and w.base_asset_id in state.assets],
-                       key=lambda w: math.hypot(state.assets[w.base_asset_id].x - t.x, state.assets[w.base_asset_id].y - t.y))[:3]
+                       key=wing_distance_to_target)[:3]
         strength = sum(f.count * flight_weight(f) for f in pkg.flights)
         red = sum(w.available for w in wings) * (0.6 + 0.6 * d.iads) * 0.25
         p = max(0.02, min(0.98, (strength / (strength + red) if strength + red else 0.0) + tempo.get(state, "AIR")))
@@ -847,7 +869,7 @@ class WarSimulator:
             elif obj.aim != "RUNWAY":
                 t.health = max(0.0, t.health - 0.1 * d.base_damage * works.damage_factor(state, t))
         elif success:
-            w = max(state.enemy_air, key=lambda w: w.available, default=None)
+            w = max(state.enemy_air, key=_wing_available, default=None)
             if w and w.available:
                 k = min(w.available, 1 + int(rng.random() < 0.5))
                 w.available -= k

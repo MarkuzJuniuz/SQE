@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.632, internal clean-up: named functions in the war, ground war and patrol planning code
+Thirty-one one-line functions (lambdas) in the war simulation, the ground war and blue's patrol planning were given names. Nothing changes in play: eight unflown campaigns come out identical turn for turn, and 127 test missions too.
+
 ## v0.41.631, internal clean-up: plain functions in the raid planning and SAM code
 Eighteen one-line functions (lambdas) in the code that plans red's raids and moves and repairs SAM sites were rewritten as small named functions and plain loops. Nothing changes in play: eight unflown campaigns come out identical turn for turn, and 127 test missions too.
 
