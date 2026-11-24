@@ -7,8 +7,8 @@ import copy
 
 from dcs import mapping, planes
 
-from . import barcap, callsigns
-from .support_assets import BY_CLASS as BY_CLASS_
+from . import barcap, blue_commit, callsigns
+from .support_assets import BY_CLASS as BY_CLASS_, _support_airfield
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .models import BaseKind
@@ -18,6 +18,8 @@ from .strike_tasks import KPH
 
 TANKER_COVER_NM = 30          # v0.41.26: a tanker track this close to a friendly field's Patriot (or the carrier group) counts as under friendly SAM cover
 SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HVAACAP / tanker CAP / base BARCAP engage inside this circle round what they guard
+LATE_TANKER_EGRESS_S = 600       # S193 PR 3 (judgment call, no source): the red raiders are this long past their time over the target before the danger counts as over (they turn for home and leave)
+LATE_TANKER_LIMIT_S = 1800       # S193 PR 3 (judgment call): a late tanker that could only open later than this after the player's planned recovery is not flown at all
 TKR_HVAACAP_ZONE_NM = 40           # v0.41.26: the tanker CAP engages inside this circle round the tanker (an AMRAAM's reach), never further
 CARRIER_BARCAP_ZONE_NM = 30            # v0.41.21: the carrier BARCAP engages within this of the boat (v0.41.14: 50; it reached out and set off red scrambles)
 CAP_REACH_BEYOND_NM = 25     # v0.41.113: a base / carrier BARCAP's engage circle reaches this far past its station (judgment call)
@@ -113,6 +115,12 @@ class SupportCaps:
         raid_lines, sweep_lines = self._raid_route_lines([package] + list(extras))      # S188: the red raids' routes (S189: and the sweeps', apart), known before they are spawned
         tanker_report = {}
         fwd = tm.tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty), caps_, lanes_, cover_, track_hdg=g.hdg - 90, raid_lines=raid_lines, sweep_lines=sweep_lines, report=tanker_report)
+        self._late_tankers = []                                              # S193 PR 3: tankers that wait on the ground until the raid window is over (see _finish_late_tankers)
+        self._late_tanker_flag = None
+        late_fwd = None
+        if fwd is None and blue_commit.BLUE_COMMIT and any(s_.slot.startswith("TANKER") and not s_.from_carrier for s_ in package.support):
+            # nothing is clear while the red raids and sweeps fly: take the spot that is best WITHOUT their routes (they are over when it launches); red patrols and lanes still count
+            late_fwd = tm.tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty), caps_, lanes_, cover_, track_hdg=g.hdg - 90, report={})
         if tanker_report.get("case") == 2:
             self.warns.append("S193: the tanker track is under blue cover but %d nm inside a patrol, lane or raid distance (no covered spot is clear of them)" % round(-tanker_report["margin"]))
         awacs_track_points = [(ax, ay)]
@@ -146,9 +154,10 @@ class SupportCaps:
             else:
                 if s.from_carrier:                                           # the recovery tanker stays with the boat
                     x, y = offset(*offset(g.bx, g.by, g.hdg + 180, 15 * NM), g.hdg - 90, 10 * NM); race = 20 * NM
-                elif fwd is not None:
+                elif fwd is not None or late_fwd is not None:
                     # a 30 nm racetrack across the route (in and out both cross it); a second tanker 15 nm nearer home
-                    c_ = fwd if s.slot == "TANKER1" else offset(*fwd, bearing(*fwd, g.bx, g.by), 15 * NM)
+                    station_ = fwd if fwd is not None else late_fwd
+                    c_ = station_ if s.slot == "TANKER1" else offset(*station_, bearing(*station_, g.bx, g.by), 15 * NM)
                     race = 30 * NM
                     x, y = offset(*c_, g.hdg - 90, race / 2)
                     if s.slot == "TANKER1":
@@ -180,9 +189,48 @@ class SupportCaps:
                 self._hvaa_groups.append(grp.name)             # S176b
                 self._support_lbl[grp.units[0].name] = s.label.upper()
                 self._support_units[BY_CLASS_.get(s.dcs_class, s.slot)] = grp.units[0].name
+                if fwd is None and late_fwd is not None and not s.from_carrier:
+                    self._flag_n += 1                             # S193 PR 3: a late tanker: hidden until the raid window is over (the commit script sets this flag, an ME trigger activates the group)
+                    late_flag = self._flag_n
+                    self._late_flag(grp, late_flag)
+                    centre_x, centre_y = offset(x, y, g.hdg + 90, race / 2)
+                    support_base = _support_airfield(st)
+                    transit_s = 0.0
+                    if support_base is not None:
+                        transit_s = dist(support_base.x, support_base.y, centre_x, centre_y) / max(spd, 1.0)
+                    self._late_tankers.append({"g": grp.name, "flag": late_flag, "x": centre_x, "z": centre_y, "transit_s": transit_s, "label": s.label, "slot": s.slot})
+                    if s.slot == "TANKER1":
+                        self._late_tanker_flag = late_flag        # its HVAACAP guard waits for the same flag (mission_builder, where the guard is built)
                 if s.slot == "TANKER1":
                     tanker_xy = offset(x, y, g.hdg + 90, race / 2)
         return tanker_xy, awacs_unit, hav_xy
+
+    def _finish_late_tankers(self, manifest, clock) -> None:
+        """S193 PR 3 (XO 2026-11-24: "the tanker would take off once the danger is done"). Called once the raids are spawned, before the commit scripts. A late tanker opens at the last red raid
+        group's time over its target (`raid_arrive_s` in the manifest) + LATE_TANKER_EGRESS_S + its flight from the support field to its station; the commit script (blue_commit.py `lateTick`)
+        then sets its flag when no red fighter is within HVAACAP's pull-back distance of the station. A tanker that could open only more than LATE_TANKER_LIMIT_S after the player's planned
+        recovery is not flown (the group stays hidden, no flag). Tankers in SQE are placed in the air on their track, so activating the group is its launch: the transit time is added to the wait."""
+        late = getattr(self, "_late_tankers", None)
+        if not late:
+            return
+        arrivals = []
+        for group in manifest.groups:
+            if group.get("raid_arrive_s") is not None:
+                arrivals.append(float(group["raid_arrive_s"]))
+        if arrivals:
+            window_end = max(arrivals) + LATE_TANKER_EGRESS_S
+        else:
+            window_end = float(getattr(self, "_last_striker_s", None) or 0.0) + LATE_TANKER_EGRESS_S
+        exit_s = getattr(self, "_exit_s", None)
+        for entry in late:
+            entry["t"] = int(window_end + entry["transit_s"])
+            entry["flown"] = exit_s is None or entry["t"] <= float(exit_s) + LATE_TANKER_LIMIT_S
+            if entry["flown"]:
+                self._red_intel.append("%s launches after the raid is over: on station about %s (it waits on the ground while red raids and sweeps are in the air)." % (entry["label"], clock(entry["t"])))
+                self.warns.append("S193: %s is a late tanker: no covered spot is clear of this mission's red raids, so it launches about %s, when they are over and no red fighter is near its station." % (entry["label"], clock(entry["t"])))
+            else:
+                self._red_intel.append("No %s this mission: the red raids are not over until too late for your flight." % entry["label"])
+                self.warns.append("S193: %s does not fly: the red raids are not over until about %s." % (entry["label"], clock(entry["t"])))
 
     def _barcap_circles(self, package, geom) -> list:
         """v0.41.138: the engage circles (x, y, radius nm) of this mission's BARCAPs (base BARCAP and carrier BARCAP), worked out the same way the flights

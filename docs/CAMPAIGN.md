@@ -304,7 +304,10 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
   the AWACS tries to stay 40 nm from a raid's route and 100 nm from a sweep's. Cover comes first: the AWACS moves to the covered spot (up to 150 nm from its rear station, never nearer to
   red and never off the map) with the most room from those routes, and the tanker takes a covered spot that is clear of them when there is one, else the covered spot that is least
   inside them (at most 25 nm inside), else a clear spot with no cover; the build warns when a tanker sits inside. Only when no covered place exists does the AWACS move away from
-  red's raid routes, as before. In the
+  red's raid routes, as before. If there is no clear spot at all while the red raids and sweeps fly, the tanker **waits on the ground and launches once they are over**: about 10 minutes
+  after the last red raid's time over its target, plus its flight to its track, and only when no red fighter is within 60 nm of the track. Its HVAACAP guard launches with it, and the
+  briefing's intelligence says when. It will often arrive after your own flight has gone home (it is there for the later packages); a tanker that could launch only more than
+  30 minutes after your planned recovery does not fly that mission. In the
   air, either one turns away when an enemy fighter comes within 60 nm: it flies 40 nm straight away from it and orbits there, and goes back to its track after 5 quiet minutes
   with no fighter within 80 nm. Red's sweeps do hunt them (a sweep can go 100 nm or more from its own bombers), and a tanker cannot outrun a fighter that is already close.
 
