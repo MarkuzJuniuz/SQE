@@ -105,6 +105,42 @@ def fighter_bases(state) -> list:
             if w.available > 0 and not state.assets[w.base_asset_id].destroyed]
 
 
+SUPPORT_FIELD_COVER_NM = 30      # S193: a support track this close to a defended blue field (defense >= 0.15) or to the carrier group is under blue cover (the tanker's v0.41.26 figure, `support_caps.TANKER_COVER_NM`)
+SUPPORT_CAP_COVER_NM = 25        # S193 (judgment call, no source): ...and this close to a blue BARCAP area that has a pair planned THIS turn (XO 2026-11-24: "barcap counts as cover")
+TANKER_SOFT_FLOOR_NM = 25         # S193 (judgment call): a covered tanker spot may sit inside a patrol / lane / raid / sweep limit, but not by more than this: further in, a clear spot without cover is better
+AWACS_COVER_MARGIN_CAP_NM = 20   # S193 (judgment call): a covered AWACS spot clear of the raid / sweep lines by more than this is as good as any other: the nearest to the first station wins then
+
+
+def blue_cover_circles(state, field_nm: float = SUPPORT_FIELD_COVER_NM, cap_nm: float = SUPPORT_CAP_COVER_NM, base_defenses: bool = True) -> list:
+    """S193: [(x, y, nm)] the places a support aircraft counts as under blue cover: every defended blue airfield (`defense` 0.15 or more, only when `base_defenses` is on) and
+    every carrier within `field_nm`, and every blue BARCAP area with a pair planned this turn (`state.barcap["blue_flights"]`, HVAACAP guards left out: they follow the support) within `cap_nm`.
+    Reads the state only (the AWACS station is the same for every package of a turn)."""
+    circles = []
+    for base in state.bases.values():
+        if base.kind == BaseKind.CARRIER:
+            circles.append((base.x, base.y, field_nm))
+        elif base.kind == BaseKind.AIRFIELD and base_defenses and getattr(base, "defense", 0) >= 0.15:
+            circles.append((base.x, base.y, field_nm))
+    barcap_state = getattr(state, "barcap", None) or {}
+    areas = {}
+    for area in barcap_state.get("blue") or []:
+        areas[area["id"]] = area
+    used_areas = set()
+    for flight in barcap_state.get("blue_flights") or []:
+        area_id = flight.get("area")
+        if area_id in areas and area_id not in used_areas and flight.get("turn") == state.turn and flight.get("kind") not in ("HVAACAP", "TKR_HVAACAP"):
+            used_areas.add(area_id)
+            circles.append((areas[area_id]["x"], areas[area_id]["y"], cap_nm))
+    return circles
+
+
+def in_blue_cover(circles, x, y) -> bool:
+    for circle_x, circle_y, circle_nm in circles:
+        if math.hypot(x - circle_x, y - circle_y) / NM <= circle_nm:
+            return True
+    return False
+
+
 def awacs_first_station(state):
     """S19 (v0.41.369, XO 2026-11-11): the AWACS's first station -> (x, y, front_hdg), before this turn's raids move it (S188, S191). It starts from the support field
     (support_assets._support_airfield), faces red's live fighter fields (else red's assets, else north) and sits BEHIND that field, clear of enemy fields and SAM rings
@@ -131,7 +167,10 @@ def awacs_station(state):
     if first is None:
         return None
     x, y, fh = first
-    x, y = _awacs_clear_of_raids(state, x, y, fh)
+    covered_spot = _awacs_under_cover(state, x, y, fh)
+    if covered_spot is not None:
+        return covered_spot[0], covered_spot[1], fh
+    x, y = _awacs_clear_of_raids(state, x, y, fh)      # S193: only when no covered spot exists: the S191 move away from red is the last resort
     return x, y, fh
 
 
@@ -193,6 +232,57 @@ def _awacs_racetrack_margin_nm(x, y, fh, lines, sweep_lines) -> float:
         for line in sweep_lines:
             worst = min(worst, _seg_nm(point_x, point_y, *line) - AWACS_SWEEP_NM)
     return worst
+
+
+def _awacs_under_cover(state, x, y, fh):
+    """S193 (XO 2026-11-24: "let them go back closer to SAM protection and CAP protection"): the AWACS station under blue cover. -> (x, y), or None when no covered spot passes the hard limits
+    (the caller then runs the S191 move away from red). The first station (x, y) stays when it is covered and its racetrack is clear of this turn's raid / sweep lines. Otherwise: spots on three
+    rings (the centre, half way, 5 nm inside the edge) round every cover circle (`blue_cover_circles`) in 30 degree steps, within `AWACS_FAN_MAX_NM` of the first station, inside the map
+    (`AWACS_MAP_MARGIN_NM`), outside SAM rings and red fields (`spot_slack`), at least `AWACS_RED_MIN_NM` and no nearer to red's nearest fighter field than the first station. The best spot:
+    the racetrack margin to the raid / sweep lines capped at `AWACS_COVER_MARGIN_CAP_NM` (a covered spot is never given up for more margin than that), then the smallest move. Reads the state only."""
+    circles = blue_cover_circles(state)
+    if not circles:
+        return None
+    lines, sweep_lines = raid_lines_from_booked(state)
+    first_margin = _awacs_racetrack_margin_nm(x, y, fh, lines, sweep_lines)
+    first_covered = in_blue_cover(circles, x, y)
+    if first_covered and first_margin >= 0:
+        return x, y
+    from . import theatres
+    top, bottom, left, right = theatres.map_edges()
+    edge = AWACS_MAP_MARGIN_NM * NM
+    red_fields = fighter_bases(state)
+    least_red_nm = AWACS_RED_MIN_NM
+    if red_fields:
+        least_red_nm = max(AWACS_RED_MIN_NM, min(math.hypot(field_x - x, field_y - y) for field_x, field_y in red_fields) / NM)
+    candidates = []
+    if first_covered:
+        candidates.append((x, y))
+    for circle_x, circle_y, circle_nm in circles:
+        for ring_nm in (0.0, circle_nm / 2.0, circle_nm - 5.0):
+            for bearing_deg in range(0, 360, 30):
+                if ring_nm == 0.0 and bearing_deg > 0:
+                    break
+                heading = math.radians(bearing_deg)
+                candidates.append((circle_x + ring_nm * NM * math.cos(heading), circle_y + ring_nm * NM * math.sin(heading)))
+    best = None
+    for spot_x, spot_y in candidates:
+        move_nm = math.hypot(spot_x - x, spot_y - y) / NM
+        if move_nm > AWACS_FAN_MAX_NM:
+            continue
+        if not (bottom + edge <= spot_x <= top - edge and left + edge <= spot_y <= right - edge):
+            continue
+        if red_fields and min(math.hypot(field_x - spot_x, field_y - spot_y) for field_x, field_y in red_fields) / NM < least_red_nm:
+            continue
+        if spot_slack(state, spot_x, spot_y, (x, y)) < 0:
+            continue
+        margin = _awacs_racetrack_margin_nm(spot_x, spot_y, fh, lines, sweep_lines)
+        score = (min(margin, AWACS_COVER_MARGIN_CAP_NM), -move_nm)
+        if best is None or score > best[0]:
+            best = (score, spot_x, spot_y)
+    if best is None:
+        return None
+    return best[1], best[2]
 
 
 def _awacs_clear_of_raids(state, x, y, fh):
@@ -478,53 +568,90 @@ def _seg_nm(px, py, ax, ay, bx, by) -> float:
     return math.hypot(ax + t * vx - px, ay + t * vy - py) / NM
 
 
-def tanker_spot(state, base_xy, egr_xy, target_xy, caps=(), lanes=(), cover=(), half_track_nm: float = 15, track_hdg: float | None = None, raid_lines=(), sweep_lines=()):
+def tanker_spot(state, base_xy, egr_xy, target_xy, caps=(), lanes=(), cover=(), half_track_nm: float = 15, track_hdg: float | None = None, raid_lines=(), sweep_lines=(), report=None):
     """v0.41.26: the tanker track centre. Between the action and home, where the package can use it, but a minimum distance from every danger:
     TANKER_MARGIN_NM outside every SAM ring and every enemy field's scramble circle, TANKER_CAP_NM from every red patrol station (caps: [(x, y)]),
-    TANKER_LANE_NM from the lines red fighters fly in on (lanes: [(field x, y, target x, y)]), S188: TANKER_RAID_NM from the raids' routes (raid_lines: [(x1, y1, x2, y2)]), both ends of the racetrack included. Among the
-    clear spots, one inside friendly SAM cover (cover: [(x, y, nm)]) wins; then the one furthest forward. The XO's Nalchik run: the tanker sat in
-    the middle of the fight and was shot down. Falls back to behind the home field (up to 40 nm). None when nothing is clear."""
+    TANKER_LANE_NM from the lines red fighters fly in on (lanes: [(field x, y, target x, y)]), S188: TANKER_RAID_NM from the raids' routes (raid_lines: [(x1, y1, x2, y2)]), both ends of the racetrack included.
+    S193 (XO 2026-11-24: a tanker out where there is no cover is no use): the SAM rings and scramble circles stay hard; the other distances are goals. The order of choice, all on the line from
+    home to the egress point (so within reach of the flights): (1) a spot under cover (cover: [(x, y, nm)]) that is clear of everything, furthest forward; (2) a spot under cover that is not clear:
+    the one with the largest margin (the least bad distance to a patrol, lane, raid or sweep), at most `TANKER_SOFT_FLOOR_NM` inside a limit; (3) a clear spot with no cover, furthest forward; (4) behind the home field (up to 40 nm); None
+    when nothing is clear. `report` (a dict, optional) gets `case` (1 to 4) and `margin` (nm, negative = inside a limit). The XO's Nalchik run: the tanker sat in the middle of the fight and was shot down."""
     bx, by = base_xy
     ex, ey = egr_xy
     h = math.degrees(math.atan2(ey - by, ex - bx))
     th = h + 90 if track_hdg is None else track_hdg
-    def ok(x, y):
-        ends = [(x, y), (x + half_track_nm * NM * math.cos(math.radians(th)), y + half_track_nm * NM * math.sin(math.radians(th))),
+
+    def track_ends(x, y):
+        return [(x, y), (x + half_track_nm * NM * math.cos(math.radians(th)), y + half_track_nm * NM * math.sin(math.radians(th))),
                 (x - half_track_nm * NM * math.cos(math.radians(th)), y - half_track_nm * NM * math.sin(math.radians(th)))]
-        for px, py in ends:
+
+    def hard_ok(x, y):
+        for px, py in track_ends(x, y):
             if spot_slack(state, px, py, target_xy, TANKER_MARGIN_NM, TANKER_MARGIN_NM) < 0:
                 return False
-            if any(math.hypot(px - cx, py - cy) / NM < TANKER_CAP_NM for cx, cy in caps):
-                return False
-            if any(_seg_nm(px, py, fx, fy, gx, gy) < TANKER_LANE_NM for fx, fy, gx, gy in lanes):
-                return False
-            if any(_seg_nm(px, py, fx, fy, gx, gy) < TANKER_RAID_NM for fx, fy, gx, gy in raid_lines):          # S188: the red raids' own routes
-                return False
-            if any(_seg_nm(px, py, fx, fy, gx, gy) < TANKER_SWEEP_NM for fx, fy, gx, gy in sweep_lines):       # S189: the red sweeps' routes (they hunt)
-                return False
         return True
+
+    def margin_nm(x, y):
+        """The smallest of (distance - limit) over both ends and every patrol, lane, raid and sweep: >= 0 means clear of all of them."""
+        worst = 1e9
+        for px, py in track_ends(x, y):
+            for cx, cy in caps:
+                worst = min(worst, math.hypot(px - cx, py - cy) / NM - TANKER_CAP_NM)
+            for fx, fy, gx, gy in lanes:
+                worst = min(worst, _seg_nm(px, py, fx, fy, gx, gy) - TANKER_LANE_NM)
+            for fx, fy, gx, gy in raid_lines:               # S188: the red raids' own routes
+                worst = min(worst, _seg_nm(px, py, fx, fy, gx, gy) - TANKER_RAID_NM)
+            for fx, fy, gx, gy in sweep_lines:              # S189: the red sweeps' routes (they hunt)
+                worst = min(worst, _seg_nm(px, py, fx, fy, gx, gy) - TANKER_SWEEP_NM)
+        return worst
+
     def covered(x, y):
         for cover_x, cover_y, cover_nm in cover:
             if math.hypot(x - cover_x, y - cover_y) / NM <= cover_nm:
                 return True
         return False
-    clear = []
+
+    clear_covered = []
+    soft_covered = []
+    clear_open = []
     for k, f in enumerate((0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.05, 0.0)):
         cx, cy = bx + (ex - bx) * f, by + (ey - by) * f
         for side in (0, 10, -10, 20, -20, 30, -30):
             x, y = cx + side * NM * math.cos(math.radians(h + 90)), cy + side * NM * math.sin(math.radians(h + 90))
-            if ok(x, y):
-                clear.append((0 if covered(x, y) else 1, k, abs(side), x, y))
-    if not clear:
-        for back in (5, 10, 15, 20, 25, 30, 35, 40):
-            for side in (0, 10, -10, 20, -20):
-                x = bx - back * NM * math.cos(math.radians(h)) + side * NM * math.cos(math.radians(h + 90))
-                y = by - back * NM * math.sin(math.radians(h)) + side * NM * math.sin(math.radians(h + 90))
-                if ok(x, y):
-                    return x, y
-        return None
-    clear.sort()
-    return clear[0][3], clear[0][4]
+            if not hard_ok(x, y):
+                continue
+            margin = margin_nm(x, y)
+            is_covered = covered(x, y)
+            if margin >= 0 and is_covered:
+                clear_covered.append((k, abs(side), x, y, margin))
+            elif is_covered and margin >= -TANKER_SOFT_FLOOR_NM:
+                soft_covered.append((-margin, k, abs(side), x, y, margin))
+            elif margin >= 0:
+                clear_open.append((k, abs(side), x, y, margin))
+    if clear_covered:
+        clear_covered.sort()
+        if report is not None:
+            report["case"], report["margin"] = 1, clear_covered[0][4]
+        return clear_covered[0][2], clear_covered[0][3]
+    if soft_covered:
+        soft_covered.sort()
+        if report is not None:
+            report["case"], report["margin"] = 2, soft_covered[0][5]
+        return soft_covered[0][3], soft_covered[0][4]
+    if clear_open:
+        clear_open.sort()
+        if report is not None:
+            report["case"], report["margin"] = 3, clear_open[0][4]
+        return clear_open[0][2], clear_open[0][3]
+    for back in (5, 10, 15, 20, 25, 30, 35, 40):
+        for side in (0, 10, -10, 20, -20):
+            x = bx - back * NM * math.cos(math.radians(h)) + side * NM * math.cos(math.radians(h + 90))
+            y = by - back * NM * math.sin(math.radians(h)) + side * NM * math.sin(math.radians(h + 90))
+            if hard_ok(x, y) and margin_nm(x, y) >= 0:
+                if report is not None:
+                    report["case"], report["margin"] = 4, margin_nm(x, y)
+                return x, y
+    return None
 
 
 def first_safe_egress(state, tx, ty, hdg_to_target, skip_ids=(), min_nm: float = 8, max_nm: float = 60, margin_nm: float = 4, avoid=()):

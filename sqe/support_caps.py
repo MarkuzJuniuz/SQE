@@ -108,11 +108,13 @@ class SupportCaps:
         tgts_ = [(g.tx, g.ty)] + [self._pkg_target_xy(p_) for p_ in extras if self._pkg_target_xy(p_)]
         lanes_ = [(fx_, fy_, tx_, ty_) for fx_, fy_ in tm.fighter_bases(st) for tx_, ty_ in tgts_
                   if dist(fx_, fy_, tx_, ty_) <= ALERT_REACH_NM * NM]
-        cover_ = [(b_.x, b_.y, TANKER_COVER_NM) for b_ in st.bases.values()
-                  if b_.kind == BaseKind.AIRFIELD and self.o.base_defenses and getattr(b_, "defense", 0) >= 0.15] + \
-                 [(b_.x, b_.y, TANKER_COVER_NM) for b_ in st.bases.values() if b_.kind == BaseKind.CARRIER]
+        # S193: a defended field, the carrier group, or a blue BARCAP area with a pair up this turn (XO: "barcap counts as cover")
+        cover_ = tm.blue_cover_circles(st, TANKER_COVER_NM, tm.SUPPORT_CAP_COVER_NM, base_defenses=bool(self.o.base_defenses))
         raid_lines, sweep_lines = self._raid_route_lines([package] + list(extras))      # S188: the red raids' routes (S189: and the sweeps', apart), known before they are spawned
-        fwd = tm.tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty), caps_, lanes_, cover_, track_hdg=g.hdg - 90, raid_lines=raid_lines, sweep_lines=sweep_lines)
+        tanker_report = {}
+        fwd = tm.tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty), caps_, lanes_, cover_, track_hdg=g.hdg - 90, raid_lines=raid_lines, sweep_lines=sweep_lines, report=tanker_report)
+        if tanker_report.get("case") == 2:
+            self.warns.append("S193: the tanker track is under blue cover but %d nm inside a patrol, lane or raid distance (no covered spot is clear of them)" % round(-tanker_report["margin"]))
         awacs_track_points = [(ax, ay)]
         for awacs_side in (fh + 90, fh - 90):
             awacs_track_points.append(offset(ax, ay, awacs_side, 20 * NM))
