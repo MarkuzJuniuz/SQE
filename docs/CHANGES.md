@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.649, the waiting window shows the whole "how to join" line
+The instructions at the top of the waiting window (connect to the local server, or open the mission file) wrap onto a second line instead of being cut off.
+
 ## v0.41.648, internal test logging
 A test-only logging switch for development runs. Nothing changes for players.
 

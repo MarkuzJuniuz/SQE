@@ -450,10 +450,12 @@ class WaitingDialog(QDialog):
         info = card(); lay.addWidget(info)
         il = info.layout()
         if p.get("server"):                                     # S161b: the sortie runs on the local DCS dedicated server
-            il.addWidget(QLabel("The sortie runs on your <b>local DCS server</b> and waits for you. Start DCS, <b>Multiplayer</b>, connect to <b>127.0.0.1:10308</b> "
-                                "(no password) and take the only client slot (your flight lead)."))
+            how_to_join = QLabel("The sortie runs on your <b>local DCS server</b> and waits for you. Start DCS, <b>Multiplayer</b>, connect to <b>127.0.0.1:10308</b> "
+                                 "(no password) and take the only client slot (your flight lead).")
         else:
-            il.addWidget(QLabel(f"Mission file: <b>SQE_Sortie.miz</b> in your DCS Missions folder. Start DCS, open it from the Missions list, and fly."))
+            how_to_join = QLabel(f"Mission file: <b>SQE_Sortie.miz</b> in your DCS Missions folder. Start DCS, open it from the Missions list, and fly.")
+        how_to_join.setWordWrap(True)                          # a label is one line unless told to wrap: the long text was cut at the card edge
+        il.addWidget(how_to_join)
         pd = p.get("package_dict", {}); cn = p.get("counts") or {}
         il.addWidget(QLabel(f"Mission start <b>{pd.get('start', '')}</b> local   |   {cn.get('groups', '?')} groups, {cn.get('units', '?')} units"))
         il.addWidget(QLabel(f"Launch {tl['launch']}   |   Marshal {tl['marshal']}   |   <b>PUSH {tl['push']}</b>   |   <b>TOT {tl['tot']}</b>   |   Egress {tl['egress']}"))
