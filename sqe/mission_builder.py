@@ -916,7 +916,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         THEIR time), with their own geometry, route and TOT. Support (tanker, AWACS, HAVCAP, base BARCAP) is shared, so tag flights are skipped."""
         from types import SimpleNamespace
         st = self.state
-        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        def hm(p):
+            return int(p.start[:2]) * 60 + int(p.start[3:5])
         used = {f.callsign for f in anchor.flights}
         out = []
         ruin_ids = {x.id for x in ruins}
@@ -940,7 +941,16 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 f.callsign = f"{nm} {no}"; used.add(f.callsign)
             manifest.cur_pkg = xp.id
             # the flight the package's timeline is built on; a SEAD package's JSOW slingers never lead it (its event is the HARM salvo, which they are timed to)
-            lead = max(xp.flights, key=lambda f: ({Role.STRIKE: 3, Role.SEAD: 3, Role.CAS: 3}.get(f.role, 1) if getattr(f, "kit", "") not in JSOW_FLIGHT_KITS else 2) * 10 + f.count)
+            lead = None
+            lead_score = None
+            for lead_candidate in xp.flights:
+                lead_weight = 2
+                if getattr(lead_candidate, "kit", "") not in JSOW_FLIGHT_KITS:
+                    lead_weight = {Role.STRIKE: 3, Role.SEAD: 3, Role.CAS: 3}.get(lead_candidate.role, 1)
+                candidate_score = lead_weight * 10 + lead_candidate.count
+                if lead_score is None or candidate_score > lead_score:
+                    lead = lead_candidate
+                    lead_score = candidate_score
             base2, spec2 = st.bases[lead.base_id], AIRCRAFT[lead.aircraft]
             tx2, ty2 = self._target_xy(xp)
             tx2, ty2 = self._jitter_primary(xp, tx2, ty2)
@@ -1002,7 +1012,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 self._spawn_opfor_ground(xp, tx2, ty2, manifest, [(base2.x, base2.y), geom2.mshl, geom2.push, geom2.ip, (tx2, ty2), geom2.egr])
                 self._cas_floor_for(geom2, xp, tx2, ty2)                 # S92: the target column is live now, so its own air defence counts in the floor
             freqs = [SimpleNamespace(callsign=f.callsign, mhz=round(128.0 + 0.5 * ((k * 7 + i * 3) % 18), 1)) for i, f in enumerate(xp.flights)]
-            plan2 = SimpleNamespace(package_flights=freqs, freq=lambda slot, _k=k: 252.0 + 3.5 * (_k + 1))
+            def package_freq(slot, _k=k):
+                return 252.0 + 3.5 * (_k + 1)
+            plan2 = SimpleNamespace(package_flights=freqs, freq=package_freq)
             tots = []
             cas_tot = None
             for i, f in enumerate(xp.flights):
@@ -1115,7 +1127,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """Last step before saving: any ground group with a unit (or a driving destination) in the water is moved as a whole, as little as possible,
         to where all of it is on dry land. The JTAC moves with its task force. Uses the DCS terrain scan when present, otherwise the rough coastline."""
         from . import seacheck, terrainmask
-        dry = lambda x, y: seacheck.site_ok(x, y, 150.0)
+        def dry(x, y):
+            return seacheck.site_ok(x, y, 150.0)
         groups = []
         for coal in self.m.coalition.values():
             for c in coal.countries.values():
@@ -1128,7 +1141,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         def fits(g, dx, dy):
             return all(dry(px + dx, py + dy) for px, py in pts(g))
 
-        order = sorted(groups, key=lambda g: g.name.startswith("Axeman"))        # task forces before their JTAC
+        def is_jtac_group(group):
+            return group.name.startswith("Axeman")
+        order = sorted(groups, key=is_jtac_group)        # task forces before their JTAC (False sorts before True)
         for g in order:
             if not g.units:
                 continue
@@ -1270,7 +1285,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if o.type == ObjectiveType.BARCAP:
             b = self.state.bases[o.target_id]
             air = [a for a in self.state.assets.values() if a.kind == AssetKind.AIRFIELD and not a.destroyed]
-            n = min(air, key=lambda a: dist(b.x, b.y, a.x, a.y))
+            n = None
+            nearest_airfield_m = None
+            for enemy_airfield in air:
+                airfield_m = dist(b.x, b.y, enemy_airfield.x, enemy_airfield.y)
+                if nearest_airfield_m is None or airfield_m < nearest_airfield_m:
+                    n = enemy_airfield
+                    nearest_airfield_m = airfield_m
             return offset(b.x, b.y, bearing(b.x, b.y, n.x, n.y), 60 * NM)
         a = self.state.assets[o.target_id]
         return a.x, a.y
@@ -1289,7 +1310,14 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _divert(self, pbase):
         fields = [b for b in self.state.bases.values() if b.kind == BaseKind.AIRFIELD and b.id != pbase.id]
         fields = [b for b in fields if not runways.is_closed(self.state, b.id)] or fields          # v0.41.254: not a cratered field (unless every other one is)
-        return min(fields, key=lambda b: dist(b.x, b.y, pbase.x, pbase.y))
+        nearest_field = None
+        nearest_field_m = None
+        for candidate_field in fields:
+            field_m = dist(candidate_field.x, candidate_field.y, pbase.x, pbase.y)
+            if nearest_field_m is None or field_m < nearest_field_m:
+                nearest_field = candidate_field
+                nearest_field_m = field_m
+        return nearest_field
 
     def _mode3(self, package, pf) -> str:
         i = package.flights.index(pf)
@@ -1324,7 +1352,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if not slots:
             return None
         cx_ = sum(q.position.x for q in slots) / len(slots); cy_ = sum(q.position.y for q in slots) / len(slots)
-        q = min(slots, key=lambda q_: dist(q_.position.x, q_.position.y, cx_, cy_))
+        q = None
+        slot_nearest_m = None
+        for parking_slot in slots:
+            slot_m = dist(parking_slot.position.x, parking_slot.position.y, cx_, cy_)
+            if slot_nearest_m is None or slot_m < slot_nearest_m:
+                q = parking_slot
+                slot_nearest_m = slot_m
         return q.position.x, q.position.y
 
     @staticmethod
@@ -1415,10 +1449,24 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return
         cx_, cy_ = sum(q[0] for q in pts_) / len(pts_), sum(q[1] for q in pts_) / len(pts_)
         span_ = max((dist(p[0], p[1], q[0], q[1]) for p in pts_ for q in pts_), default=0.0)
-        cx_, cy_ = min(pts_, key=lambda q: dist(q[0], q[1], cx_, cy_))       # v0.41.331 (XO): aim at the jet nearest the middle, not at the empty middle
+        # v0.41.331 (XO): aim at the jet nearest the middle, not at the empty middle
+        ramp_middle_x, ramp_middle_y = cx_, cy_
+        ramp_nearest_m = None
+        for ramp_point in pts_:
+            ramp_point_m = dist(ramp_point[0], ramp_point[1], ramp_middle_x, ramp_middle_y)
+            if ramp_nearest_m is None or ramp_point_m < ramp_nearest_m:
+                cx_, cy_ = ramp_point
+                ramp_nearest_m = ramp_point_m
         dir_ = None
         if span_ >= RAMP_AXIS_MIN_M:
-            p1_, p2_ = max(((p, q) for p in pts_ for q in pts_), key=lambda pq: dist(pq[0][0], pq[0][1], pq[1][0], pq[1][1]))
+            p1_, p2_ = None, None
+            ramp_widest_m = None
+            for ramp_point_a in pts_:
+                for ramp_point_b in pts_:
+                    ramp_apart_m = dist(ramp_point_a[0], ramp_point_a[1], ramp_point_b[0], ramp_point_b[1])
+                    if ramp_widest_m is None or ramp_apart_m > ramp_widest_m:
+                        p1_, p2_ = ramp_point_a, ramp_point_b
+                        ramp_widest_m = ramp_apart_m
             dir_ = int(round(math.degrees(math.atan2(p2_[1] - p1_[1], p2_[0] - p1_[0])))) % 360
         for bt_ in self._ramp_tasks:
             bt_.params["x"], bt_.params["y"] = cx_, cy_
@@ -1607,7 +1655,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return False
         st_ = wps[k]
         need_ = min(CAP2_ROOM_NM, self._room(st_.x, st_.y, package))
-        margin_ = lambda x, y: self._room(x, y, package) - need_
+        def margin_(x, y):
+            return self._room(x, y, package) - need_
         xy = None
         if st_.action in ("TARCAP", "ESCORT"):
             # S141c: the race-track on red's line: CAP2 BEHIND the station (away from red), so the orbit flies station -> CAP2 (cold) -> station (hot, nose on red), not the
@@ -2080,7 +2129,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     # S137: a strike / CAS TARCAP is no longer capped at TARCAP_PKG_ZONE_NM: its circle is tethered round what it protects instead
                     bz_ = [] if pkg_zone_ else [z_ for z_ in getattr(self, "_barcap_zones", []) if dist(stw.x, stw.y, z_[0], z_[1]) / NM > z_[2] - TARCAP_BARCAP_OVERLAP_NM]
                     if bz_:
-                        bx_, by_, br_ = min(bz_, key=lambda z_: dist(stw.x, stw.y, z_[0], z_[1]) / NM - z_[2])
+                        bx_, by_, br_ = None, None, None
+                        barcap_zone_best_nm = None
+                        for barcap_zone in bz_:
+                            barcap_zone_nm = dist(stw.x, stw.y, barcap_zone[0], barcap_zone[1]) / NM - barcap_zone[2]
+                            if barcap_zone_best_nm is None or barcap_zone_nm < barcap_zone_best_nm:
+                                bx_, by_, br_ = barcap_zone
+                                barcap_zone_best_nm = barcap_zone_nm
                         bpts_ = [offset(bx_, by_, bearing(bx_, by_, stw.x, stw.y), max(0.0, br_ - TARCAP_BARCAP_OVERLAP_NM) * NM)]
                 # S137 (tethered aggression): round what the package protects (the strikers' IP, TGT and egress), full reach, then the station
                 pp_ = self._protect_pts.get(package.id) or []
@@ -2540,12 +2595,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if k1 + 1 >= len(wps) or wps[k1 + 1].name != "CAP2" or geom is None:
             return 0
         a, b = wps[k1], wps[k1 + 1]
-        ok = lambda x, y: self._room(x, y, package) >= AVOID_MARGIN_NM
+        def ok(x, y):
+            return self._room(x, y, package) >= AVOID_MARGIN_NM
         if ok(a.x, a.y) and ok(b.x, b.y):
             return 0
         leg_b, leg_d = bearing(a.x, a.y, b.x, b.y), dist(a.x, a.y, b.x, b.y)
         if ok(a.x, a.y):
-            c2 = cap2_point(a.x, a.y, leg_b - 90.0, leg_d / NM, lambda x, y: self._room(x, y, package) - AVOID_MARGIN_NM)
+            def room_beyond_margin(x, y):
+                return self._room(x, y, package) - AVOID_MARGIN_NM
+            c2 = cap2_point(a.x, a.y, leg_b - 90.0, leg_d / NM, room_beyond_margin)
             if c2 is not None:
                 b.x, b.y = c2
                 return 1
@@ -2687,7 +2745,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if d1 < 2 * NM or d2 < 2 * NM:
             return None                                             # no room to come down before the ring and climb after it
         cruise = max(a.alt_ft, b.alt_ft)
-        at = lambda s: offset(a.x, a.y, bearing(a.x, a.y, b.x, b.y), s)
+        def at(s):
+            return offset(a.x, a.y, bearing(a.x, a.y, b.x, b.y), s)
         return [Wpt("UDSC", *at(e_in - 2 * NM - d1), cruise, a.speed_kts, "Descend: low under the SAM ring"),
                 Wpt("UIN", *at(e_in - 2 * NM), int(h_ft), a.speed_kts, "Low under the SAM ring", rad=True),
                 Wpt("UOUT", *at(e_out + 2 * NM), int(h_ft), a.speed_kts, "Low under the SAM ring", rad=True),
@@ -2863,7 +2922,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         for nm, code in (("DEP", "DEPX1"), ("MSHL", "MSHLX2"), ("PUSH", "PUSHX3")):
             if nm in by and id(by[nm]) not in plan:
                 plan[id(by[nm])] = code
-        return lambda w: plan.get(id(w))
+        def code_of(w):
+            return plan.get(id(w))
+        return code_of
 
     @staticmethod
     def _set_eta(wp, w, wps):
@@ -2907,7 +2968,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if self._f14ab_player(pf):
             return                                       # S103d: the plain F-14B has three waypoints: DIVERT, TKR and BULLS are on the card only (the tanker by its TACAN, the bullseye is in the jet)
         g = next(gr for fl, gr in self.flight_groups if fl is pf)
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         for name, x, y, _t, alt, kts, _n in rows:
             a = 20000 * FT if name == "TKR" else 5000 * FT
             g.add_waypoint(pt(x, y), a, (spec.profile.aar_kts if name == "TKR" else 300) * KPH, name)
@@ -2997,7 +3059,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         sam = [(math.hypot(a.x - geom.tx, a.y - geom.ty), a) for a in self.state.assets.values()
                if a.kind == AssetKind.SAM and not a.destroyed and tm.RANGE_NM.get(a.variant, 0) >= 10 and math.hypot(a.x - geom.tx, a.y - geom.ty) <= 80 * NM]
         if sam:
-            a = min(sam, key=lambda t_: t_[0])[1]
+            nearest_sam_entry = None
+            for sam_entry in sam:
+                if nearest_sam_entry is None or sam_entry[0] < nearest_sam_entry[0]:
+                    nearest_sam_entry = sam_entry
+            a = nearest_sam_entry[1]
             g.add_nav_target_point(self._pt(a.x, a.y), "HA")
             extra.append(("HA", a.x, a.y))
         if st_i is None and dp_i is not None and f.role.value in ("TARCAP", "ESCORT") and package.objective.type in (ObjectiveType.STRIKE, ObjectiveType.DEAD, ObjectiveType.CAS):
@@ -3204,7 +3270,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         if lps2_:
                             thr2_ = self._red_approach(sum(q_[0] for q_ in lps2_) / len(lps2_), sum(q_[1] for q_ in lps2_) / len(lps2_))
                             if thr2_ is not None:
-                                jx_, jy_ = min(lps2_, key=lambda q_: dist(q_[0], q_[1], thr2_[0], thr2_[1]))
+                                jx_, jy_ = None, None
+                                launch_point_best_m = None
+                                for launch_point in lps2_:
+                                    launch_point_m = dist(launch_point[0], launch_point[1], thr2_[0], thr2_[1])
+                                    if launch_point_best_m is None or launch_point_m < launch_point_best_m:
+                                        jx_, jy_ = launch_point
+                                        launch_point_best_m = launch_point_m
                                 ax_ = bearing(tx, ty, jx_, jy_)
                     ex_, ey_ = offset(jx_, jy_, ax_, (ESCORT_BEHIND_NM + back_extra_) * NM)
                 else:
@@ -3236,8 +3308,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         # 180 at most, so the clear point nearest the axis) as far as the SAM rings and the JSOW distance force; the station above stays when that is no nearer the axis
                         thr_ = self._red_approach(mx_, my_)
                         if thr_ is not None:
+                            def station_is_clear(x_, y_):
+                                return self._station_clear(x_, y_, sites_)
                             ax2_ = axis_station((mx_, my_), thr_, (jx_, jy_), near_nm_, TARCAP_BEHIND_NM,
-                                                lambda x_, y_: self._station_clear(x_, y_, sites_), (ex_, ey_))
+                                                station_is_clear, (ex_, ey_))
                             if ax2_ is not None:
                                 ex_, ey_ = ax2_
                 geom.stand[key] = (ex_, ey_, [], dist(ex_, ey_, tx, ty) / NM, False)
