@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.631, internal clean-up: plain functions in the raid planning and SAM code
+Eighteen one-line functions (lambdas) in the code that plans red's raids and moves and repairs SAM sites were rewritten as small named functions and plain loops. Nothing changes in play: eight unflown campaigns come out identical turn for turn, and 127 test missions too.
+
 ## v0.41.630, internal clean-up: plain functions in the strike task, threat map and SEAD timing code
 Twelve more one-line functions (lambdas) were rewritten as plain loops and small named functions. Nothing changes in play: 127 test missions come out identical.
 
