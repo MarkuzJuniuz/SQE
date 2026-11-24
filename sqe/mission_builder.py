@@ -36,7 +36,7 @@ from .words import strength_word
 
 TUNE_PARAMS = {"F-16C": ("COMM1_FREQ",), "A-10C": ("UHF_FREQ",), "A-10C2": ("UHF_FREQ",), "FA-18C": ("COMM1_FREQ", "COMM2_FREQ"), "F-14BU": ("COMM1_FREQ", "COMM2_FREQ"), "F-14B": ("COMM1_FREQ", "COMM2_FREQ")}   # v0.41.215: the player's radios SQE can read (XO's probes 2026-10-28 / 30); the F-15C (FC3) has none
 TUNE_BAND_MHZ = 0.05            # v0.41.215: tuned = within this much of the AWACS frequency (judgment call; the probe used 0.1)
-from .debrief import Manifest, install_hook
+from .debrief import Manifest, install_hook, magvar_east_deg
 from .difficulty import Difficulty, ai_skill
 from .fighter_stations import FighterStations, TARCAP_MIN, ESCORT_AFTER_TOT_S, TARCAP_AFTER_TOT_S, axis_station, ENGAGE_LEAD_S
 from .support_caps import SupportCaps
@@ -852,7 +852,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                               "cvrec": self._wing_recovery(pbase, ptot), "recov": list(self._recov),
                               "phome": ([self._pt(pbase.x, pbase.y).x, self._pt(pbase.x, pbase.y).y] if pbase.kind == BaseKind.AIRFIELD else None),
                               "rwys": runways.fields_for_hook(st, self.t), "craters": self._crater_blasts,
-                              "blue_places": self._blue_places()})
+                              "blue_places": self._blue_places(),
+                              "magvar": magvar_east_deg(st.theatre)})
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
