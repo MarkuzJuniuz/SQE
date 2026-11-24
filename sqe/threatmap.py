@@ -171,7 +171,9 @@ def corridor_sam_sites(state, polyline, target_asset, margin_nm: float = 10, max
             out.append(a)
         elif r >= SERIOUS_NM * NM and poly_dist(a.x, a.y, polyline) < r + margin_nm * NM:
             route.append((r - poly_dist(a.x, a.y, polyline), a))
-    route.sort(key=lambda t: t[0], reverse=True)
+    def first_field(row):
+        return row[0]
+    route.sort(key=first_field, reverse=True)
     return out + [a for _, a in route[:max_route]]
 
 
@@ -329,7 +331,13 @@ def nearest_threat_bearing(state, x, y, fallback: float) -> float:
     fb = fighter_bases(state)
     if not fb:
         return fallback
-    ex, ey = min(fb, key=lambda e: math.hypot(e[0] - x, e[1] - y))
+    ex, ey = None, None
+    nearest_base_m = None
+    for fighter_base in fb:
+        fighter_base_m = math.hypot(fighter_base[0] - x, fighter_base[1] - y)
+        if nearest_base_m is None or fighter_base_m < nearest_base_m:
+            ex, ey = fighter_base
+            nearest_base_m = fighter_base_m
     return math.degrees(math.atan2(ey - y, ex - x)) % 360
 
 
@@ -366,7 +374,11 @@ def tanker_spot(state, base_xy, egr_xy, target_xy, caps=(), lanes=(), cover=(), 
             if any(_seg_nm(px, py, fx, fy, gx, gy) < TANKER_LANE_NM for fx, fy, gx, gy in lanes):
                 return False
         return True
-    covered = lambda x, y: any(math.hypot(x - cx, y - cy) / NM <= cnm for cx, cy, cnm in cover)
+    def covered(x, y):
+        for cover_x, cover_y, cover_nm in cover:
+            if math.hypot(x - cover_x, y - cover_y) / NM <= cover_nm:
+                return True
+        return False
     clear = []
     for k, f in enumerate((0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.05, 0.0)):
         cx, cy = bx + (ex - bx) * f, by + (ey - by) * f

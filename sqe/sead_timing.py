@@ -86,8 +86,21 @@ class SeadTiming:
         groups = self._sead_groups(pkgs)
         if len(groups) < 2:
             return
-        groups.sort(key=lambda g: (-max(wave_factor(st, it[1]) for it in g), min(int(it[0].start[:2]) * 60 + int(it[0].start[3:5]) for it in g)))
-        arrive = lambda it: int(it[0].start[:2]) * 60 + int(it[0].start[3:5]) + it[2] / 60.0
+        def strongest_then_earliest(group):
+            # the group with the largest wave factor first; among equals the one whose earliest package starts first
+            largest_factor = None
+            earliest_start = None
+            for item in group:
+                factor = wave_factor(st, item[1])
+                if largest_factor is None or factor > largest_factor:
+                    largest_factor = factor
+                start_min = int(item[0].start[:2]) * 60 + int(item[0].start[3:5])
+                if earliest_start is None or start_min < earliest_start:
+                    earliest_start = start_min
+            return (-largest_factor, earliest_start)
+        groups.sort(key=strongest_then_earliest)
+        def arrive(it):
+            return int(it[0].start[:2]) * 60 + int(it[0].start[3:5]) + it[2] / 60.0
         last = None
         for g in groups:
             now = max(arrive(it) for it in g)
@@ -149,7 +162,8 @@ class SeadTiming:
                 p.start = f"{m // 60:02d}:{m % 60:02d}"
         # v0.41.158: a follow job (STRIKE / CAS behind the SEAD of the long-reach sites round its target) starts FOLLOW_GAP_MIN after the latest of those packages
         stage = {p.objective.target_id: p for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS}
-        hm = lambda q: int(q.start[:2]) * 60 + int(q.start[3:5])
+        def hm(q):
+            return int(q.start[:2]) * 60 + int(q.start[3:5])
         for p in pkgs:
             sps = [stage[x] for x in after_sites(p.objective) if x in stage]
             if sps:
