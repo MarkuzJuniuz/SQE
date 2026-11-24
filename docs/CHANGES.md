@@ -1,7 +1,7 @@
 # CHANGES.md
 
 ## v0.41.615, F-14B kneeboard: every route point to enter by hand
-The plain F-14B holds only three waypoints. Every other point of your route now has its own kneeboard page after page 1, with position and altitude, all of them in route order (before: only the turn points round SAM rings, at most eight).
+The plain F-14B holds only three waypoints. Every other point of your route now shows its position on page 1, right under its row (or on an extra page after page 1 when they do not fit), all of them in route order (before: only the turn points round SAM rings, at most eight, on page 2).
 
 ## v0.41.614, red SEAD and Kh-59M raids fly over their launch point
 A red SEAD or Kh-59M bomber group now flies over its launch point before it turns home. On a sharp turn it used to cut the corner about 10 km short, stay out of missile range and go home without firing.

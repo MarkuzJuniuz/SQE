@@ -790,7 +790,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 hook_wps.append((pspec.wp_label(i), r[0], r[1], r[2]))
             # S175: a route point the plain F-14B cannot hold (its WP column is "-") goes on the by-hand page with its position, in route order
             if self._f14ab and i < n_route and kn_rows[-1]["wp"] == "-":
-                hand_rows.append(self._hand_row(rows, i, n_route))
+                hand_row = self._hand_row(rows, i, n_route)
+                hand_rows.append(hand_row)
+                kn_rows[-1]["pos"] = hand_row["pos"]
         for code, x_, y_ in (self._f14ab or {}).get("extra", []):             # S103e: the nav target points the planner has no row for (the hostile area), right after HB so the card reads in flight order
             kn_rows.insert(n_route, {"wp": code, "name": "TARGET" if code == "ST" else "HOSTILE", "time": "", "alt": "", "kts": "", "leg": "", "win": "",
                                      "note": "Package ground target (navigation target point)" if code == "ST" else "Hostile area: nearest SAM site (navigation target point)"})

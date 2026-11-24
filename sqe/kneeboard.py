@@ -1,6 +1,6 @@
 """Kneeboard pages (PNG 768x1024), laid out like a printed form: shaded section bands, ruled rows, and exactly three type sizes.
 Page 1: comms ladder + waypoints (numbered the way YOUR jet's cockpit numbers them), the tolerances, the time zone and the minimum safe altitude (with the ground-height scan).
-Page 1b (plain F-14A / B only, S175): every route point the jet cannot hold, with its position, to enter by hand.
+Page 1 (plain F-14A / B, S175): a route point the jet cannot hold has its position on a line under its row; Page 1b only when those lines do not fit.
 Page 2: fuel, codes, weather, target lat/long, bullseye, package who's-who (with Link 16 STNs).
 Page 3: the other packages in the mission (own push / TOT), threats near the target, intelligence.
 Every clock time is hh:mm:ss. Text wraps only at logical breaks (after a comma or a sentence), never inside an item."""
@@ -143,49 +143,60 @@ def render_pages(outdir, ctx: dict) -> list:
     pages = []
 
     # ------------------------------------------------ page 1: comms + the times YOU must hit
-    f = _Form(head)
-    f.line(ctx["objective"][:60], color=DIM, gap=8)
-    if ctx.get("fc3"):                      # FC3 radios have no channels: just the frequencies
-        f.band("FREQUENCIES")
-        for e in list(ctx["comm1"].values()) + list(ctx["comm2"].values()):
-            f.row([(0, e.label), (12, f"{e.mhz:7.3f}"), (21, (e.callsign + " " + e.note).strip()[:40])], True)
-    else:
-        f.band("COMM 1 (UHF)")
-        for ch, e in ctx["comm1"].items():
-            f.row([(0, f"CH{ch}"), (4, e.label), (14, f"{e.mhz:7.3f}"), (23, ((e.callsign or e.note).replace("carrier control", "CVN")).strip()[:36])], True)
-        f.band("COMM 2 (VHF)")
-        for ch, e in ctx["comm2"].items():
-            f.row([(0, f"CH{ch}"), (4, "TOWER" if e.label == "ATC" else e.label), (14, f"{e.mhz:7.3f}"), (23, ((e.callsign or e.note).replace("carrier control", "CVN")).strip()[:36])], True)
-    f.band("", [(0, "WP"), (3, "NAME"), (12, "TIME"), (22, "ALT"), (29, "KTS"), (34, "HDG/NM")])
-    for r in ctx["waypoints"]:
-        hot = r["name"] in ("MSHL", "PUSH", "TGT", "SEAD", "CAP1")
-        f.row([(0, r["wp"]), (3, r["name"]), (12, hms(r["time"])), (22, r["alt"]), (29, r["kts"]), (34, r["leg"])], hot, gap=4)
-        if r["name"] == "TGT":
-            note = _tgt_note(r, bool(ctx.get("target_data")))
+    # S175: the plain F-14B's by-hand route points get their position on a line under their row ("-" in the WP column) when the page has
+    # room; if those lines would run off the bottom, page 1 is drawn again without them and they go on page 1b instead.
+    def draw_page_one(positions_inline):
+        f = _Form(head)
+        f.line(ctx["objective"][:60], color=DIM, gap=8)
+        if ctx.get("fc3"):                      # FC3 radios have no channels: just the frequencies
+            f.band("FREQUENCIES")
+            for e in list(ctx["comm1"].values()) + list(ctx["comm2"].values()):
+                f.row([(0, e.label), (12, f"{e.mhz:7.3f}"), (21, (e.callsign + " " + e.note).strip()[:40])], True)
         else:
-            note = " ".join(x for x in (r["win"], r["note"]) if x) if (hot or r["name"] in ("TKR", "RTB", "DIVERT", "TAKEOFF")) else ""
-        if note:
-            f.line(_tol(hms(note)), False, INK if hot else DIM, indent=3, gap=6)
-    f.band("NOTES")
-    num = str(ctx.get("numbering", "")).replace("...", "").rstrip(" .,")
-    notes = [f"{ctx['jet']} waypoint numbers: {num}.", "PUSH +/-30 s, TOT +/-1 min.", ctx.get("zulu_note", "Times are local.")]
-    if ctx.get("tkr_line"):
-        notes.append(ctx["tkr_line"])                   # S103d: the plain F-14B has no tanker waypoint
-    if ctx.get("detour_line"):
-        notes.append(ctx["detour_line"])                # S140c: the detour round the SAM rings (the AVD rows above)
-    if ctx.get("msa"):
-        notes.append(f"MSA {int(ctx['msa']):,} ft along the route.")
-    for note in notes:
-        f.line(note, color=DIM, gap=4)
-    if ctx.get("nav"):                      # v0.41.182 (XO 2026-10-28): the recovery block closes the page; at the top it read as part of the task line
-        f.band("RECOVERY: ILS / TACAN / ICLS")
-        for ln in ctx["nav"]:
-            f.line(ln, True, gap=2)
+            f.band("COMM 1 (UHF)")
+            for ch, e in ctx["comm1"].items():
+                f.row([(0, f"CH{ch}"), (4, e.label), (14, f"{e.mhz:7.3f}"), (23, ((e.callsign or e.note).replace("carrier control", "CVN")).strip()[:36])], True)
+            f.band("COMM 2 (VHF)")
+            for ch, e in ctx["comm2"].items():
+                f.row([(0, f"CH{ch}"), (4, "TOWER" if e.label == "ATC" else e.label), (14, f"{e.mhz:7.3f}"), (23, ((e.callsign or e.note).replace("carrier control", "CVN")).strip()[:36])], True)
+        f.band("", [(0, "WP"), (3, "NAME"), (12, "TIME"), (22, "ALT"), (29, "KTS"), (34, "HDG/NM")])
+        for r in ctx["waypoints"]:
+            hot = r["name"] in ("MSHL", "PUSH", "TGT", "SEAD", "CAP1")
+            f.row([(0, r["wp"]), (3, r["name"]), (12, hms(r["time"])), (22, r["alt"]), (29, r["kts"]), (34, r["leg"])], hot, gap=4)
+            if r["name"] == "TGT":
+                note = _tgt_note(r, bool(ctx.get("target_data")))
+            else:
+                note = " ".join(x for x in (r["win"], r["note"]) if x) if (hot or r["name"] in ("TKR", "RTB", "DIVERT", "TAKEOFF")) else ""
+            if note:
+                f.line(_tol(hms(note)), False, INK if hot else DIM, indent=3, gap=6)
+            if positions_inline and r.get("pos"):
+                f.line(r["pos"], False, INK, indent=3, gap=6)
+        f.band("NOTES")
+        num = str(ctx.get("numbering", "")).replace("...", "").rstrip(" .,")
+        notes = [f"{ctx['jet']} waypoint numbers: {num}.", "PUSH +/-30 s, TOT +/-1 min.", ctx.get("zulu_note", "Times are local.")]
+        if ctx.get("tkr_line"):
+            notes.append(ctx["tkr_line"])                   # S103d: the plain F-14B has no tanker waypoint
+        if ctx.get("detour_line"):
+            notes.append(ctx["detour_line"])                # S140c: the detour round the SAM rings (the AVD rows above)
+        if ctx.get("msa"):
+            notes.append(f"MSA {int(ctx['msa']):,} ft along the route.")
+        for note in notes:
+            f.line(note, color=DIM, gap=4)
+        if ctx.get("nav"):                      # v0.41.182 (XO 2026-10-28): the recovery block closes the page; at the top it read as part of the task line
+            f.band("RECOVERY: ILS / TACAN / ICLS")
+            for ln in ctx["nav"]:
+                f.line(ln, True, gap=2)
+        return f
+
+    f = draw_page_one(True)
+    hand_on_page_one = True
+    if ctx.get("hand_table") and f.y > H - 10:
+        f = draw_page_one(False)
+        hand_on_page_one = False
     pages.append(f.save(outdir / "1_comms_times.png"))
 
-    # ------------------------------------------------ page 1b (plain F-14A / B only): every route point the jet cannot hold, to enter by hand
-    # S175: all of them, in route order (degrees, minutes, thousandths: enter the minutes as they are). A flight with none has no page.
-    if ctx.get("hand_table"):
+    # ------------------------------------------------ page 1b (plain F-14A / B only, when page 1 has no room): every route point the jet cannot hold
+    if ctx.get("hand_table") and not hand_on_page_one:
         f = _Form(head)
         f.band("", [(0, "#"), (3, "ROUTE POINTS (ENTER BY HAND)"), (27, "LAT / LONG"), (53, "ALT")])
         for r in ctx["hand_table"]:
