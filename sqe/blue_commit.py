@@ -38,7 +38,7 @@ COMMIT_COOLDOWN_S = 120         # S160b: no recommit on the same group this long
 COMMIT_HURT_COOLDOWN_S = 300    # S160b: ...and this long after a flight lost a jet and broke off (reason hurt). Judgment call
 COMMIT_ALT_FT = 30000             # S168: the altitude blue's cover fighters fly at (F-15C 33,000 ft, the rest 25,000 to 30,000): the commit script's SAM rings are the rings against a jet this high (`samtier.ring_nm`)
 SAM_RING_MARGIN_NM = 3.0        # an enemy SAM ring counts this much bigger (scramble.STATION_RING_MARGIN_NM, the defender's margin)
-HAVCAP_REACH_NM = 25            # S160: a tanker / AWACS guard commits only this far (judgment call; its normal circle is the guard ring)
+HAVCAP_REACH_NM = 30            # S160: a tanker / AWACS guard commits only this far (judgment call; its normal circle is the guard ring). S176a (v0.41.616): was 25 (46 km); red's escorts fired R-27ERs first from 41 to 56 km in 8 of 14 HAVCAP fights while the guard committed at 42 to 43 km (37 server runs, `.claude/s176-barcap-havcap-evidence.md`); 30 nm = the base / carrier BARCAP reach. Judgment call
 HAVCAP_LEASH_NM = 30            # ...and never more than this from its station (judgment call: it must stay with what it guards)
 BARCAP_REACH_NM = 30            # S160c (T1fix7 Caucasus: two F-14BU carrier BARCAP jets, reach 45 nm, fought away from the fleet and died): a base / carrier BARCAP guard commits only this far (judgment call, like HAVCAP_REACH_NM)
 BARCAP_LEASH_FLEET_NM = 25      # ...and never more than this from its station. A carrier station is `barcap.STATION_FLEET_NM` 35 nm out; 35 + 25 = 60 nm from the boat stays inside the ships' SM-2 reach (`barcap.FLEET_REACH_NM` 78, measured p90 77.5 nm in S168). Judgment call
@@ -91,7 +91,7 @@ def _lua_string(text) -> str:
 
 def commit_lua(side, flights, sams) -> str:
     """The mission script for one side ("blue" or "red").
-    `flights`: [{"g": group name, "reach": m, "t0": s, "t1": s, optional "ax", "az", "leash" (m)}], `sams`: [(x, z, radius m)] of the ENEMY's cover."""
+    `flights`: [{"g": group name, "reach": m, "t0": s, "t1": s, optional "ax", "az", "leash" (m), optional "bx", "bz" (the far end of the patrol's race-track; the leash is round the segment)}], `sams`: [(x, z, radius m)] of the ENEMY's cover."""
     if side == "blue":
         own, enemy, table, ewr = "BLUE", "RED", "SQE_COMMIT_BLUE", "false"
     else:
@@ -99,9 +99,17 @@ def commit_lua(side, flights, sams) -> str:
     flight_rows = []
     for flight in flights:
         leash = int(flight.get("leash") or 0)
-        flight_rows.append("{g=%s, reach=%d, t0=%d, t1=%d, ax=%d, az=%d, leash=%d}" % (
+        anchor_x = int(flight.get("ax") or 0)
+        anchor_z = int(flight.get("az") or 0)
+        # S176a: the far end of the race-track; a flight without one has a leash round a point (both ends the same)
+        end_x = anchor_x
+        end_z = anchor_z
+        if flight.get("bx") is not None and flight.get("bz") is not None:
+            end_x = int(flight["bx"])
+            end_z = int(flight["bz"])
+        flight_rows.append("{g=%s, reach=%d, t0=%d, t1=%d, ax=%d, az=%d, bx=%d, bz=%d, leash=%d}" % (
             _lua_string(flight["g"]), int(flight["reach"]), int(flight["t0"]), int(flight["t1"]),
-            int(flight.get("ax") or 0), int(flight.get("az") or 0), leash))
+            anchor_x, anchor_z, end_x, end_z, leash))
     sam_rows = []
     for x, z, radius in sams:
         sam_rows.append("{%d, %d, %d}" % (int(x), int(z), int(radius)))
@@ -168,8 +176,21 @@ local function leashed(f)
   return f.leash and f.leash > 0
 end
 local function anchorDist(f, p)
-  local dx = p.x - f.ax
-  local dz = p.z - f.az
+  -- S176a: the leash is round the patrol's own race-track, the segment from its station (ax, az) to its far end (bx, bz): the distance to
+  -- the nearest point of that segment. Measured from the station alone, a base BARCAP (25 nm leg, 15 nm leash) could not commit for 40 % of a lap.
+  local end_x = f.bx or f.ax
+  local end_z = f.bz or f.az
+  local sx = end_x - f.ax
+  local sz = end_z - f.az
+  local length2 = sx * sx + sz * sz
+  local along = 0
+  if length2 > 0 then
+    along = ((p.x - f.ax) * sx + (p.z - f.az) * sz) / length2
+    if along < 0 then along = 0 end
+    if along > 1 then along = 1 end
+  end
+  local dx = p.x - (f.ax + along * sx)
+  local dz = p.z - (f.az + along * sz)
   return math.sqrt(dx * dx + dz * dz)
 end
 local NOWT = 0
