@@ -288,8 +288,10 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
   orbit, 6 refit), 8 KC-135s (4 hours on orbit, 3 refit) and 8 S-3Bs (2 hours, 3 refit). A package gets the AWACS and a tanker
   only if one is on orbit while it flies: a jet with a boom gets a KC-135, a probe-and-drogue jet (F-14, F/A-18C) the carrier's
   S-3B. A lost airframe is replaced slowly. Today the war sim does **not** take AWACS losses on its own (`AWACS_LOSS_ON` is off).
-* **Each of them has its own guard (HAVCAP).** One pair of fighters guards the E-3, the E-2C and the tanker for as long as the
-  asset is on orbit in the turn, flown by the HAVCAP squadron where there is one and by an ordinary fighter squadron otherwise. The
+* **Each of them has its own guard (HAVCAP).** Fighters guard the E-3, the E-2C and the tanker for as long as the
+  asset is on orbit in the turn. The HAVCAP squadron (8 F-15C) guards the land-based E-3 only: a four-ship when it has four jets
+  ready (four fly one turn, the other four the next), a pair when it has fewer. The tankers and the carrier's E-2C get a guard pair
+  from the ordinary fighter squadrons, as does the E-3 when the HAVCAP squadron has no jets ready. The
   guard goes up in the last wave that opens before the asset's window starts (the first wave when the asset is up already), or in a later
   wave when no pair is ready sooner.
   Every package that carries the asset carries its guard. The pair can refuel on the orbit.
