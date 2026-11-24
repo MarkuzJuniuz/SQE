@@ -131,7 +131,7 @@ of scripted jamming in DCS missions is not SQE's: it goes back to the "Complete 
 and the campaign tool DCS Retribution offers an electronic warfare script as a plugin. SQE uses no code from either; its script was written for SQE from a description of the
 effect.
 
-**Experimental: Fly on the local DCS dedicated server** (Settings > Mission Build, off by default). The idea: the server runs the same mission with the AI at real time and without
+**Experimental: Fly on the local DCS dedicated server** (Settings > DCS Integration, off by default). The idea: the server runs the same mission with the AI at real time and without
 a screen, so it may carry bigger missions than the game on its own, and you join it as a client at 127.0.0.1:10308 (no password). It needs the MissionScripting patch, the
 `DCS_Server` profile folder (start the dedicated server once by hand so DCS creates it), a free port 10308 and real time only: no time acceleration. SQE keeps your own
 `serverSettings.lua` in a backup, and puts it back when the server stops. With the option on, your flight lead gets a client slot (a mission built that way can be flown on a

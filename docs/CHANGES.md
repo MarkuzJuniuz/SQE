@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.646, the dedicated-server option moves to the DCS Integration tab
+"Fly on the Local DCS Dedicated Server (Experimental)" was a checkbox far down the Mission Build tab; it is now at the bottom of the DCS Integration tab, with the other DCS settings.
+
 ## v0.41.645, one command for the smoke test
 `tools\smoke_test.bat` runs the self-test from any folder using the project's `.venv` (it makes the venv first if it is missing). Extra arguments are passed on, e.g. `--only locks`.
 
