@@ -314,6 +314,25 @@ def terrain():
     return cls()
 
 
+_EDGES_CACHE = {}
+
+
+def map_edges(terrain_object=None) -> tuple:
+    """(top, bottom, left, right) of the map in DCS metres (x runs north, y east): the active pack's `map_box` {x0, x1, y0, y1} (S90 J8: pydcs's Syria bounds have top below bottom and stop short of Jordan),
+    else the terrain's own bounds with top the larger x (the Caucasus). S191: lives here so code that has only the state (the AWACS station) can ask without a mission builder; the mission builder
+    passes the terrain it already holds. Without one, the answer is worked out once per theatre."""
+    box = hook("map_box")
+    if box is not None:
+        return float(box["x1"]), float(box["x0"]), float(box["y0"]), float(box["y1"])
+    if terrain_object is None:
+        theatre_id = active()["id"]
+        if theatre_id not in _EDGES_CACHE:
+            _EDGES_CACHE[theatre_id] = map_edges(terrain())
+        return _EDGES_CACHE[theatre_id]
+    bounds = terrain_object.bounds
+    return max(bounds.top, bounds.bottom), min(bounds.top, bounds.bottom), bounds.left, bounds.right
+
+
 def geo() -> dict:
     """Coarse coastline, lakes and borders for the active theatre (map view and the fallback land test)."""
     d = active()

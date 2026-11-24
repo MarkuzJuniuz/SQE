@@ -300,7 +300,8 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
 * **The AWACS sits on one fixed safe station** (behind the front, from the rear base: Kutaisi on the Caucasus, Paphos on Syria), not near you or your target. The tanker sits
   forward on the way home, clear of SAM rings and red's scramble circles.
 * **Both keep clear of red's raids.** The tanker's track stays at least 50 nm from the routes a red raid flies, and 100 nm from the route of a red fighter sweep; the AWACS
-  station moves back (up to 60 nm) when a raid booked that turn passes within 40 nm of it, or a sweep within 100 nm; if no spot behind it is clear it stays where it was. In the
+  station moves away (searching behind the rear base and to either side, up to 150 nm, never nearer to red and never off the map) when a raid booked that turn passes within 40 nm of
+  it, or a sweep within 100 nm; if no spot is clear it takes the best one it found, and the build warns. In the
   air, either one turns away when an enemy fighter comes within 60 nm: it flies 40 nm straight away from it and orbits there, and goes back to its track after 5 quiet minutes
   with no fighter within 80 nm. Red's sweeps do hunt them (a sweep can go 100 nm or more from its own bombers), and a tanker cannot outrun a fighter that is already close.
 
