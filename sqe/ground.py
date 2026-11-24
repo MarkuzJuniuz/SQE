@@ -35,6 +35,11 @@ MAX_FORCE = 100.0
 SUPPLY_KINDS = (AssetKind.FUEL, AssetKind.DEPOT)
 
 
+# S150: the sort keys this module uses (they were lambdas)
+def _asset_id(asset):
+    return asset.id
+
+
 def fi_site(state, a) -> bool:
     """A site of red's Force Index stock: a supply site, plus (S131) the works of a campaign that counts them (`ground["sup_works"]`). Their nightly repair stays `is_supply` only."""
     if is_supply(a):
@@ -156,10 +161,13 @@ def build(state, th, d, rng, ap) -> None:
         a_, b_ = nodes[k]["name"], nodes[k + 1]["name"]
         names += [f"{a_} - {b_}" if cnt == 1 else f"{a_} - {b_} {j + 1}/{cnt}" for j in range(cnt)]
     red0, blue0 = _initial(d, n, int(th["front"].get("rear_zones", 0) or 0))
-    off = lambda k: sum(legs[:k])
+    def off(k):
+        return sum(legs[:k])
     rbases = [{"id": nd["red"], "name": nd["name"], "zone": off(k), "x": axis[k][0], "y": axis[k][1]} for k, nd in enumerate(nodes) if nd.get("red")]
     order = {sid: i for i, sid in enumerate(stages)}
-    rbases.sort(key=lambda r: order.get(r["id"], 99))                      # in the order we take them
+    def take_order(r):
+        return order.get(r["id"], 99)
+    rbases.sort(key=take_order)                      # in the order we take them
     fall = {str(off(k) - 1): nd["blue"] for k, nd in enumerate(nodes) if nd.get("blue") and off(k) >= 1}
     fr = th["front"]
     state.ground = {"v": GROUND_V, "axis": axis, "legs": legs, "centers": centers, "names": names, "red": red0, "blue": blue0,
@@ -368,7 +376,7 @@ def rebuild_blue(state, d, rng) -> list:
     out = []
     sup = supply(state, "blue")
     fallen = set((state.ground or {}).get("fallen", []))
-    for a in sorted(state.blue_assets.values(), key=lambda a: a.id):
+    for a in sorted(state.blue_assets.values(), key=_asset_id):
         if a.health > 0.05 or (a.guards and a.guards in fallen):
             continue
         if rng.random() < d.blue_rebuild * sup:
@@ -391,7 +399,9 @@ def ensure(state) -> bool:
             return False
         t = theatres.terrain()
         d = get_difficulty(state.level)
-        build(state, th, d, random.Random(state.campaign_id), lambda n: t.airports[n].position)
+        def airport_position(n):
+            return t.airports[n].position
+        build(state, th, d, random.Random(state.campaign_id), airport_position)
         return True
     except Exception:
         state.ground = {}
@@ -697,7 +707,9 @@ def _red_cas(state, d, rng, red, blue, n, sg) -> list:
     from . import redair, tempo
     from .loadouts import ENEMY_FIGHTERS
     out = []
-    face = lambda: [i for i in range(n) if blue[i] >= MIN_FORCE and (red[i] >= MIN_FORCE or (i > 0 and red[i - 1] >= MIN_FORCE))]      # blue sectors facing red
+    def face():
+        return [i for i in range(n) if blue[i] >= MIN_FORCE and (red[i] >= MIN_FORCE or (i > 0 and red[i - 1] >= MIN_FORCE))]
+    # blue sectors facing red
     if not face() or not getattr(state, "enemy_air", None):
         return out
     wings = [w for w in state.enemy_air if w.base_asset_id in state.assets]
@@ -707,7 +719,8 @@ def _red_cas(state, d, rng, red, blue, n, sg) -> list:
             break
         i = min(fc)                                                     # the front-most blue sector facing red
         cx, cy = state.ground["centers"][i]
-        dist = lambda w, cx=cx, cy=cy: ((state.assets[w.base_asset_id].x - cx) ** 2 + (state.assets[w.base_asset_id].y - cy) ** 2) ** 0.5
+        def dist(w, cx=cx, cy=cy):
+            return ((state.assets[w.base_asset_id].x - cx) ** 2 + (state.assets[w.base_asset_id].y - cy) ** 2) ** 0.5
         at = [w for w in sorted(wings, key=dist) if w.available_of(RED_ATTACK_TYPES) >= 2 and redair.can(state, w.base_asset_id, 2)]
         if not at:
             continue
@@ -1176,7 +1189,9 @@ def apply_red_fall(state, rb) -> list:
     if w is not None and w.sqns:
         dests = [x for x in state.enemy_air if x is not w and not state.assets[x.base_asset_id].destroyed]
         fx, fy = rb["x"], rb["y"]
-        dest = min(dests, key=lambda x: (state.assets[x.base_asset_id].x - fx) ** 2 + (state.assets[x.base_asset_id].y - fy) ** 2) if dests else None
+        def wing_distance_squared(x):
+            return (state.assets[x.base_asset_id].x - fx) ** 2 + (state.assets[x.base_asset_id].y - fy) ** 2
+        dest = min(dests, key=wing_distance_squared) if dests else None
         total = sum(q.available + q.reserve for q in w.sqns)
         if dest is None:
             w.sqns.clear(); w.squadrons = 0
@@ -1209,8 +1224,10 @@ def apply_fall(state, bid: str) -> list:
             continue
         lost = int(round(sq.available * FALL_LOSS))
         sq.available = max(0, sq.available - lost)
+        def field_distance_squared(x):
+            return (x.x - b.x) ** 2 + (x.y - b.y) ** 2
         dest = (landing_field(state, b.x, b.y, sq, sq.available + sq.reserve, others, diverts)
-                or min(others or diverts, key=lambda x: (x.x - b.x) ** 2 + (x.y - b.y) ** 2))       # the nearest standing field with room, a divert field only as the last resort (Phase 9b, XO 2026-11-10); none has room: the nearest (as before)
+                or min(others or diverts, key=field_distance_squared))       # the nearest standing field with room, a divert field only as the last resort (Phase 9b, XO 2026-11-10); none has room: the nearest (as before)
         sq.home_id = sq.home_id or bid                                      # v0.41.243: remembered, so it flies back when this field is retaken
         sq.base_id = dest.id
         lines.append(f"   {sq.name} withdraws to {dest.name}, {lost} aircraft lost" + _settle(state, sq, math.hypot(dest.x - b.x, dest.y - b.y)))
@@ -1225,7 +1242,9 @@ def field_with_room(state, x: float, y: float, sq, jets: int, fields) -> object:
     for q in state.squadrons.values():
         if q is not sq:
             held[q.base_id] = held.get(q.base_id, 0) + q.authorized
-    for f in sorted(fields, key=lambda f: (math.hypot(f.x - x, f.y - y), f.id)):
+    def distance_then_id(f):
+        return (math.hypot(f.x - x, f.y - y), f.id)
+    for f in sorted(fields, key=distance_then_id):
         cap = _parking(f.airport, sq.aircraft) if f.airport else None
         if cap is None or cap - held.get(f.id, 0) >= jets:
             return f
