@@ -110,6 +110,11 @@ def reachable(state, a) -> bool:
     return False
 
 
+# Sort key for a list of (priority, asset) rows: highest priority first, the asset id breaks a tie.
+def priority_then_asset_id(row):
+    return (-row[0], row[1].id)
+
+
 def targets(state, skip=frozenset()) -> list:
     """[(priority, asset)] best first: live red EWRs and SAM sites of the long-range kind (a ring of 10 nm or more, the DEAD planner's own filter) that red air does not cover."""
     from . import ground, threatmap as tm
@@ -130,7 +135,7 @@ def targets(state, skip=frozenset()) -> list:
             continue
         pr = a.value * a.health * (2.0 if a.variant in MIN_VALUE_VARIANTS else 1.0)
         out.append((pr, a))
-    out.sort(key=lambda t: (-t[0], t[1].id))
+    out.sort(key=priority_then_asset_id)
     return out
 
 
@@ -146,7 +151,7 @@ def runway_targets(state, skip=frozenset()) -> list:
         if w is None or w.available <= 0 or covered(state, a.x, a.y, own=a.id) or not reachable(state, a):
             continue
         out.append((a.value * 0.9 * (w.available / max(1, w.authorized)), a))
-    out.sort(key=lambda t: (-t[0], t[1].id))
+    out.sort(key=priority_then_asset_id)
     return out
 
 
@@ -162,7 +167,7 @@ def objectives(state, skip=frozenset()) -> list:
     first_night = not clock.is_night_turn(state.turn - 1)                 # the runway strike is offered on the FIRST turn of the night only: at most one a night (a field cratered every night stays shut, and the first probe flew two a night)
     cands = [(pr, a, "F117") for pr, a in targets(state, skip)[:n]] + ([(pr, a, "RUNWAY") for pr, a in runway_targets(state, skip)[:1]] if first_night else [])
     out = []
-    for pr, a, aim in sorted(cands, key=lambda c: (-c[0], c[1].id))[:n]:
+    for pr, a, aim in sorted(cands, key=priority_then_asset_id)[:n]:
         if aim == "RUNWAY":
             out.append(Objective("", ObjectiveType.STRIKE, a.id, pr, f"Night OCA: Runway Strike, {a.name} (F-117A, no other red patrol can reach it)", "RUNWAY"))
         else:
@@ -232,12 +237,16 @@ def opening_picks(state, os_: dict, base, n: int) -> list:
     """The assets the leftover pairs of the opening strike go after: the pack's `fill` kinds taken in turn (an SA variant of `scenario.SAM_VALUE`, dash and case free, or "EWR" = any early-warning radar), one site
     per pair. Within a kind: deepest first (`tier` high to low), then farthest from the squadron's base, then id (no rng). Judgment call: the F-117 went for the deep, heavily defended targets (Baghdad 1991, from
     memory, medium firmness); the front belt is the SEAD / HARM job of the day's packages. Column air defence (`fsam_`) and sites already down are never picked."""
+    # Deepest (highest tier) first, then the farthest from the base, then the asset id.
+    def highest_tier_farthest_first(asset):
+        return (-asset.tier, -math.hypot(asset.x - base.x, asset.y - base.y), asset.id)
+
     by_kind = []
     for k in os_.get("fill") or []:
         want = k.replace("-", "").lower()
         c = [a for a in state.assets.values() if not a.destroyed and not a.id.startswith("fsam_")
              and ((a.kind == AssetKind.EWR) if want == "ewr" else (a.kind == AssetKind.SAM and a.variant.replace("-", "").lower() == want))]
-        c.sort(key=lambda a: (-a.tier, -math.hypot(a.x - base.x, a.y - base.y), a.id))
+        c.sort(key=highest_tier_farthest_first)
         by_kind.append(c)
     out = []
     while len(out) < n and any(by_kind):
@@ -256,10 +265,21 @@ def opening_sortie(state, os_: dict, hit: list) -> list:
     from . import refit, sams
     from .aircraft import AIRCRAFT
     qs = [q for q in squadrons(state) if q.available >= 2 and state.bases.get(q.base_id) is not None]
-    q = sorted(qs, key=lambda q: q.id)[0] if qs else None
+    def squadron_id(squadron):
+        return squadron.id
+
+    q = sorted(qs, key=squadron_id)[0] if qs else None
     base = state.bases[q.base_id] if q else None
-    dist = (lambda a: math.hypot(a.x - base.x, a.y - base.y)) if q else (lambda a: 0.0)
-    sites = sorted(hit, key=lambda a: (-a.tier, -dist(a), a.id))
+    # How far a site is from the squadron's base (0 when no squadron can fly).
+    def dist(a):
+        if not q:
+            return 0.0
+        return math.hypot(a.x - base.x, a.y - base.y)
+
+    def tier_then_far_then_id(asset):
+        return (-asset.tier, -dist(asset), asset.id)
+
+    sites = sorted(hit, key=tier_then_far_then_id)
     pairs = q.available // 2 if q else 0
     fill = opening_picks(state, os_, base, pairs - len(sites)) if q and pairs > len(sites) else []
     for a in fill:

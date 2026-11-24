@@ -54,11 +54,25 @@ class DormantSites:
             return
         st = self.state
         poly = self._poly
-        key = (lambda a: tm.poly_dist(a.x, a.y, poly)) if poly else (lambda a: dist(a.x, a.y, tx, ty))
+        # How far a site is from the route (when there is one) or else from the target.
+        def distance_from_route(asset):
+            return tm.poly_dist(asset.x, asset.y, poly)
+
+        def distance_from_target(asset):
+            return dist(asset.x, asset.y, tx, ty)
+
+        if poly:
+            key = distance_from_route
+        else:
+            key = distance_from_target
+
+        def distance_then_id(asset):
+            return (key(asset), asset.id)
+
         for kind in (AssetKind.EWR, AssetKind.SAM):
             if kind not in kinds:
                 continue
-            cands = sorted((a for a in st.assets.values() if a.kind == kind and not a.destroyed and a.id not in self.groups_by_asset and SITES.get(a.variant)), key=lambda a: (key(a), a.id))
+            cands = sorted((a for a in st.assets.values() if a.kind == kind and not a.destroyed and a.id not in self.groups_by_asset and SITES.get(a.variant)), key=distance_then_id)
             for a in cands:
                 self._spawn_site(a, SITES[a.variant], manifest, primary=False)
                 if kind == AssetKind.SAM:
@@ -74,8 +88,12 @@ class DormantSites:
         if not (self.o.dormant_sites and self.o.base_defenses):
             return
         st = self.state
+        # Nearest to the target first.
+        def distance_to_target(base):
+            return dist(base.x, base.y, tx, ty)
+
         fields = sorted((b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD and b.id not in self.apt and b.airport in self.t.airports),
-                        key=lambda b: dist(b.x, b.y, tx, ty))
+                        key=distance_to_target)
         for b in fields:
             self._place_base(b, tx, ty, dormant=True)
             self._dormant_fields.append(b.id)
@@ -98,7 +116,10 @@ class DormantSites:
     @staticmethod
     def _s89_tick_lua(names, flags) -> str:
         """S89: the mission-time tick script (every 10 s: how many dormant groups exist, i.e. were woken once, and how many are asleep again)."""
-        q = lambda n: "[==[" + n.replace("]==]", "]=]") + "]==]"
+        # A Lua long-string literal for a name.
+        def q(n):
+            return "[==[" + n.replace("]==]", "]=]") + "]==]"
+
         lines = ["local N={" + ",".join(q(n) for n in names) + "}",
                  "local FS={" + ",".join("[ " + q(n) + " ]=%d" % f for n, f in flags.items()) + "}",
                  "local function tick(_, t)",
@@ -170,7 +191,10 @@ class DormantSites:
         extra_dets, klass = [], None
         if left:
             sams = [a for a in self._dormant_assets(AssetKind.SAM) if tm.RANGE_NM.get(a.variant, 0) > 0]
-            best = max(sams, key=lambda a: tm.RANGE_NM[a.variant]) if sams else None
+            def sam_range_nm(asset):
+                return tm.RANGE_NM[asset.variant]
+
+            best = max(sams, key=sam_range_nm) if sams else None
             sam_r = (tm.RANGE_NM[best.variant] + WAKE_MARGIN_NM) if best is not None else 0
             if sam_r > 0 and sam_r > (BARCAP_DETECT_NM if self._bandit_stations else 0):
                 klass = "SAM"
@@ -243,7 +267,11 @@ class DormantSites:
 
         used = n_sl = capped = 0
         sleep_flags = self._s89_sleep_flags = {}                         # group name -> its "asleep" flag, for the tick script
-        for g, x, y, en in sorted(groups, key=lambda t: _route_dist(poly, t[1], t[2])):
+        # Nearest to the route first.
+        def group_route_distance(group_row):
+            return _route_dist(poly, group_row[1], group_row[2])
+
+        for g, x, y, en in sorted(groups, key=group_route_distance):
             zs = covers.get(g.id, [])
             if not zs:
                 continue
@@ -257,7 +285,10 @@ class DormantSites:
             fa, fo, fs = self._flag_n - 2, self._flag_n - 1, self._flag_n
             for tg in wakers.get(g.id, []):
                 tg.add_action(action.SetFlag(fa))
-            out_all = lambda: [condition.AllOfCoalitionOutsideZone(en, z) for z in zs]
+            # The "every enemy is outside every ring" conditions of this group.
+            def out_all():
+                return [condition.AllOfCoalitionOutsideZone(en, z) for z in zs]
+
             cont(f"S89 outside timer start {g.name}", [condition.FlagIsTrue(fa), condition.FlagIsFalse(fs), condition.FlagIsFalse(fo)] + out_all(), [action.SetFlag(fo)])
             cont(f"S89 sleep {g.name}", [condition.FlagIsTrue(fa), condition.FlagIsTrue(fo), condition.FlagIsFalse(fs), condition.TimeSinceFlag(fo, 30)] + out_all(),
                  [action.GroupAIOff(g.id), action.SetFlag(fs), action.ClearFlag(fo)] + self._s89_log("sleep", g.name))

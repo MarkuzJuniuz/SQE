@@ -9,6 +9,12 @@ from dcs import planes
 from .models import Role, BaseKind, RefuelMethod
 
 
+# Default cruise altitude per role for a new RouteProfile (a dataclass default must be built by a function, so each profile gets its own dict).
+def _default_alt_ft() -> dict:
+    return {Role.STRIKE: 20000, Role.SEAD: 25000, Role.TARCAP: 24000,
+            Role.ESCORT: 26000, Role.SWEEP: 26000, Role.CAS: 9000}
+
+
 @dataclass
 class RouteProfile:
     """Altitudes (ft) and ground speeds (kts) for the route planner. Waypoint speeds are ground speed."""
@@ -23,8 +29,7 @@ class RouteProfile:
     cap_kts: int = 380
     cover_kts: int = 0               # S157: the TARCAP / escort / sweep station speed (0 = cap_kts); the BARCAP / support orbits keep cap_kts
     cap_leg_nm: int = 25
-    alt_ft: dict = field(default_factory=lambda: {Role.STRIKE: 20000, Role.SEAD: 25000, Role.TARCAP: 24000,
-                                                  Role.ESCORT: 26000, Role.SWEEP: 26000, Role.CAS: 9000})
+    alt_ft: dict = field(default_factory=_default_alt_ft)
     push_kts: int = 500
     ip_kts: int = 510
     attack_kts: int = 510

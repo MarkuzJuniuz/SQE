@@ -196,14 +196,20 @@ class EnemyAirWing:
             room = [q for q in self.sqns if not q.reserve and q.available < q.authorized]
             if not room:
                 break
-            max(room, key=lambda q: q.authorized - q.available).available += 1
+            def free_places(squadron):
+                return squadron.authorized - squadron.available
+
+            max(room, key=free_places).available += 1
 
     @staticmethod
     def _take_from(qs) -> bool:
         have = [q for q in qs if q.available > 0]
         if not have:
             return False
-        max(have, key=lambda q: q.available).available -= 1
+        def jets_ready(squadron):
+            return squadron.available
+
+        max(have, key=jets_ready).available -= 1
         return True
 
     @property
@@ -256,7 +262,10 @@ class EnemyAirWing:
             room = [q for q in self.sqns if not q.reserve and q.aircraft not in skip and q.available + len(q.refit) < q.authorized]
             if not room:
                 break
-            max(room, key=lambda q: q.authorized - q.available - len(q.refit)).available += 1
+            def free_places_after_refit(squadron):
+                return squadron.authorized - squadron.available - len(squadron.refit)
+
+            max(room, key=free_places_after_refit).available += 1
 
     def scatter(self, frac: float) -> None:
         """A cratered field: each squadron keeps int(available * frac) jets."""
@@ -268,7 +277,11 @@ def _spread(total: int, weights: list) -> list:
     """Split `total` over `weights` in proportion (largest remainder), never more than the weight itself."""
     s = sum(weights) or 1
     out = [min(w, int(total * w / s)) for w in weights]
-    for i in sorted(range(len(weights)), key=lambda i: -(total * weights[i] / s - out[i])):
+    # Biggest remainder first.
+    def remainder_first(i):
+        return -(total * weights[i] / s - out[i])
+
+    for i in sorted(range(len(weights)), key=remainder_first):
         if sum(out) >= total:
             break
         if out[i] < weights[i]:

@@ -154,7 +154,11 @@ def facing_area(state, side: str, asset_id: str, toward_xy: tuple):
     if not areas:
         return None
     want = bearing(areas[0]["ax"], areas[0]["ay"], toward_xy[0], toward_xy[1])
-    return min(areas, key=lambda a: (_angdiff(a["bearing"], want), a["id"]))
+    # Closest to the wanted bearing; the area id breaks a tie.
+    def bearing_gap_then_id(area):
+        return (_angdiff(area["bearing"], want), area["id"])
+
+    return min(areas, key=bearing_gap_then_id)
 
 
 def ensure(state) -> dict:

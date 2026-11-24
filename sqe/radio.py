@@ -18,12 +18,21 @@ from .aircraft import AIRCRAFT
 from .models import BaseKind
 
 
+# Default radio presets (a dataclass default must be built by a function, so each layout gets its own dict).
+def _default_comm1() -> dict:
+    return {1: "AWACS", 2: "TANKER1", 3: "JTAC", 4: "TANKER2"}
+
+
+def _default_comm2() -> dict:
+    return {1: "FLIGHT", 2: "ATC", 3: "DIVERT"}
+
+
 @dataclass
 @_dc
 class RadioLayout:
     """Your fixed preset layout. COMM1 CH3 (JTAC) and CH4 (second tanker) appear only when the mission has them."""
-    comm1: dict = field(default_factory=lambda: {1: "AWACS", 2: "TANKER1", 3: "JTAC", 4: "TANKER2"})
-    comm2: dict = field(default_factory=lambda: {1: "FLIGHT", 2: "ATC", 3: "DIVERT"})
+    comm1: dict = field(default_factory=_default_comm1)
+    comm2: dict = field(default_factory=_default_comm2)
     optional: frozenset = frozenset({"JTAC", "TANKER2"})
     comm1_radio_id: int = 1
     comm2_radio_id: int = 2

@@ -108,7 +108,11 @@ def reaction_draw(state, side: str, package, rng=None) -> list:
             wings.append((nm, w.base_asset_id, w, types))
     out = []
     for _ in range(REACTION_PAIRS):
-        for nm, _b, w, types in sorted(wings, key=lambda x: (x[0], x[1])):
+        # Wing name, then base id.
+        def name_then_base(row):
+            return (row[0], row[1])
+
+        for nm, _b, w, types in sorted(wings, key=name_then_base):
             sq = pick_red_hold(state, w, drawn, types)
             if sq is not None:
                 out.append((sq, 2))

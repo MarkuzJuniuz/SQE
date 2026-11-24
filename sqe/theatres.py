@@ -149,7 +149,10 @@ def _check_hooks(d: dict, src) -> None:
                 bad(f"win_supply level {lv} must be {{\"below\": a number above 0 and up to 1, \"days\": a whole number of days, 1 or more}}")
     if "works" in d:                                                  # S111: Lutorin's works (works.py)
         w = d["works"]
-        num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+        # A real number (a bool is not one here).
+        def num(v):
+            return isinstance(v, (int, float)) and not isinstance(v, bool)
+
         if not isinstance(w, dict) or set(w) - {"label", "damage", "levels", "sites"}:
             bad("works takes only label, damage, levels and sites")
         if "label" in w and not isinstance(w["label"], str):

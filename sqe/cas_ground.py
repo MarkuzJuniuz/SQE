@@ -255,7 +255,11 @@ class CasGround:
             if d_ <= R:
                 cands.append((d_, i, a))
         built = 0
-        for d_, i, a in sorted(cands, key=lambda c_: c_[0]):
+        # Nearest candidate first.
+        def candidate_distance(candidate):
+            return candidate[0]
+
+        for d_, i, a in sorted(cands, key=candidate_distance):
             if built >= self.FRONT_BATTLES_MAX:
                 break
             rs, bs = ground.red_strength(st, i), ground.blue_strength(st, i)

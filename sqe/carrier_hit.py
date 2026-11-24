@@ -24,7 +24,11 @@ def big(state, d, rng):
         return None
     lines = [f"   MISSILES HIT {cv.name}: the flight deck is torn up"]
     total = 0
-    for sq in sorted((s for s in state.squadrons.values() if s.base_id == cv.id and s.available > 0), key=lambda s: s.id):
+    # Squadron id order, so the losses are rolled in the same order every time.
+    def squadron_id(squadron):
+        return squadron.id
+
+    for sq in sorted((s for s in state.squadrons.values() if s.base_id == cv.id and s.available > 0), key=squadron_id):
         lost = min(sq.available, max(1, round(sq.available * rng.uniform(*SQN_LOSS))))
         sq.available -= lost
         total += lost

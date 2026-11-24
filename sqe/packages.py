@@ -570,7 +570,11 @@ class PackageBuilder:
             # S60 (XO 2026-11-12: EWR strikes are stand-off only): the strike slot takes the kit of the first airframe in EWR_KIT_ORDER that has a squadron with 2+ free jets in range for it (the PEN kit's
             # reach is shorter). None: the package cannot be built, the EWR waits (no GBU fallback). S68: a player's build gets the kit of his own airframe (F-16C JSOW-A, Hornet SLAM-ER); an airframe with no kit gets no EWR strike (NoPlayerSlot below).
             pac_ = st.squadrons[st.player.squadron_id].aircraft if (for_player and st.player) else None        # S68 (XO 2026-11-12: the mission is the same for a person): a player's own airframe is tried first, so he flies the kit slot too
-            for ac_, kit_ in sorted(EWR_KIT_ORDER, key=lambda e_: e_[0] != pac_):
+            # The player's own airframe is tried first; the others keep the EWR_KIT_ORDER order.
+            def not_players_airframe(entry):
+                return entry[0] != pac_
+
+            for ac_, kit_ in sorted(EWR_KIT_ORDER, key=not_players_airframe):
                 if any(sq_.aircraft == ac_ and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty, kit_) for sq_ in st.squadrons.values()):
                     s_ = next(s_ for s_ in slots if s_.role == Role.STRIKE)
                     s_.kit, s_.only = kit_, ac_
@@ -601,7 +605,10 @@ class PackageBuilder:
                     ok = [i for i in ok if slots[i].role != Role.CAS]
             if not ok:
                 raise NoPlayerSlot(f"{psq.name} cannot fly any role in: {obj.description}")
-            player_idx = max(ok, key=lambda i: PLAYER_ROLE_PREFERENCE[slots[i].role])
+            def slot_preference(slot_index):
+                return PLAYER_ROLE_PREFERENCE[slots[slot_index].role]
+
+            player_idx = max(ok, key=slot_preference)
             if obj.type == ObjectiveType.CAS and psq.aircraft not in HOG_KEYS:      # v0.41.188: a Hornet / Viper pilot picking a CAS job flies the Maverick slot, not the escort
                 cas_ = [i for i in ok if slots[i].role == Role.CAS]
                 player_idx = cas_[0] if cas_ else player_idx
@@ -747,7 +754,11 @@ class PackageBuilder:
         from . import support_assets as sa_
         out = [SupportPlan("AWACS", awacs.dcs_class, awacs.label, awacs.altitude_ft, awacs.speed_kts)]
         methods: list = []
-        for f in sorted((f for f in pkg.flights if not f.tag), key=lambda f: f is not lead):
+        # The lead flight first, the others keep their order.
+        def not_lead(flight):
+            return flight is not lead
+
+        for f in sorted((f for f in pkg.flights if not f.tag), key=not_lead):
             m = AIRCRAFT[f.aircraft].refuel
             if m not in methods:
                 methods.append(m)
@@ -776,7 +787,10 @@ class PackageBuilder:
         opts = pkg.player_options(pp.aircraft)
         if not opts:
             raise NoPlayerSlot("package has no flight your aircraft can fly")
-        chosen = (max(opts, key=lambda f: PLAYER_ROLE_PREFERENCE[f.role]) if flight_id is None
+        def flight_preference(flight):
+            return PLAYER_ROLE_PREFERENCE[flight.role]
+
+        chosen = (max(opts, key=flight_preference) if flight_id is None
                   else next((f for f in opts if f.id == flight_id), None))
         if chosen is None:
             raise NoPlayerSlot(f"{flight_id} is not a flight you can fly in this package")

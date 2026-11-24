@@ -108,14 +108,23 @@ def band_spot(state, max_move_km: float | None) -> tuple | None:
     band_m = float((theatres.active().get("carrier") or {}).get("carrier_band_km", BAND_KM)) * 1000.0
     best = min(allp)                                                 # the best spot anywhere (nearest the front), not what is in reach today
     cap_m = stand_m + BAND_FIELD_NM * NM
-    nearest_red = lambda x, y: min(math.hypot(x - fx, y - fy) for fx, fy in fields) if fields else 0.0
-    ok_band = lambda x, y: math.hypot(x - best[1], y - best[2]) <= band_m and nearest_red(x, y) <= cap_m
+    # Distance from a point to the nearest red field (0 when red has none).
+    def nearest_red(x, y):
+        return min(math.hypot(x - fx, y - fy) for fx, fy in fields) if fields else 0.0
+
+    # A spot inside the band around the best spot and within reach of the red fields.
+    def ok_band(x, y):
+        return math.hypot(x - best[1], y - best[2]) <= band_m and nearest_red(x, y) <= cap_m
+
     in_band = ok_band(cv.x, cv.y)
     reach = (max_move_km * 1000.0) if max_move_km is not None else 1e12
     near = [s for s in allp if math.hypot(s[1] - cv.x, s[2] - cv.y) <= reach]
     pool = sorted((s[1], s[2]) for s in near if ok_band(s[1], s[2]))
     if not pool:                                                    # the band is out of reach today (back from a run): the reachable spot nearest the front, and on the next day again
-        return (min(near, key=lambda s: s[0])[1:], False) if near else None
+        def spot_cost(spot):
+            return spot[0]
+
+        return (min(near, key=spot_cost)[1:], False) if near else None
     return random.Random(f"{state.campaign_id}:{state.day // BAND_DAYS}:cv").choice(pool), in_band
 
 
@@ -145,12 +154,21 @@ def evade(state) -> str | None:
     if not fields:
         return None
     need_m = evade_nm(state) * NM
-    near = lambda x, y: min(math.hypot(x - fx, y - fy) for fx, fy in fields)
+    # Distance from a point to the nearest red field.
+    def near(x, y):
+        return min(math.hypot(x - fx, y - fy) for fx, fy in fields)
+
     if near(cv.x, cv.y) >= need_m:
         return None
     cand = [(x, y) for _, x, y in _all_spots(state, EVADE_MOVE_KM, fields, 0.0)]
     ok = [(x, y) for x, y in cand if near(x, y) >= need_m]
-    spot = min(ok, key=lambda p: math.hypot(p[0] - cv.x, p[1] - cv.y)) if ok else (max(cand, key=lambda p: near(*p)) if cand else None)
+    def distance_from_carrier(point):
+        return math.hypot(point[0] - cv.x, point[1] - cv.y)
+
+    def distance_to_red(point):
+        return near(*point)
+
+    spot = min(ok, key=distance_from_carrier) if ok else (max(cand, key=distance_to_red) if cand else None)
     if spot is None or near(*spot) <= near(cv.x, cv.y) + 1000.0:
         return None
     moved = math.hypot(spot[0] - cv.x, spot[1] - cv.y) / 1000.0

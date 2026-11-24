@@ -98,7 +98,10 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
     btg = ", ".join(f"[{_lq(k)}]={{x={float(v[0]):.1f}, z={float(v[1]):.1f}}}" for k, v in (bomb_tgt or {}).items())
     ea = ", ".join(f"[{_lq(n)}]=true" for n in (enemy_air or []))
-    lst = lambda xs: "{" + ", ".join(_lq(x) for x in xs) + "}"
+    # A Lua list of quoted strings.
+    def lst(xs):
+        return "{" + ", ".join(_lq(x) for x in xs) + "}"
+
     sc = ", ".join(f'{{pkg={_lq(x["pkg"])}, g={_lq(x["grp"])}, k={_lq(x["k"])}, units={lst(x["units"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, '
                     f'you={"true" if x["you"] else "false"}, tot={float(x["tot"]):.0f}}}' for x in (scrub or []))
     st = ", ".join(f'{{id={_lq(x["id"])}, label={_lq(x["label"])}, who={_lq(x["who"])}, prim={"true" if x["prim"] else "false"}, '
@@ -398,7 +401,10 @@ def package_rows(state, manifest: Manifest, data: dict, pending: dict | None = N
         else:
             phase = "Returning"
         rows.append((tot is None, tot or 0.0, {"name": name, "text": _title(f"{res}, {phase}" if res else phase)}))
-    rows.sort(key=lambda r: r[:2])              # XO 2026-11-15: by TOT, earliest first, no TOT last; the flown package is not special (a stable sort keeps the order among equal TOTs)
+    def tot_sort_key(row):
+        return row[:2]
+
+    rows.sort(key=tot_sort_key)              # XO 2026-11-15: by TOT, earliest first, no TOT last; the flown package is not special (a stable sort keeps the order among equal TOTs)
     return [r[2] for r in rows]
 
 
@@ -511,7 +517,10 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                     a0 = state.assets[g["ref"]]
                     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
                     if fields:
-                        nb = min(fields, key=lambda b: (b.x - a0.x) ** 2 + (b.y - a0.y) ** 2)
+                        def squared_distance_to_position(base):
+                            return (base.x - a0.x) ** 2 + (base.y - a0.y) ** 2
+
+                        nb = min(fields, key=squared_distance_to_position)
                         from . import sams as _sams
                         _sams.hit_field(state, nb, 0.10)
                         out["lines"].append(f"The position was overrun; the column presses on toward {nb.name}")
@@ -616,7 +625,10 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         if closed_rw:
             out["target_damage"] = max(out["target_damage"], RUNWAY_CREDIT)
     # alert / scramble groups (v0.40.8): called, airborne, or stuck on the ground; and the build's settings, so test runs can be told apart
-    ms_ = lambda t_: f"{int(t_) // 60:d}:{int(t_) % 60:02d}"                  # v0.41.208 (XO): scrambles are numbered in the order the build lists them (the briefing's QRA list uses the same numbers)
+    # Seconds as m:ss. v0.41.208 (XO): scrambles are numbered in the order the build lists them (the briefing's QRA list uses the same numbers)
+    def ms_(t_):
+        return f"{int(t_) // 60:d}:{int(t_) % 60:02d}"
+
     owner_ = {q.id: q for w_ in state.enemy_air for q in w_.sqns}
     pkg_ = next((p_ for p_ in (state.plan or []) if p_.get("id") == data.get("package")), None)
     st_min_ = None                                                          # v0.41.343 (Phase 6a): the mission's start, absolute minute (the package's start time on today's clock)
