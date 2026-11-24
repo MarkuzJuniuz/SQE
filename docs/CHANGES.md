@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.637, the tanker and the AWACS also keep clear of red sweeps
+Red's fighter sweeps hunt: in the test runs they shot down the tanker and the AWACS far from their own bombers. The tanker's track and the AWACS station now stay at least 100 nm from the route a red sweep flies, as well as 50 nm (tanker) and 40 nm (AWACS) from the raid's. The AWACS stays where it was when no spot behind it is clear. The sweeps themselves are unchanged.
+
 ## v0.41.636, Level 3: a bomber raid comes in behind red's SEAD, from another side
 At Level 3, when red sends SEAD against a field's Patriot, it may send one bomber raid at that same field, from an axis at least 100 degrees away from the SEAD raid's, reaching its attack run about 5 minutes after the SEAD missiles are due. In the mission the Patriot keeps facing the SEAD raid, so the bombers meet only the rest of the field's defences (HAWK, guns, Stinger, your fighters). In the war simulation the field's air defence counts half against such a raid. Levels 1 and 2 are unchanged.
 

@@ -109,8 +109,8 @@ class SupportCaps:
         cover_ = [(b_.x, b_.y, TANKER_COVER_NM) for b_ in st.bases.values()
                   if b_.kind == BaseKind.AIRFIELD and self.o.base_defenses and getattr(b_, "defense", 0) >= 0.15] + \
                  [(b_.x, b_.y, TANKER_COVER_NM) for b_ in st.bases.values() if b_.kind == BaseKind.CARRIER]
-        raid_lines = self._raid_route_lines([package] + list(extras))                # S188: the red raids' routes, known before they are spawned
-        fwd = tm.tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty), caps_, lanes_, cover_, track_hdg=g.hdg - 90, raid_lines=raid_lines)
+        raid_lines, sweep_lines = self._raid_route_lines([package] + list(extras))      # S188: the red raids' routes (S189: and the sweeps', apart), known before they are spawned
+        fwd = tm.tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty), caps_, lanes_, cover_, track_hdg=g.hdg - 90, raid_lines=raid_lines, sweep_lines=sweep_lines)
         awacs_track_points = [(ax, ay)]
         for awacs_side in (fh + 90, fh - 90):
             awacs_track_points.append(offset(ax, ay, awacs_side, 20 * NM))
@@ -119,8 +119,11 @@ class SupportCaps:
             for line in raid_lines:
                 if tm._seg_nm(point_x, point_y, *line) < tm.AWACS_RAID_NM:
                     awacs_too_close = True
+            for line in sweep_lines:
+                if tm._seg_nm(point_x, point_y, *line) < tm.AWACS_SWEEP_NM:
+                    awacs_too_close = True
         if awacs_too_close:
-            self.warns.append("S188: the AWACS station is within %d nm of a red raid's route (no clear spot behind it)" % tm.AWACS_RAID_NM)
+            self.warns.append("S188: the AWACS station is within %d nm of a red raid's route or %d nm of a red sweep's (no clear spot behind it)" % (tm.AWACS_RAID_NM, tm.AWACS_SWEEP_NM))
         self._tanker_c = None
         self._tanker_race = 30 * NM
         for s in package.support:
@@ -156,6 +159,9 @@ class SupportCaps:
                         for end_x, end_y in ((trial_x, trial_y), trial_far_end):
                             for line in raid_lines:
                                 if tm._seg_nm(end_x, end_y, *line) < tm.TANKER_RAID_NM:
+                                    too_close = True
+                            for line in sweep_lines:
+                                if tm._seg_nm(end_x, end_y, *line) < tm.TANKER_SWEEP_NM:
                                     too_close = True
                         if not too_close:
                             x, y = trial_x, trial_y

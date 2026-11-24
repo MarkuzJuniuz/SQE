@@ -126,39 +126,52 @@ def awacs_station(state):
 
 
 AWACS_RAID_NM = 40          # S188: the AWACS racetrack stays this far from the lines this turn's red raids fly (escort fighters' radar and missile reach plus the AWACS's turn-away time; judgment call, no source: S174 and S183 runs lost it to raid escorts)
+AWACS_SWEEP_NM = 100        # S189 (XO 2026-11-24, fair play: red sweeps may hunt the tanker and the AWACS, so they keep their distance): the AWACS racetrack stays this far from the route a red sweep flies (its field to the raid's target). Measured in the S174 and S183 runs: a red sweep shot the AWACS and the tanker while 93 to 217 km (50 to 117 nm) from its own bombers; 100 nm is round the farthest of them, judgment call
+TANKER_SWEEP_NM = 100       # S189: ...and the same for a tanker track
 AWACS_RAID_BACK_STEP_NM = 10   # ...moved back along its own axis (away from red) in steps of this many nm
 AWACS_RAID_BACK_MAX_NM = 60    # ...at most this far (then it stays where it was)
 TANKER_RAID_NM = 50         # S188: a tanker track stays this far from the lines the mission's red raids fly: 40 nm (escort fighters' radar and missile reach plus the tanker's turn-away time, judgment call) plus 10 nm because the real escort and sweep routes lie up to 10 nm nearer than the straight field-to-target line (measured in the S174 mission: line 44.4 nm, route 34.3 nm). The S174 run lost Arco 1 to escorts that started 25 km from the track
 
 
-def raid_lines_from_booked(state) -> list:
-    """S188: [(x1, y1, x2, y2)] straight lines from each red wing a raid booked this turn (`state.raids["booked"]`, raider, escort, sweep and pooled wings) to the raid's target. Reads the state only
-    (the AWACS station must be the same for every package of a turn). An unbent line: the S171 ring bends move a route only a few nm, and the margin covers it."""
+def raid_lines_from_booked(state) -> tuple:
+    """S188: -> (raid lines, sweep lines), each [(x1, y1, x2, y2)]: straight lines from each red wing a raid booked this turn (`state.raids["booked"]`) to the raid's target; raider, escort and pooled wings
+    in the first list, sweep wings (`sweep_wing`, `sweep_pool`; S189) in the second. Reads the state only (the AWACS station must be the same for every package of a turn). An unbent line: the S171 ring
+    bends move a route only a few nm, and the margin covers it."""
     lines = []
+    sweep_lines = []
     booked = (getattr(state, "raids", None) or {}).get("booked") or {}
     for oid in sorted(booked):
         plan = booked[oid]
         dest = plan.get("dest")
         if not dest or not plan.get("land"):
             continue
-        wing_ids = {plan.get("bomber_wing"), plan.get("escort_wing"), plan.get("sweep_wing")}
+        wing_ids = {plan.get("bomber_wing"), plan.get("escort_wing")}
         for partner in (plan.get("pool") or []):
             wing_ids.add(partner.get("wing"))
         for partner in (plan.get("esc_pool") or []):
             wing_ids.add(partner.get("wing"))
+        sweep_ids = {plan.get("sweep_wing")}
+        for partner in (plan.get("sweep_pool") or []):
+            sweep_ids.add(partner.get("wing"))
+        wing_ids -= sweep_ids
         for wing_id in sorted(w for w in wing_ids if w):
             field = state.assets.get(wing_id)
             if field is None:
                 continue
             lines.append((field.x, field.y, float(dest[0]), float(dest[1])))
-    return lines
+        for wing_id in sorted(w for w in sweep_ids if w):
+            field = state.assets.get(wing_id)
+            if field is None:
+                continue
+            sweep_lines.append((field.x, field.y, float(dest[0]), float(dest[1])))
+    return lines, sweep_lines
 
 
 def _awacs_clear_of_raids(state, x, y, fh):
     """S188: the AWACS station moved back along its own axis (away from red, `fh` + 180) until the racetrack (the station and both ends, 20 nm either side) is `AWACS_RAID_NM` clear of this turn's raid lines
     and still clear of SAM rings and enemy fields (`spot_slack`). Unchanged when no raid is booked, when it is already clear, or when no spot within `AWACS_RAID_BACK_MAX_NM` is clear."""
-    lines = raid_lines_from_booked(state)
-    if not lines:
+    lines, sweep_lines = raid_lines_from_booked(state)
+    if not lines and not sweep_lines:
         return x, y
     side = math.radians(fh + 90)
     back = math.radians(fh + 180)
@@ -171,6 +184,9 @@ def _awacs_clear_of_raids(state, x, y, fh):
         for px, py in points:
             for line in lines:
                 if _seg_nm(px, py, *line) < AWACS_RAID_NM:
+                    clear = False
+            for line in sweep_lines:
+                if _seg_nm(px, py, *line) < AWACS_SWEEP_NM:
                     clear = False
         if clear and (step == 0 or spot_slack(state, cx, cy, (x, y)) >= 0):
             return cx, cy
@@ -407,7 +423,7 @@ def _seg_nm(px, py, ax, ay, bx, by) -> float:
     return math.hypot(ax + t * vx - px, ay + t * vy - py) / NM
 
 
-def tanker_spot(state, base_xy, egr_xy, target_xy, caps=(), lanes=(), cover=(), half_track_nm: float = 15, track_hdg: float | None = None, raid_lines=()):
+def tanker_spot(state, base_xy, egr_xy, target_xy, caps=(), lanes=(), cover=(), half_track_nm: float = 15, track_hdg: float | None = None, raid_lines=(), sweep_lines=()):
     """v0.41.26: the tanker track centre. Between the action and home, where the package can use it, but a minimum distance from every danger:
     TANKER_MARGIN_NM outside every SAM ring and every enemy field's scramble circle, TANKER_CAP_NM from every red patrol station (caps: [(x, y)]),
     TANKER_LANE_NM from the lines red fighters fly in on (lanes: [(field x, y, target x, y)]), S188: TANKER_RAID_NM from the raids' routes (raid_lines: [(x1, y1, x2, y2)]), both ends of the racetrack included. Among the
@@ -428,6 +444,8 @@ def tanker_spot(state, base_xy, egr_xy, target_xy, caps=(), lanes=(), cover=(), 
             if any(_seg_nm(px, py, fx, fy, gx, gy) < TANKER_LANE_NM for fx, fy, gx, gy in lanes):
                 return False
             if any(_seg_nm(px, py, fx, fy, gx, gy) < TANKER_RAID_NM for fx, fy, gx, gy in raid_lines):          # S188: the red raids' own routes
+                return False
+            if any(_seg_nm(px, py, fx, fy, gx, gy) < TANKER_SWEEP_NM for fx, fy, gx, gy in sweep_lines):       # S189: the red sweeps' routes (they hunt)
                 return False
         return True
     def covered(x, y):
