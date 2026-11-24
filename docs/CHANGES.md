@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.623, internal clean-up: plain functions in the route planner and the red air picture
+Twenty one-line functions (lambdas) in the route planner and in the code that places red patrols were rewritten as plain loops and small named functions. Nothing changes in play: 126 test missions come out identical.
+
 ## v0.41.622, internal clean-up: plain functions in the raid and site spawning code
 Eighteen one-line functions (lambdas) in the code that places red raids and ground sites were rewritten as plain loops and small named functions. Nothing changes in play: 126 test missions come out identical.
 
