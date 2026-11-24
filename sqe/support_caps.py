@@ -115,6 +115,7 @@ class SupportCaps:
                 grp = self.m.awacs_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=40 * NM, heading=int(fh + 90) % 360,
                                           altitude=alt, speed=spd, frequency=freq)
                 callsigns.apply(grp, s.label, 1, callsigns.AWACS); grp.units[0].name = f"{s.label} 1-1"
+                self._hvaa_groups.append(grp.name)             # S176b
                 self._support_lbl[grp.units[0].name] = s.label.upper()
                 self._support_units[BY_CLASS_.get(s.dcs_class, s.slot)] = grp.units[0].name
                 awacs_unit = grp.units[0]
@@ -138,6 +139,7 @@ class SupportCaps:
                 grp = self.m.refuel_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=race, heading=int(g.hdg + 90) % 360,
                                            altitude=alt, speed=spd, frequency=freq, tacanchannel=plan.tacan[s.slot])
                 callsigns.apply(grp, s.label, 1, callsigns.TANKER); grp.units[0].name = f"{s.label} 1-1"
+                self._hvaa_groups.append(grp.name)             # S176b
                 self._support_lbl[grp.units[0].name] = s.label.upper()
                 self._support_units[BY_CLASS_.get(s.dcs_class, s.slot)] = grp.units[0].name
                 if s.slot == "TANKER1":

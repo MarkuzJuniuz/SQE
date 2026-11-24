@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.627, tankers and AWACS pull back from enemy fighters
+A blue tanker or AWACS now leaves its track when an enemy fighter comes within 60 nm: it flies 40 nm straight away from it and orbits there (and moves again if it is still being chased), then goes back to its track once no fighter has been within 80 nm for five minutes. You get a line when it moves and when it is back; the tanker's TACAN stays on.
+
 ## v0.41.626, the ECM script option says what it does
 The description of the ECM Script option in Settings was wrong about what the script does. It now says it plainly: a radar-guided missile fired at a jet with a jammer may be fooled (a chance, higher with a pod and from far away, none inside about 12 km) and is then removed in flight. The guide describes it too.
 
