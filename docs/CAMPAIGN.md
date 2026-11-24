@@ -297,11 +297,14 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
   guard goes up in the last wave that opens before the asset's window starts (the first wave when the asset is up already), or in a later
   wave when no pair is ready sooner.
   Every package that carries the asset carries its guard. The pair can refuel on the orbit.
-* **The AWACS sits on one fixed safe station** (behind the front, from the rear base: Kutaisi on the Caucasus, Paphos on Syria), not near you or your target. The tanker sits
-  forward on the way home, clear of SAM rings and red's scramble circles.
-* **Both keep clear of red's raids.** The tanker's track stays at least 50 nm from the routes a red raid flies, and 100 nm from the route of a red fighter sweep; the AWACS
-  station moves away (searching behind the rear base and to either side, up to 150 nm, never nearer to red and never off the map) when a raid booked that turn passes within 40 nm of
-  it, or a sweep within 100 nm; if no spot is clear it takes the best one it found, and the build warns. In the
+* **The AWACS sits under blue cover** (behind the front, from the rear base: Kutaisi on the Caucasus, Paphos on Syria), not near you or your target: within 30 nm of a defended
+  field or the carrier group, or within 25 nm of a blue BARCAP that has a pair flying that turn. The tanker sits forward on the way home, under the same cover where it can, clear
+  of SAM rings and red's scramble circles.
+* **Both prefer cover to distance from raids.** The tanker's track tries to stay at least 50 nm from the routes a red raid flies and 100 nm from the route of a red fighter sweep;
+  the AWACS tries to stay 40 nm from a raid's route and 100 nm from a sweep's. Cover comes first: the AWACS moves to the covered spot (up to 150 nm from its rear station, never nearer to
+  red and never off the map) with the most room from those routes, and the tanker takes a covered spot that is clear of them when there is one, else the covered spot that is least
+  inside them (at most 25 nm inside), else a clear spot with no cover; the build warns when a tanker sits inside. Only when no covered place exists does the AWACS move away from
+  red's raid routes, as before. In the
   air, either one turns away when an enemy fighter comes within 60 nm: it flies 40 nm straight away from it and orbits there, and goes back to its track after 5 quiet minutes
   with no fighter within 80 nm. Red's sweeps do hunt them (a sweep can go 100 nm or more from its own bombers), and a tanker cannot outrun a fighter that is already close.
 

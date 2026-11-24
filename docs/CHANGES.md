@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.651, the AWACS and the tankers stay under cover
+The AWACS and the tankers are placed under blue cover (a defended field, the carrier group, or a BARCAP flying that turn) first, and keep clear of red's raid routes second. On Syria the AWACS no longer ends up at the western edge of the map; on the Caucasus it now sits under cover on almost every turn (it was under cover on about half the Level 3 turns).
+
 ## v0.41.650, the server mission is called SQE_Sortie
 On the local dedicated server the mission is now named SQE_Sortie in DCS's server list (it was SQE_test). The old copy is deleted when the server starts.
 
