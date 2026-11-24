@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.639, docs: how the tanker and the AWACS keep clear of red
+The campaign guide now says where the tanker and the AWACS stay away from red's raids and sweeps, and how they turn away from a fighter. Docs only.
+
 ## v0.41.638, the "Bombs away" call says where and which way
 An AI flight's "Bombs away" now follows the brevity manual: it adds where the bombs left (bullseye bearing and range) and the track they fly, as a heading, for example "Bombs away, bullseye 1-2-5/27, heading 2-7-0". "Rifle" and "Magnum" are unchanged.
 
