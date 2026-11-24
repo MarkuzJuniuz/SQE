@@ -85,7 +85,7 @@ _CA_JSOW_TASK = "Standoff Counter-Air: AGM-154A JSOW on the jets parked on the r
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
 _TASK[Role.ESCORT] = _ESC_TASK
-_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TKR_HAVCAP": "HAVCAP (guards the tanker)", "BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP (guards the carrier group)"}
+_TAG_TASK = {"HVAACAP": "HVAACAP (guards the AWACS)", "TKR_HVAACAP": "HVAACAP (guards the tanker)", "BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP (guards the carrier group)"}
 
 
 @dataclass
@@ -265,7 +265,7 @@ class Ledger:
     (`refit.ready_by`; tier 2 counts against `available`). A sortie of wave w draws `free` and the tiers 2 to w (`room`) and spends the LATEST tier first (w, then w - 1 ... then `free`), so the earlier
     waves keep the jets they can use. `late` = the tiers added up per squadron, read-only. `view(wave)` hands the builder a throw-away Ledger for one wave, and `settle` books what the builder spent in it.
     `t_abs=None` (the plain `Ledger(state)`) means no later tiers."""
-    hfree = None                 # v0.41.353 (Phase 9b): the jets of the HAVCAP squadrons (`Squadron.role`), kept apart: only the AWACS / tanker guards draw them (`hroom` / `htake`); every other reader sees 0 in `free` / `tier`
+    hfree = None                 # v0.41.353 (Phase 9b): the jets of the HVAACAP squadrons (`Squadron.role`), kept apart: only the AWACS / tanker guards draw them (`hroom` / `htake`); every other reader sees 0 in `free` / `tier`
     htier = None
 
     def __init__(self, state: CampaignState, t_abs: int | None = None):
@@ -277,7 +277,7 @@ class Ledger:
                     self.tier[sid] = self.tiers_of(s, t_abs)
         self.hfree, self.htier = {}, {}
         for sid, s in state.squadrons.items():
-            if s.role == "havcap":                                                     # guards only: out of the pools the packages, patrols and scrambles read
+            if s.role == "hvaacap":                                                     # guards only: out of the pools the packages, patrols and scrambles read
                 self.hfree[sid], self.htier[sid] = self.free[sid], self.tier[sid]
                 self.free[sid], self.tier[sid] = 0, self.no_tiers()
 
@@ -333,11 +333,11 @@ class Ledger:
         return True
 
     def hroom(self, sid: str, wave: int) -> int:
-        """Jets of a HAVCAP squadron a guard of this wave can still draw (0 for any other squadron)."""
+        """Jets of an HVAACAP squadron a guard of this wave can still draw (0 for any other squadron)."""
         return _tier_room(self.hfree or {}, self.htier or {}, sid, wave)
 
     def htake(self, sid: str, n: int, wave: int) -> bool:
-        """`take` for a HAVCAP squadron's guard pair: the latest tier goes first."""
+        """`take` for an HVAACAP squadron's guard pair: the latest tier goes first."""
         if self.hroom(sid, wave) < n:
             return False
         _tier_spend(self.hfree, self.htier, sid, n, wave)
@@ -651,7 +651,7 @@ class PackageBuilder:
                 ledger.free[sq_.id] += n_
             raise NoPlayerSlot("no SEAD flight free to escort the " + ("CAS" if obj.type == ObjectiveType.CAS else "strike") + " today")
 
-        # support CAP: all four kinds (TKR_HAVCAP, HAVCAP, BASE_BARCAP, CARRIER_BARCAP) are planned in blue_barcap.py (per turn, per asset / area) and attached once the start times are known
+        # support CAP: all four kinds (TKR_HVAACAP, HVAACAP, BASE_BARCAP, CARRIER_BARCAP) are planned in blue_barcap.py (per turn, per asset / area) and attached once the start times are known
 
         used, n = (names if names is not None else {}), 0     # names: the day's callsign counter, shared by every package that day
         for slot, sq, count, is_pl in chosen:

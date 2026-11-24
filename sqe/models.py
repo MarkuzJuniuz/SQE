@@ -50,13 +50,13 @@ class ObjectiveType(str, Enum):
 SEAD_AIMS = ("SEAD", "STANDOFF")        # packages with HARM shooters timed on the salvo
 
 
-# S52 / S53 (XO 2026-11-12): the internal flight tags BASE_BARCAP, CARRIER_BARCAP and TKR_HAVCAP are never shown; players read BARCAP, BARCAP and HAVCAP. ONE table, every printed tag goes through tag_label.
-TAG_LABEL = {"BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP", "TKR_HAVCAP": "HAVCAP"}
-OLD_TAG_NAMES = {"BASECAP": "BASE_BARCAP", "CVCAP": "CARRIER_BARCAP", "TNKCAP": "TKR_HAVCAP"}      # the names a save from before S52 (v0.41.410) holds; state.from_dict maps them once on load
+# S52 / S53 (XO 2026-11-12): the internal flight tags BASE_BARCAP, CARRIER_BARCAP and TKR_HVAACAP are never shown; players read BARCAP, BARCAP and HVAACAP. ONE table, every printed tag goes through tag_label.
+TAG_LABEL = {"BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP", "TKR_HVAACAP": "HVAACAP"}
+OLD_TAG_NAMES = {"BASECAP": "BASE_BARCAP", "CVCAP": "CARRIER_BARCAP", "TNKCAP": "TKR_HVAACAP", "HAVCAP": "HVAACAP", "TKR_HAVCAP": "TKR_HVAACAP"}      # the names a save from before S52 (v0.41.410) or S192 (HAVCAP became HVAACAP, v0.41.641) holds; state.from_dict maps them once on load
 
 
 def tag_label(tag: str) -> str:
-    """What a player reads for a flight tag (HAVCAP as it is)."""
+    """What a player reads for a flight tag (HVAACAP as it is)."""
     return TAG_LABEL.get(tag, tag)
 
 
@@ -104,7 +104,7 @@ class Squadron:
     refit: list = field(default_factory=list)   # v0.41.334 (refit.py): the absolute minute (clock.py) each jet in refit is ready again; `available` stays "ready now"
     repl_due: int = 0           # absolute minute the next replacement pair arrives (0 = no timer: the squadron is at strength)
     held: int = 0               # replacements that arrived while the runway was closed: counted toward strength, flyable when the runway reopens
-    role: str = ""              # v0.41.353 (Phase 9b): "havcap" = the AWACS / tanker guard squadron: it flies only those guards (Ledger gives it no room for anything else), AI only. "" = an ordinary squadron; an older save has none
+    role: str = ""              # v0.41.353 (Phase 9b): "hvaacap" = the AWACS / tanker guard squadron: it flies only those guards (Ledger gives it no room for anything else), AI only. "" = an ordinary squadron; an older save has none
 
     @property
     def on_hand(self) -> int:

@@ -981,7 +981,7 @@ if #ALERTS > 0 then
     return t + 10
   end, nil, timer.getTime() + 10)
 end
--- v0.41.79: CAP replacement. A covered pair (a red patrol, a blue base / carrier / HAVCAP / tanker CAP) is watched: if a jet of it is down, or its air-to-air
+-- v0.41.79: CAP replacement. A covered pair (a red patrol, a blue base / carrier / HVAACAP / tanker CAP) is watched: if a jet of it is down, or its air-to-air
 -- missiles are all gone (winchester), or a jet is at bingo fuel, the whole pair leaves (its orbit stops on the bf flag: a pair does not stay one jet short,
 -- XO: "if one is shot down they bug out") and COVER_DELAY_S later the replacement is called (the rf flag; the nearest field's pair, or a pair that appears
 -- behind the station). Nothing is called when the sortie is nearly over anyway (COVER_MIN_LEFT_S).

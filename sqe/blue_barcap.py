@@ -47,14 +47,14 @@ def _base_id(base):
 
 
 def _cap_squadrons(state, base) -> list:
-    """The fighter squadrons that fly a base's patrol: its own; a field with none borrows the nearest capable squadron within its combat radius. A HAVCAP squadron (Phase 9b) flies guards only, never a patrol."""
-    own = [sq for sq in state.squadrons.values() if sq.base_id == base.id and Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2 and sq.role != "havcap"]
+    """The fighter squadrons that fly a base's patrol: its own; a field with none borrows the nearest capable squadron within its combat radius. An HVAACAP squadron (Phase 9b) flies guards only, never a patrol."""
+    own = [sq for sq in state.squadrons.values() if sq.base_id == base.id and Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2 and sq.role != "hvaacap"]
     if own or base.kind == BaseKind.CARRIER:
         return own
     best, best_d = None, 1e9
     for sq in state.squadrons.values():
         spec = AIRCRAFT[sq.aircraft]
-        if Role.CAP not in spec.roles or sq.available < 2 or sq.role == "havcap":
+        if Role.CAP not in spec.roles or sq.available < 2 or sq.role == "hvaacap":
             continue
         b = state.bases[sq.base_id]
         d = math.hypot(b.x - base.x, b.y - base.y) / NM
@@ -70,8 +70,8 @@ def _crew(ledger, sqs, wave: int, keep: int):
     return max((q for q in sqs if ledger.room(q.id, wave) >= 2 + keep), key=room_then_id, default=None)
 
 
-def _crew_havcap(ledger, sqs, wave: int):
-    """The HAVCAP squadron with the most jets for a guard pair in this wave (`Ledger.hroom`), or None."""
+def _crew_hvaacap(ledger, sqs, wave: int):
+    """The HVAACAP squadron with the most jets for a guard pair in this wave (`Ledger.hroom`), or None."""
     def guard_room_then_id(q):
         return (ledger.hroom(q.id, wave), q.id)
     return max((q for q in sqs if ledger.hroom(q.id, wave) >= 2), key=guard_room_then_id, default=None)
@@ -109,7 +109,7 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
     """This turn's standing patrols and guards (v0.41.339, Phase 4b; it was a plan for the whole day, `plan`). `t0`: the turn's first minute of the day; `ledger`: the turn's jets (the pairs are taken
     off it, so the packages are built from what is left); `rng`: seeded by the turn; `wins`: this turn's AWACS / tanker windows (`support_assets.plan`). The turn's flights are added to
     `state.barcap["blue_flights"]` (those of earlier turns of the day stay; a plan of this turn made before is replaced) and `blue_cover` (minutes of the day each area has a pair up) is made
-    again from them. -> this turn's flights [{id, kind BASE_BARCAP|CARRIER_BARCAP|HAVCAP|TKR_HAVCAP, asset, area, squadron, aircraft, size, start, end (minutes of the day), callsign "", turn, wave}]."""
+    again from them. -> this turn's flights [{id, kind BASE_BARCAP|CARRIER_BARCAP|HVAACAP|TKR_HVAACAP, asset, area, squadron, aircraft, size, start, end (minutes of the day), callsign "", turn, wave}]."""
     bc = barcap.ensure(state)
     level = max(1, min(3, int(getattr(d, "level", 1))))
     t1 = t0 + clock.TURN_MIN
@@ -147,15 +147,15 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
 
 # the guard of each support asset: key -> flight tag. The assets and their guards are standing entities on their own schedule (S71, XO 2026-11-13): every package that carries the asset gets the guard.
 # A second tanker (another direction) is one more TABLE row in support_assets and one more entry here.
-AWACS_GUARD_JETS = 4       # S182 (XO 2026-11-24: "awacs guards a minimum of 4 ships"): the AWACS guard's size when the HAVCAP squadron can give it. Evidence: the AWACS died with a pair on guard in the S174 and S177 server runs (raid escorts). Judgment call
-GUARDS = {"bl_e3": "HAVCAP", "bl_e2": "HAVCAP", "bl_kc135": "TKR_HAVCAP", "bl_s3": "TKR_HAVCAP"}      # S182: the AWACS guards are crewed first; a tanker's guard is still not optional (it takes any capable squadron's pair). Before: tankers first
+AWACS_GUARD_JETS = 4       # S182 (XO 2026-11-24: "awacs guards a minimum of 4 ships"): the AWACS guard's size when the HVAACAP squadron can give it. Evidence: the AWACS died with a pair on guard in the S174 and S177 server runs (raid escorts). Judgment call
+GUARDS = {"bl_e3": "HVAACAP", "bl_e2": "HVAACAP", "bl_kc135": "TKR_HVAACAP", "bl_s3": "TKR_HVAACAP"}      # S182: the AWACS guards are crewed first; a tanker's guard is still not optional (it takes any capable squadron's pair). Before: tankers first
 
 
-def _havcap_squadrons(state, base) -> list:
-    """The HAVCAP squadrons (`Squadron.role`, Phase 9b) that can guard an asset based at `base`: ready jets and the base within their combat radius."""
+def _hvaacap_squadrons(state, base) -> list:
+    """The HVAACAP squadrons (`Squadron.role`, Phase 9b) that can guard an asset based at `base`: ready jets and the base within their combat radius."""
     out = []
     for sq in state.squadrons.values():
-        if sq.role != "havcap" or sq.available < 2 or Role.CAP not in AIRCRAFT[sq.aircraft].roles:
+        if sq.role != "hvaacap" or sq.available < 2 or Role.CAP not in AIRCRAFT[sq.aircraft].roles:
             continue
         b = state.bases[sq.base_id]
         if math.hypot(b.x - base.x, b.y - base.y) / NM <= AIRCRAFT[sq.aircraft].combat_radius_nm:
@@ -165,12 +165,12 @@ def _havcap_squadrons(state, base) -> list:
 
 def _guard_squadrons(state, base) -> list:
     """The fighters that guard an asset based at `base`: the base's own; else the nearest within reach; else any capable squadron (the tanker's
-    guard is not optional). The player's squadron is left to the packages. A HAVCAP squadron never shows here (`_havcap_squadrons` is tried first)."""
+    guard is not optional). The player's squadron is left to the packages. An HVAACAP squadron never shows here (`_hvaacap_squadrons` is tried first)."""
     pl = state.player.squadron_id if getattr(state, "player", None) else None
     sqs = [q for q in _cap_squadrons(state, base) if q.id != pl]
     if sqs:
         return sqs
-    cands = [sq for sq in state.squadrons.values() if sq.id != pl and Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2 and sq.role != "havcap"]
+    cands = [sq for sq in state.squadrons.values() if sq.id != pl and Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2 and sq.role != "hvaacap"]
     return sorted(cands, key=_most_available_then_id)[:1]
 
 
@@ -185,13 +185,13 @@ def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
         spans = [(max(s, t0), min(e, t1)) for s, e in (wins.get(key) or []) if e > t0 and s < t1]
         if a is None or not spans or a["base_id"] not in state.bases:
             continue
-        # Phase 9b: the HAVCAP squadron guards first, within reach. S182 (XO 2026-11-24: "Batumi is special awacs guard, tankers take from normal
+        # Phase 9b: the HVAACAP squadron guards first, within reach. S182 (XO 2026-11-24: "Batumi is special awacs guard, tankers take from normal
         # squadrons"): it guards the land-based AWACS only. Its 8 jets (Batumi parks 10) then fly four one turn and the other four the next,
         # while the first four refit. A tanker's guard and the carrier AWACS's guard (it sits under the fleet's SM-2s and BARCAP) come from the
         # ordinary squadrons
         hv = []
-        if tag == "HAVCAP" and state.bases[a["base_id"]].kind != BaseKind.CARRIER:
-            hv = _havcap_squadrons(state, state.bases[a["base_id"]])
+        if tag == "HVAACAP" and state.bases[a["base_id"]].kind != BaseKind.CARRIER:
+            hv = _hvaacap_squadrons(state, state.bases[a["base_id"]])
         sqs = _guard_squadrons(state, state.bases[a["base_id"]])
         if not sqs and not hv:
             continue
@@ -199,7 +199,7 @@ def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
         w = max([k for k in range(1, NWAVES + 1) if t0 + wave_open(k) <= lo] or [1])
         sq = None
         while True:
-            sq, hav = (_crew_havcap(ledger, hv, w) if hv else None), True
+            sq, hav = (_crew_hvaacap(ledger, hv, w) if hv else None), True
             if sq is None:
                 sq, hav = _crew(ledger, sqs, w, 0), False                 # none ready (it has had its turn): the ordinary guards
             if sq is not None or w >= NWAVES:
@@ -208,10 +208,10 @@ def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
             lo = max(lo, t0 + wave_open(w))
         if sq is None or lo >= hi:
             continue
-        # S182: the land AWACS's guard is a four-ship when the HAVCAP squadron has the jets in this wave; a pair otherwise (and always a pair from an
+        # S182: the land AWACS's guard is a four-ship when the HVAACAP squadron has the jets in this wave; a pair otherwise (and always a pair from an
         # ordinary squadron, whose jets the packages need: the tankers' and the carrier AWACS's guards)
         guard_jets = 2
-        if tag == "HAVCAP" and hav and ledger.hroom(sq.id, w) >= AWACS_GUARD_JETS:
+        if tag == "HVAACAP" and hav and ledger.hroom(sq.id, w) >= AWACS_GUARD_JETS:
             guard_jets = AWACS_GUARD_JETS
         if hav:
             ledger.htake(sq.id, guard_jets, w)
@@ -355,12 +355,12 @@ def status_lines(state) -> list:
     by = {}
     for n, d, pc in parts:
         by.setdefault(n, []).append(f"{d} {cover_word(pc / 100.0)}")
-    g = [f for f in bc["blue_flights"] if f["kind"] in ("HAVCAP", "TKR_HAVCAP")]
+    g = [f for f in bc["blue_flights"] if f["kind"] in ("HVAACAP", "TKR_HVAACAP")]
     out = ["BARCAP cover so far today (how much of the day a pair is up):"] + [f"   {n}: " + ", ".join(v) for n, v in by.items()]
     if not by:
         out[0] = "BARCAP cover so far today: none planned"
     if g:
-        out.append(f"Tanker / AWACS guards so far today: {sum(1 for f in g if f['kind'] == 'TKR_HAVCAP')} tanker, {sum(1 for f in g if f['kind'] == 'HAVCAP')} AWACS sorties")
+        out.append(f"Tanker / AWACS guards so far today: {sum(1 for f in g if f['kind'] == 'TKR_HVAACAP')} tanker, {sum(1 for f in g if f['kind'] == 'HVAACAP')} AWACS sorties")
     return out + detection_lines(state)
 
 

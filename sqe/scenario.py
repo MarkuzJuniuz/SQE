@@ -96,14 +96,22 @@ def placement(th: dict, level: int = 2, player_squadron: str | None = None, terr
     return out
 
 
+def squadron_role(pack_squadron: dict) -> str:
+    """The role of a squadron row of a theatre pack. S192: the guard squadrons' role is "hvaacap"; a pack written before (a user's own) says "havcap", which still means the same."""
+    role = pack_squadron.get("role", "")
+    if role == "havcap":
+        return "hvaacap"
+    return role
+
+
 def squadron_options(aircraft: str, theatre: str = "caucasus", level: int = 2, a10_variant: str | None = None, f14_variant: str | None = None) -> list:
-    """(id, label) for the New Campaign squadron picker: the REAL field of each squadron (`placement`). A HAVCAP squadron is AI only and is not offered (XO: a guard is not a job type)."""
+    """(id, label) for the New Campaign squadron picker: the REAL field of each squadron (`placement`). An HVAACAP squadron is AI only and is not offered (XO: a guard is not a job type)."""
     th = theatres.load(theatre)
     names = {th["carrier"]["id"]: th["carrier"].get("short", th["carrier"]["name"]), **{f["id"]: f["name"].replace(" AB", "") for f in th["blue_fields"]}}
     sc = get_difficulty(level).friendly_scale
     out = []
     for q in th["squadrons"]:
-        if era_aircraft(q["aircraft"], a10_variant, f14_variant) != aircraft or q.get("role") == "havcap":      # S103b: a slot the pack gives to an A-10 flies the campaign's A-10 variant
+        if era_aircraft(q["aircraft"], a10_variant, f14_variant) != aircraft or squadron_role(q) == "hvaacap":      # S103b: a slot the pack gives to an A-10 flies the campaign's A-10 variant
             continue
         where = placement(th, level, q["id"])[q["id"]]                  # this squadron as the player's: it is placed first
         out.append((q["id"], f"{q['name']}  -  {_size(q['count'], sc)} aircraft at {names.get(where, where)}"))
@@ -253,7 +261,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     def n(base):
         return _size(base, sc)
     # The squadron structure is in the theatre pack (`squadrons`; 272 jets in the Caucasus, the same at every level since v0.41.353). Callsigns are unique across the whole coalition (group names must never collide).
-    st.squadrons = {q["id"]: Squadron(q["id"], q["name"], era_aircraft(q["aircraft"], st.a10_variant, st.f14_variant), q["base"], n(q["count"]), n(q["count"]), q["callsign"], role=q.get("role", "")) for q in th["squadrons"]}      # S103b: the slot's airframe is the campaign's A-10 / F-14 variant
+    st.squadrons = {q["id"]: Squadron(q["id"], q["name"], era_aircraft(q["aircraft"], st.a10_variant, st.f14_variant), q["base"], n(q["count"]), n(q["count"]), q["callsign"], role=squadron_role(q)) for q in th["squadrons"]}      # S103b: the slot's airframe is the campaign's A-10 / F-14 variant
     for s in st.squadrons.values():                       # sanity: land jets on land, carrier jets on the boat
         spec, base = AIRCRAFT[s.aircraft], st.bases[s.base_id]
         if spec.home != base.kind:
@@ -382,7 +390,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         x.defended_by = [s.id for s in sams if math.hypot(x.x - s.x, x.y - s.y) < 40_000]
 
     # ---- the player ---------------------------------------------------------------------------------------------------
-    mine = [q for q in st.squadrons_for(player_aircraft) if q.role != "havcap"]          # a HAVCAP squadron is AI only
+    mine = [q for q in st.squadrons_for(player_aircraft) if q.role != "hvaacap"]          # an HVAACAP squadron is AI only
     if not mine or not AIRCRAFT[player_aircraft].player_flyable:
         raise ValueError(f"{player_aircraft} is not a player-flyable type with a squadron")
     me = next((q for q in mine if q.id == player_squadron), mine[0])

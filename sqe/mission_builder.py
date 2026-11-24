@@ -3,7 +3,7 @@
 * Your flight (and wingmen) sit hot on the catapult/runway; the F-14B(U) INS is pre-aligned.
 * Every other friendly flight is already airborne and holds at MARSHAL until PUSH (a clock time; nobody waits for anybody).
 * Enemy defenders are late-activated and arrive at the target at TOT +/- 1-2 minutes, from the ENEMY side.
-* Tanker/AWACS sit well back from enemy bases with a HAVCAP; carriers always have escorts; coalition bases always have SAM/AAA.
+* Tanker/AWACS sit well back from enemy bases with an HVAACAP; carriers always have escorts; coalition bases always have SAM/AAA.
 * SAM sites and armor columns are single groups (a battery needs its radar and launchers in one group).
 """
 from __future__ import annotations
@@ -73,7 +73,7 @@ BLUE_BASE_DEF_SKILL = "Excellent"   # v0.41.222 (XO 2026-10-31): blue's base Pat
 # S155 (XO 2026-11-22, test T1fix Caucasus): TARCAP 15 -> 5. With 15 nm the loop (DCS overshoots CAP2 by 8 to 13 km) took the TARCAP 36 km from its station for about
 # 9 minutes a lap, away through most of the strike window. 5 nm keeps it within about 15 to 20 km and about 4 minutes a lap. Judgment call; 5 is also cap2_point's floor.
 CAP_SPREAD_NM = {"TARCAP": 5, "ESCORT": 10, "SWEEP": 20,
-                 "BASE_BARCAP": 25, "CARRIER_BARCAP": 30, "HAVCAP": 20, "TKR_HAVCAP": 20}   # S9 (v0.41.350): the support CAPs, used by support_caps (judgment calls, no public figure); Phase 8 (v0.41.349): the race-track leg from CAP1 (the station) to CAP2, across the threat axis. Judgment calls: no public leg length found (FAA anchor tracks of about 50 nm are civil)
+                 "BASE_BARCAP": 25, "CARRIER_BARCAP": 30, "HVAACAP": 20, "TKR_HVAACAP": 20}   # S9 (v0.41.350): the support CAPs, used by support_caps (judgment calls, no public figure); Phase 8 (v0.41.349): the race-track leg from CAP1 (the station) to CAP2, across the threat axis. Judgment calls: no public leg length found (FAA anchor tracks of about 50 nm are civil)
 CAP2_ROOM_NM = 8             # Phase 8: CAP2 must have at least this much SAM room (nm to the nearest SAM ring), or as much as the station itself has when that is less (8 is the cover circle's own floor)
 TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
 TARCAP_FWD_NM = 20           # v0.41.120: the TARCAP's engage circle tries to reach this far past its station toward red (judgment call: red's alert pairs held 24 nm from the station in XO's 2026-10-23 run)
@@ -652,7 +652,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
         # ---- friendly flights --------------------------------------------------------------------------------------------
         despawn, pkg_table = [], []
-        self._sup_cts = []                                                   # HAVCAP / base BARCAP orbit tasks: their stop time is extended once the merged packages are known
+        self._sup_cts = []                                                   # HVAACAP / base BARCAP orbit tasks: their stop time is extended once the merged packages are known
         self._cover = []                                                     # v0.41.79: [{g, n, bf, rf, u}] the CAP pairs the hook watches (debrief.py COVER)
         self._relief_src = {}                                                # v0.41.78: callsign -> what _spawn_flight needs to build that support CAP's relief sorties
         self._relief_names = []                                              # relief flights built so far (their callsigns are taken)
@@ -703,7 +703,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         whois = self._datalinks(package)
 
         # ---- enemy air picture (known CAP airborne from the start + alert aircraft that scramble when detected) ----
-        keep = []                                         # v0.41.76: only the AWACS anchor / HAVCAP is kept clear of red's patrols (the tanker picks its own spot clear of them, threatmap.tanker_spot)
+        keep = []                                         # v0.41.76: only the AWACS anchor / HVAACAP is kept clear of red's patrols (the tanker picks its own spot clear of them, threatmap.tanker_spot)
         if hav_xy is not None:
             keep.append((hav_xy[0], hav_xy[1], 100))
         keep += self._fleet_keepout()
@@ -722,7 +722,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             manifest.cur_pkg = deferred_raid[0].id
             self._spawn_raid(*deferred_raid)                                  # S183 / S186: now that the first raid's missile time is known
         self._stage_front_battles(package, manifest, tx, ty, [(w_.x, w_.y) for w_ in pw], tgt.eta_s)             # S81: the ground war on the map, under any flight
-        # HAVCAP and base BARCAP guard the tanker, AWACS and home field: they stay until the last flight of ANY package in this mission is home
+        # HVAACAP and base BARCAP guard the tanker, AWACS and home field: they stay until the last flight of ANY package in this mission is home
         # (they used to leave 40 min after your TOT, so later merged packages flew with the tanker and AWACS unguarded)
         last_home = max([m_["rtb_s"] for m_ in merged if not m_.get("struck")] + [rtb_s]) + 300
         for ct_ in self._sup_cts:
@@ -925,7 +925,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     def _add_merged(self, anchor, extras, P0, manifest, despawn, atc, div_mhz, div_name, clock, ruins=()) -> list:
         """Fold extra packages into this mission. Their flights are AI, airborne on their own schedule (late-activated so they push at
-        THEIR time), with their own geometry, route and TOT. Support (tanker, AWACS, HAVCAP, base BARCAP) is shared, so tag flights are skipped."""
+        THEIR time), with their own geometry, route and TOT. Support (tanker, AWACS, HVAACAP, base BARCAP) is shared, so tag flights are skipped."""
         from types import SimpleNamespace
         st = self.state
         def hm(p):
@@ -1497,7 +1497,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             bt_.params["directionEnabled"] = dir_ is not None
             bt_.params["direction"] = dir_ if dir_ is not None else 0
 
-    # ---- support: tanker + AWACS well back from the enemy, with a HAVCAP at the same spot ----------------------------
+    # ---- support: tanker + AWACS well back from the enemy, with an HVAACAP at the same spot ----------------------------
     def _pkg_target_xy(self, package):
         """(x, y) of a package's ground target, or None (fleet / base patrols)."""
         a = self.state.assets.get(package.objective.target_id) if package.objective.target_id else None
@@ -1608,7 +1608,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if rel.get("flag"):                                               # v0.41.79: a replacement is called by the hook, not by the clock
                 return int(rel["end"]), 0
             return int(rel["end"]), max(1, int(rel["start"]) - lead)
-        e_ = int(barcap.endurance_min(f.aircraft, f.tag == "TKR_HAVCAP") * 60)
+        e_ = int(barcap.endurance_min(f.aircraft, f.tag == "TKR_HVAACAP") * 60)
         self._flag_n += 1
         self._relief_src[f.callsign] = {"package": package, "f": f, "ctx": ctx, "full": int(full_stop), "end": min(int(full_stop), e_), "E": e_, "bf": self._flag_n}
         return min(int(full_stop), e_), 0
@@ -2076,7 +2076,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             # air-to-air missiles are gone (the SAMs and the boat's SM-2s cover what it guards)
             g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
             # v0.41.26: the tanker CAP was timid in the XO's Nalchik run. Radar searching all the time, so it shoots first at maximum range
-            # at anything coming at the tanker; the circle round the tanker (TKR_HAVCAP_ZONE_NM) keeps it with the tanker.
+            # at anything coming at the tanker; the circle round the tanker (TKR_HVAACAP_ZONE_NM) keeps it with the tanker.
             # v0.41.35: NO explicit weapons free any more. Weapons free = "engage any enemy group in contact" (ME docs), which overrides the
             # circle: in all three of XO's runs of 2026-10-16/17 the tanker CAP (the only support CAP with it) ran 50-78 nm out into the
             # Sukhumi S-300, and the v0.41.34 pull-back could not stop it (the option outlives a new route). Default ROE, like the others.
@@ -2085,7 +2085,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
             rtbt_ = task.OptRTBOnOutOfAmmo(); rtbt_.params["action"]["params"]["value"] = AAM_WEAPONS
             g.points[0].tasks.append(rtbt_)
-            # S160: the support CAPs commit too; a tanker / AWACS guard only HAVCAP_REACH_NM and on a leash round its station
+            # S160: the support CAPs commit too; a tanker / AWACS guard only HVAACAP_REACH_NM and on a leash round its station
             commit_end_ = stop if stop else COMMIT_ALL_MISSION_S
             station_ = None
             for w_ in wps:
@@ -2098,8 +2098,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if w_.name == "CAP2":
                     track_end = (w_.x, w_.y)
                     break
-            if f.tag in ("HAVCAP", "TKR_HAVCAP"):
-                self._commit_register("blue", g, blue_commit.HAVCAP_REACH_NM, 0, commit_end_, station_, blue_commit.HAVCAP_LEASH_NM, track_end)
+            if f.tag in ("HVAACAP", "TKR_HVAACAP"):
+                self._commit_register("blue", g, blue_commit.HVAACAP_REACH_NM, 0, commit_end_, station_, blue_commit.HVAACAP_LEASH_NM, track_end)
             else:
                 # S160c: a base / carrier BARCAP guard is on a leash round its station too, so it does not fight out of its SAM and SM-2 cover
                 barcap_leash_nm = blue_commit.BARCAP_LEASH_BASE_NM
@@ -3387,7 +3387,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     def _commit_register(self, side, g, reach_nm, t0, t1, anchor=None, leash_nm=0, anchor_end=None) -> None:
         """S160: put an AI air-to-air group on its side's commit script (blue_commit.py). t1 is a mission time, or a hold dict whose (extended) end is used.
-        anchor (x, y) + leash_nm: the flight must stay within the leash of that point (HAVCAPs). Players are never registered (callers test it)."""
+        anchor (x, y) + leash_nm: the flight must stay within the leash of that point (HVAACAPs). Players are never registered (callers test it)."""
         entry = {"side": side, "g": g.name, "reach": reach_nm * NM, "t0": t0, "t1": t1}
         if anchor is not None and leash_nm:
             entry["ax"] = anchor[0]

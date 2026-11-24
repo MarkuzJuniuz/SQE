@@ -292,7 +292,7 @@ def _status_of(obj: dict, manifest: Manifest, data: dict) -> tuple:
 
 def combat_flight_groups(state, manifest: Manifest, pending: dict | None = None) -> list:
     """Friendly manifest groups that belong to a combat package (the flown one and the merged ones): the plan's flight with NO tag.
-    Tagged flights (BASE_BARCAP, CARRIER_BARCAP, HAVCAP, TKR_HAVCAP) are supports; reliefs are copies of them (same id), and alert / standby pairs are
+    Tagged flights (BASE_BARCAP, CARRIER_BARCAP, HVAACAP, TKR_HVAACAP) are supports; reliefs are copies of them (same id), and alert / standby pairs are
     not plan flights at all, so neither counts. Tankers / AWACS are `support` groups, not `friendly`."""
     ids = [manifest.package_id] + [m["id"] for m in manifest.merged]
     tag = {}
