@@ -61,6 +61,9 @@ SEAD_RAID_AC_MAX = 40         # ...a SEAD raid (SEAD jets + escorts + sweep) nev
 SEAD_PATRIOT_PACKAGES = 3     # ...a full-strength Patriot gets three such packages in one raid, anything else one. S59b (XO 2026-11-12), judgment call: a Patriot site has 8 launchers x 4 missiles and fires about two at each ARM, so one coordinated salvo of three packages is meant to exhaust it; the HAWK fell to two packages in run 14-45-46, the Patriot did not. B2 (XO 2026-11-21): the comment was tuned for 64 Kh-31P at Level 3 from Su-34s with 4 a jet; S106 removed the Su-34, and a Su-24M or Su-17M4 carries 2 a jet (`loadouts.ARM_PER_JET`, `ARM58_PER_JET`), so three packages of 8 jets (SEAD_JETS, Level 3) are 24 jets and 48 missiles on paper, but a raid never flies more than POOL_MAX_RAIDERS 16 jets: a full Patriot is 16 jets in two packages and 32 missiles (half Kh-58U, half Kh-31P), Level 2 three packages of 4 are 12 jets and 24 missiles (Level 1 has no SEAD, `raid_arm` 0)
 SEAD_PATRIOT_MIN_PACKAGES = 2  # S59b (XO 2026-11-12, "at least 2 but ideally 3 per patriot"): a full-strength Patriot raid that cannot field this many packages (after pooling a second wing) is not planned that turn, red keeps the jets (judgment call: one package, 8 Kh-31P at L2, is shot down and wastes a third of what red could send)
 SEAD_POOL = True              # S59b: a SEAD raid whose lead wing is short takes a partner wing too (`_pool_partners`, bomber types only: the types that carry the Kh-31P, Su-24M); the escorts pool as other raids do (`POOL_ESCORTS`)
+SEAD_OUTSIDE_IN = True        # S183 (XO 2026-11-24: "red should focus on plinking patriots one by one and not cross a patriot coverage to hit something deeper"): a SEAD raid goes only for the blue SAM sites
+                              # whose attack point the fewest OTHER live Patriots reach (the outermost ones). Evidence: server run S179c-strip: the raid on Paphos, with its attack point 10 km from the
+                              # Larnaca Patriot, fired nothing and lost 3 bombers to the Larnaca and Akrotiri Patriots. The switch is for comparison runs
 SEAD_PATRIOT_WEIGHT = 2.0     # S64 (XO 2026-11-12, run 21-39-54: a raid went at a HAWK while its full-strength Patriot stood beside it): a full-strength Patriot weighs this much more than a HAWK in red's draw of a SEAD target (judgment call; a Patriot below full strength keeps weight 1). The draw only offers a full Patriot red can field (`_sead_fieldable`)
 SEAD_HAWK_PACKAGES = 2          # S44 (XO 2026-11-12): a HAWK gets two packages too (a Patriot below full strength, or whatever is left of one, still one)
 SEAD_SITE_HIT = 0.15          # ...and a blue SAM site loses this much health per SEAD jet that gets through (a launch of 3 jets takes 0.45 off a HAWK, 6 take 0.9 off a Patriot; judgment call, tuned with the probe `.private/probes/s36`: 0.08 never opened a field, 0.25 wiped the SAMs by day 10, 0.15 sags them and reopens fields)
@@ -191,6 +194,43 @@ def _nearest_field(state, x: float, y: float):
     return min(fs, key=lambda b: math.hypot(b.x - x, b.y - y)) if fs else None
 
 
+def patriots_over_attack_point(state, site, wing) -> int:
+    """S183: how many OTHER live blue Patriots reach the point a SEAD raid on `site` attacks from. The attack point lies on the line from the site toward the raiding wing's field,
+    the launch distance plus the IP run before it (`raid_spawns.ARM_LAUNCH_NM` + `ARM_IP_NM`). A Patriot reaches it within its ring against a high target (`samtier.ring_nm`,
+    63 nm above 8 km, measured S171). A Patriot turns to face a raid in reach (S179c), so its arc gives the raid no shelter: reach alone counts. A live Patriot = the field's
+    battery still has launchers (`sams.blue_battery`), the same test `covering_fields` uses."""
+    from . import samtier
+    from .raid_spawns import ARM_IP_NM, ARM_LAUNCH_NM
+    from .sams import blue_battery
+    wing_field = state.assets.get(wing.base_asset_id)
+    if wing_field is None:
+        return 0
+    leg_x = wing_field.x - site.x
+    leg_y = wing_field.y - site.y
+    leg_m = math.hypot(leg_x, leg_y)
+    if leg_m < 1.0:
+        return 0
+    out_m = (ARM_LAUNCH_NM + ARM_IP_NM) * NM
+    point_x = site.x + leg_x / leg_m * out_m
+    point_y = site.y + leg_y / leg_m * out_m
+    reach_m = samtier.ring_nm("Patriot", 30000) * NM
+    count = 0
+    for base in state.bases.values():
+        if base.kind != BaseKind.AIRFIELD or base.id == site.guards:
+            continue
+        if not blue_battery(base, state)["patriot_ln"]:
+            continue
+        patriot = (getattr(state, "blue_sams", None) or {}).get("bsam_%s_pat" % base.id)
+        patriot_x = base.x
+        patriot_y = base.y
+        if patriot is not None:
+            patriot_x = patriot.x
+            patriot_y = patriot.y
+        if math.hypot(patriot_x - point_x, patriot_y - point_y) <= reach_m:
+            count += 1
+    return count
+
+
 def candidates(state, kind: str, tu: bool = False, d_=None) -> list:
     """[(base, aim, weight)] for one kind of raid ("field" | "supply" | "garrison" | "sector"). The base is the friendly field the package is flown for. `tu` (v0.41.355, Phase 10a; "supply" only): the
     Tu-22M3 land strike's targets: the supply sites the bomber wing reaches that no live Patriot / HAWK covers (no SEAD is built for it, as for every raid on a covered supply site). S36b: kind "sam" (with the
@@ -227,6 +267,7 @@ def candidates(state, kind: str, tu: bool = False, d_=None) -> list:
                 continue
             out.append((home, a.id, max(0.15, 1.0 - r[0] / 330.0) * (0.5 + 0.5 * a.health) * (a.value / 5.0) * wt_))
     elif kind == "sam":
+        sam_cover = []                  # S183: per candidate, how many other live Patriots reach its attack point
         for a in sorted((getattr(state, "blue_sams", None) or {}).values(), key=lambda a: a.id):          # S36b: a blue Patriot or HAWK site a SEAD package can fire on (the AAA is not a target)
             if a.destroyed or a.id.rsplit("_", 1)[1] not in ("pat", "hawk"):
                 continue
@@ -237,6 +278,15 @@ def candidates(state, kind: str, tu: bool = False, d_=None) -> list:
             if r is None:
                 continue
             out.append((home, a.id, max(0.15, 1.0 - r[0] / 330.0) * (0.5 + a.health) * (SEAD_PATRIOT_WEIGHT if _full_patriot(a) else 1.0)))
+            sam_cover.append(patriots_over_attack_point(state, a, r[1]))
+        if SEAD_OUTSIDE_IN and out:
+            # S183: only the outermost sites: the ones whose attack point the fewest other live Patriots reach (0 where red can get at a site without crossing another)
+            fewest = min(sam_cover)
+            outermost = []
+            for index in range(len(out)):
+                if sam_cover[index] == fewest:
+                    outermost.append(out[index])
+            out = outermost
     elif kind == "sector":
         from . import ground
         if ground.active(state):
