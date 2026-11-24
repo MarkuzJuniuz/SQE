@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.621, internal clean-up: no lambdas left in the mission builder
+The last 21 one-line functions (lambdas) in the mission builder were rewritten as plain loops and small named functions. Nothing changes in play: 126 test missions come out identical.
+
 ## v0.41.620, experimental: Fly starts the sortie on your local DCS server
 With the experimental server option on (Settings, off by default), Fly now starts the local DCS dedicated server with the sortie; it waits, paused, until you join (Multiplayer, 127.0.0.1:10308, the only client slot). The waiting window reads the server's results, and Accept or Abort stops the server and puts your own server settings back. Not yet flown by a person from start to debrief.
 
