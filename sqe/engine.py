@@ -1178,9 +1178,41 @@ class Session(Merging, SeadTiming):
         man = self.manifest()
         if man is None:
             return "none", None, None
-        status, data = read_state_file(Path(path) if path else self.settings.state_file, man,
+        status, data = read_state_file(Path(path) if path else self.results_file(), man,
                                        None if path else self.state.pending["built_at"] - 2)
         return status, data, (tally(self.state, man, data) if status == "ok" else None)
+
+    def results_file(self) -> Path:
+        """Where the hook writes this sortie's results: the DCS server's own profile folder when SQE started the sortie on the local server (S161b), else the usual file."""
+        pending = self.state.pending or {}
+        if pending.get("server"):
+            from . import dcs_server
+            return dcs_server.server_state_path(self.settings.dcs_saves)
+        return self.settings.state_file
+
+    def server_start(self) -> tuple:
+        """S161b (experimental, Settings): run the built sortie on the local DCS dedicated server. -> (ok, text for the user). The scripting patch is put back first
+        when it is missing (the hook could not write its results without it). On success the pending sortie remembers that it runs on the server."""
+        from . import dcs_server
+        from . import settings as settings_module
+        s = self.settings
+        if self.state.pending is None:
+            return False, "No sortie is built."
+        if s.auto_patch_scripting and s.dcs_install and not dcs_server.scripting_is_patched(s.dcs_install):
+            settings_module.patch_mission_scripting(s.dcs_install)
+        ok, text = dcs_server.start_server(s.dcs_install, s.dcs_saves, s.sortie_miz, wait_for_client=True)
+        if ok:
+            self.state.pending["server"] = True
+            self.save()
+        return ok, text
+
+    def server_stop(self) -> tuple:
+        """S161b: stop the server this sortie runs on and put the user's server settings back. Does nothing when the sortie is not a server sortie."""
+        pending = self.state.pending or {}
+        if not pending.get("server"):
+            return True, ""
+        from . import dcs_server
+        return dcs_server.stop_server(self.settings.dcs_saves)
 
     def load_manual(self, path):
         """Manually Submit: any file the user picks, checked against the pending sortie."""
@@ -1189,6 +1221,7 @@ class Session(Merging, SeadTiming):
     def abort(self) -> None:
         """Throw the built sortie away. The sortie counter goes back too (v0.41.0): it feeds the mission seed, so flying the same package again
         rebuilds the same layout (sites, spawns, patrols), and two test runs of one package can be compared."""
+        self.server_stop()                              # S161b: a sortie on the local DCS server: the server goes down with it
         if self.state.pending is not None and self.state.sortie_counter > 0:
             self.state.sortie_counter -= 1
         self.state.pending = None
@@ -1199,6 +1232,7 @@ class Session(Merging, SeadTiming):
         st = self.state
         man = self.manifest()
         pend = st.pending
+        self.server_stop()                              # S161b: the results are read (`data`): a server sortie's server stops and the user's server settings go back
         out = apply_debrief(st, man, data)
         if out["player"] == "lost":                 # you can't die: a lost jet means you bailed out and were rescued
             out["player"] = "ejected"

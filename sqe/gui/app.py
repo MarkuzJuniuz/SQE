@@ -976,6 +976,12 @@ class MainWindow(QMainWindow):
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Could not build the mission", traceback.format_exc()); return
         QApplication.restoreOverrideCursor()
+        if getattr(sess.settings, "dcs_server_fly", False):       # S161b (experimental): the sortie runs on the local DCS dedicated server
+            ok, text = sess.server_start()
+            if not ok:
+                QMessageBox.warning(self, "DCS server", "The sortie is built, but the local DCS server did not start:\n\n" + text
+                                    + "\n\nThe sortie has a client slot, so it cannot be flown in single player. Fix the problem above and press Abort mission, then Fly again; "
+                                    + "or turn the server option off in Settings and Fly again.")
         self.refresh_all(); self.wait_for_results()
 
     def eventFilter(self, obj, ev):
@@ -1188,7 +1194,7 @@ def run():
         if not (settings.dcs_install and settings.auto_patch_scripting):
             return
         from .. import dcs_server
-        if getattr(settings, "dcs_server_fly", False) and dcs_server.server_processes():
+        if dcs_server.server_processes():                 # S161b: ANY running DCS server needs the patch (a test server too: closing SQE once restored the file under one)
             return
         S.restore_mission_scripting(settings.dcs_install)
     app.aboutToQuit.connect(restore_scripting_on_exit)

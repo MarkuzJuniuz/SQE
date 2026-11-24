@@ -34,6 +34,13 @@ SETTINGS_KEYS_FIXED = (
     ("pause_without_clients", "false"),
     ("resume_mode", "1"),
 )
+# S161b: with a person about to join, the mission waits for him: it pauses while no client is connected and runs when one is
+# (the server options "pause_without_clients" and "resume_mode" 2 = resume with clients; DCS server settings, from memory, firmness medium:
+# the unattended test cycle checks that the mission loads and stays at time 0 until a client joins).
+SETTINGS_KEYS_WAIT_FOR_CLIENT = (
+    ("pause_without_clients", "true"),
+    ("resume_mode", "2"),
+)
 
 
 # ---- paths --------------------------------------------------------------------------------------------------------
@@ -91,11 +98,14 @@ def set_mission_list(text: str, newline: str, miz_path) -> str:
     return pattern.sub(lambda match: block, text)
 
 
-def edit_settings_text(text: str, newline: str, miz_path) -> str:
-    """The settings text with one mission, no password, private, run on load without pausing."""
+def edit_settings_text(text: str, newline: str, miz_path, wait_for_client: bool = False) -> str:
+    """The settings text with one mission, no password, private, run on load without pausing; with `wait_for_client` the mission pauses until a client is connected."""
     text = set_mission_list(text, newline, miz_path)
     for key, value_lua in SETTINGS_KEYS_FIXED:
         text = set_value(text, key, value_lua)
+    if wait_for_client:
+        for key, value_lua in SETTINGS_KEYS_WAIT_FOR_CLIENT:
+            text = set_value(text, key, value_lua)
     return text
 
 
@@ -203,8 +213,8 @@ def recover(dcs_saves: str) -> tuple:
 
 
 # ---- start and stop -----------------------------------------------------------------------------------------------------
-def start_server(dcs_install: str, dcs_saves: str, miz_path) -> tuple:
-    """Put the mission into the server's settings and start the server, detached. -> (ok, text)."""
+def start_server(dcs_install: str, dcs_saves: str, miz_path, wait_for_client: bool = False) -> tuple:
+    """Put the mission into the server's settings and start the server, detached. -> (ok, text). `wait_for_client`: the mission stays paused until a client joins."""
     miz_path = Path(miz_path)
     if not miz_path.exists():
         return False, "The mission file is missing: %s" % miz_path
@@ -216,7 +226,7 @@ def start_server(dcs_install: str, dcs_saves: str, miz_path) -> tuple:
         backup_note = backup_settings_once(dcs_saves)
         shutil.copyfile(miz_path, server_mission_path(dcs_saves))
         text, newline = read_text_keep_ending(settings_path)
-        text = edit_settings_text(text, newline, server_mission_path(dcs_saves))
+        text = edit_settings_text(text, newline, server_mission_path(dcs_saves), wait_for_client)
         open(settings_path, "w", encoding="utf-8", newline="").write(text)
         state_path = server_state_path(dcs_saves)
         if state_path.exists():

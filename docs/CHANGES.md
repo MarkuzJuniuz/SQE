@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.620, experimental: Fly starts the sortie on your local DCS server
+With the experimental server option on (Settings, off by default), Fly now starts the local DCS dedicated server with the sortie; it waits, paused, until you join (Multiplayer, 127.0.0.1:10308, the only client slot). The waiting window reads the server's results, and Accept or Abort stops the server and puts your own server settings back. Not yet flown by a person from start to debrief.
+
 ## v0.41.619, the AWACS guard is a four-ship
 The fighters that guard the land-based AWACS (E-3) now fly as four when their squadron has the jets, not as a pair; red raid escorts were shooting the AWACS down past a pair. The guard squadron (194th FS, 8 F-15C) now guards only that AWACS, four jets one turn and the other four the next; the tankers and the carrier's E-2C get their guard pair from the ordinary fighter squadrons.
 
