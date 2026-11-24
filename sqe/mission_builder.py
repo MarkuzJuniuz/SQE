@@ -770,6 +770,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                           int(r[5]) if str(r[5]).isdigit() else 0, r[6]) for r in rows]
         self._trailing_steerpoints(package, rows[n_route:], pspec)
         kn_rows, hook_wps = [], []
+        hand_rows = []
         for i, r in enumerate(rows, 1):
             leg = ""
             if i < n_route:
@@ -787,6 +788,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                             "note": r[6] if (r[0] in ("TGT", "TKR", "RTB", "DIVERT", "TAKEOFF") or (r[0] == "CAP1" and any(w_.orbit for w_ in pw))) else ""})
             if r[0] not in ("TAKEOFF", "DIVERT", "TKR", "BULLS"):
                 hook_wps.append((pspec.wp_label(i), r[0], r[1], r[2]))
+            # S175: a route point the plain F-14B cannot hold (its WP column is "-") goes on the by-hand page with its position, in route order
+            if self._f14ab and i < n_route and kn_rows[-1]["wp"] == "-":
+                hand_row = self._hand_row(rows, i, n_route)
+                hand_rows.append(hand_row)
+                kn_rows[-1]["pos"] = hand_row["pos"]
         for code, x_, y_ in (self._f14ab or {}).get("extra", []):             # S103e: the nav target points the planner has no row for (the hostile area), right after HB so the card reads in flight order
             kn_rows.insert(n_route, {"wp": code, "name": "TARGET" if code == "ST" else "HOSTILE", "time": "", "alt": "", "kts": "", "leg": "", "win": "",
                                      "note": "Package ground target (navigation target point)" if code == "ST" else "Hostile area: nearest SAM site (navigation target point)"})
@@ -859,7 +865,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                                "status": ("already struck, heading home; its target is in ruins" if m_.get("struck") else "airborne when you start" if m_.get("underway") else "")} for m_ in merged if not m_.get("unseen")],
                    "intel": [l_.replace(" are within reach of the target area and may be sent to reinforce.", " may reinforce.").replace(" are on cockpit alert and may launch to help.", " on alert, may launch.") for l_ in self._intel],
                    "zulu_note": self._zulu_note(), "msa": relief.msa_ft(polyline), "detour_line": self._detour_line(pw),
-                   "avd_table": [{"n": f"AVD {k}", "leg": leg_, "pos": latlon(x_, y_, self.t)} for k, (leg_, x_, y_) in enumerate((self._f14ab or {}).get("avd", []), 1)],
+                   "hand_table": hand_rows,
                    "nav": [ln_ for ln_ in (self._nav_row("HOME", pbase), self._nav_row("DIVERT", div)) if ln_]}
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
@@ -2915,6 +2921,25 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """Your own flight in the plain F-14B (not the all-AI test, not the B(U), whose X-name scheme stays): the jet has three numbered waypoints."""
         return bool(f is not None and f.is_player and not self.o.player_is_ai and f.aircraft == "F-14B")
 
+    def _hand_row(self, rows, i, n_route) -> dict:
+        """S175: one row of the plain F-14B's "ROUTE POINTS (enter by hand)" page for card row `i` (1 = TAKEOFF): its number in the route (TAKEOFF = 0),
+        its name, the leg it sits on (for a turn point round a SAM ring, "AVD"), its position in the jet's format and its altitude."""
+        r = rows[i - 1]
+        leg = ""
+        if r[0] == "AVD":
+            before = "TAKEOFF"
+            for k in range(i - 2, -1, -1):
+                if rows[k][0] != "AVD":
+                    before = rows[k][0]
+                    break
+            after = "HB"
+            for k in range(i, n_route):
+                if rows[k][0] != "AVD":
+                    after = rows[k][0]
+                    break
+            leg = f"{before} -> {after}"
+        return {"n": str(i - 1), "name": r[0], "leg": leg, "pos": latlon(r[1], r[2], self.t), "alt": r[4]}
+
     def _f14ab_label(self, i, r, n_route):
         """The card's WP column for row `i` (1 = TAKEOFF) of the plain F-14B player: 0 the start, 1 to 3 the kept route points, HB the landing, the nav target point's code where a point is one
         (ST, IP), and "-" for a point that is on the card only."""
@@ -2972,13 +2997,6 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.add_nav_target_point(self._pt(geom.tx, geom.ty), "ST")            # XO 2026-11-21: a station fighter's ST is the package's ground target, a row just above HA
             extra.append(("ST", geom.tx, geom.ty))
         self._f14ab = {"keep": [(route[i].name, route[i].x, route[i].y) for i in keep], "ntp": ntp, "extra": extra}
-        avd_ = []                                            # S140c: the turn points the three-waypoint jet cannot hold: the card's "ROUTE POINTS (enter by hand)" table, in route order
-        for i, w in enumerate(route):
-            if w.name == "AVD" and i not in keep:
-                p_ = next((route[k].name for k in range(i - 1, -1, -1) if route[k].name != "AVD"), "TAKEOFF")
-                n_ = next((route[k].name for k in range(i + 1, len(route)) if route[k].name != "AVD"), "HB")
-                avd_.append((f"{p_} -> {n_}", w.x, w.y))
-        self._f14ab["avd"] = avd_
 
     # ---- Link 16 / SADL: the package flies as one network ------------------------------------------------------------------
     def _datalinks(self, package) -> list:
