@@ -626,7 +626,8 @@ class RaidSpawns:
         unseen_ = not getattr(self, "_detect_full", True)                               # v0.41.346 (Phase 7a): an unseen package (detection.cast = "barcap") draws no red reactive pair (blue's pairs below are unchanged)
         picks = reactive.plan_red(st, d, rr, tx, ty, base_n, blue_f, used, ENEMY_FIGHTERS, bearing, self._hold_drawn) if not (fleet_obj or unseen_) else []
         skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         alt, spd = 22000 * FT, 400 * KPH
         placed_red, seen_src = 0, set()
         for k, pk in enumerate(picks, 1):
@@ -825,13 +826,16 @@ class RaidSpawns:
             base = st.bases[f.base_id]
             alt, spd = c1.alt, c1.speed * 3.6                      # pydcs keeps the speed in m/s; _arm_callin takes km/h
             n0 = len(self._hot_calls)
+            def blue_lands_home(g_, b_=base):
+                return self._blue_back_home(g_, b_)
             self._arm_callin(g, None, (sx, sy), (hx, hy), SUPPORT_CAP_ZONE_NM, alt, spd, end_s, tot_s, bf_, {}, tx, ty,
-                             cap2=(c2.position.x, c2.position.y), land=lambda g_, b_=base: self._blue_back_home(g_, b_))
+                             cap2=(c2.position.x, c2.position.y), land=blue_lands_home)
             calls.append(self._hot_calls.pop())
             assert len(self._hot_calls) == n0
         if not calls:
             return
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         if not self._callin_lua:
             t0 = triggers.TriggerOnce(comment="define SQE_CALLIN")
             t0.add_condition(condition.TimeAfter(1))
@@ -849,7 +853,8 @@ class RaidSpawns:
     def _blue_back_home(self, g, base) -> None:
         """The second way home of a called-in blue patrol (after its shift): the field's landing, or its recovery entry point when this base type
         skips landings; the boat's deck. The recovery net of the first home leg still covers the group."""
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         if base.kind == BaseKind.AIRFIELD:
             if self._skip_landing(base):
                 lp_ = g.points[-1].position
@@ -923,7 +928,8 @@ class RaidSpawns:
         from . import raids, ground
         st, d, r = self.state, self.d, self.vrng
         kind = raids.aim_kind(aim)
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         if kind == "sam":                               # S36b: the SAM site under SEAD attack is already on the map (the field's batteries)
             return
         if kind == "supply":
@@ -960,7 +966,8 @@ class RaidSpawns:
         points near that other field are dropped too (a SEAD group for a neighbouring battery)."""
         pts = list(path[:-1])
         ring_ = ARM_LAUNCH_NM if ring_nm is None else ring_nm
-        near = lambda q: dist(*q, dx, dy) <= (ring_ + 10) * NM or (fx is not None and dist(*q, fx, fy) <= (ring_ + 10) * NM)
+        def near(q):
+            return dist(*q, dx, dy) <= (ring_ + 10) * NM or (fx is not None and dist(*q, fx, fy) <= (ring_ + 10) * NM)
         while len(pts) > 1 and near(pts[-1]):
             pts.pop()
         return pts
@@ -1041,7 +1048,8 @@ class RaidSpawns:
         sead_rep = []                                           # B2: one line per SEAD package (kind, jets, launch distance, times), kept on `self.sead_report` for the checks; nothing reads it in the mission
         dx, dy = (ex.get("dest") or (cvb.x, cvb.y))              # where the raiders are going: the field, a supply site, a garrison or a sector
         cvg = self.ship.get(cvb.id)
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         station = (sx_, sy_)
         ba, w1, mshl, staged_ok, apt_r = self._raid_axis(package, station)          # v0.41.265: one place for the marshal and the outer point (the interceptors' dash point uses them too)
         V = RAID_MPS

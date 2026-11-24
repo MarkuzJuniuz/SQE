@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.622, internal clean-up: plain functions in the raid and site spawning code
+Eighteen one-line functions (lambdas) in the code that places red raids and ground sites were rewritten as plain loops and small named functions. Nothing changes in play: 126 test missions come out identical.
+
 ## v0.41.621, internal clean-up: no lambdas left in the mission builder
 The last 21 one-line functions (lambdas) in the mission builder were rewritten as plain loops and small named functions. Nothing changes in play: 126 test missions come out identical.
 
