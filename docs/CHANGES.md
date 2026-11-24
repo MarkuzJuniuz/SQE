@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.634, Level 3: red's SEAD strips the Patriot belt in two layers
+At Level 3, when red raids an outer Patriot, a second SEAD wave goes for the Patriot behind it (the one only the outer site covers), its missiles due 5 minutes after the first wave's land. The second wave may cross the outer site's ring but no other live Patriot's. If the first wave leaves the outer Patriot standing, the second meets it too. Levels 1 and 2 are unchanged.
+
 ## v0.41.633, internal clean-up: named functions in the engine, campaign set-up and red air planning code
 Thirty-four one-line functions (lambdas) in the turn engine, the campaign set-up and red's air planning were given names. Nothing changes in play: eight unflown campaigns come out identical turn for turn, and 127 test missions too.
 

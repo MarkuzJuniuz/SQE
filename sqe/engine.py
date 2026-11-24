@@ -581,6 +581,7 @@ class Session(Merging, SeadTiming):
         self._wave_times(pkgs)                                       # v0.41.367 (S20 Phase 2): and the groups go in one after another, nearest first, SAM_WAVE_GAP_MIN apart
         self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
         self._late_sead(pkgs)                                        # test option --late-sead: the SEAD stage goes in late, so the DEAD stage holds
+        self._time_layers(pkgs)                                      # S183 rule 2: wave 2 of a layered SEAD raid starts SEAD_LAYER_GAP_S after wave 1 (the mission then trims the exact missile time)
         # no package starts before its wave opens (its jets are not ready earlier)
         def floor(p):
             return t0 + _tod.wave_open(p.extra.get("wave", 1))
@@ -822,6 +823,22 @@ class Session(Merging, SeadTiming):
             elif (p.objective.type == ObjectiveType.DEAD and p.objective.target_id in sites and p.objective.aim == "STANDOFF"
                   and int(p.start[:2]) * 60 + int(p.start[3:5]) > m):          # the day's own Standoff DEAD on a blocking site that would go in after the raid: it goes in ahead of it (a SEAD / Close DEAD pair keeps its own staging)
                 p.start = f"{m // 60:02d}:{m % 60:02d}"
+
+    def _time_layers(self, pkgs: list) -> None:
+        """S183 rule 2: a layered SEAD raid's second wave (`extra["layer_of"]` = wave 1's objective id) starts `layer_gap_s` after wave 1 starts (so its blue intercept is timed behind wave 1's). The
+        mission builder then moves its arrival so that its missiles land `layer_gap_s` after wave 1's (`raid_spawns._spawn_raid`)."""
+        by_objective = {}
+        for package in pkgs:
+            by_objective[package.objective.id] = package
+        for package in pkgs:
+            first_id = (package.extra or {}).get("layer_of")
+            if not first_id:
+                continue
+            first = by_objective.get(first_id)
+            if first is None:
+                continue
+            gap_min = int(math.ceil(float(package.extra.get("layer_gap_s", raids.SEAD_LAYER_GAP_S)) / 60.0))
+            package.start = _fmt_hm(_hm(first.start) + gap_min)
 
     def _carried(self, objs: list) -> list:
         """Objectives postponed yesterday (no aircraft left for them after an emergency scramble), if they are still worth flying and not already in the list."""
