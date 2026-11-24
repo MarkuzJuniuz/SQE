@@ -396,13 +396,29 @@ class FighterStations:
                 alt = t_.alt_ft if (t_ is not None and t_.changed) else AIRCRAFT[lf.aircraft].profile.alt_ft.get(lf.role, 20000)
                 brg = bearing(sx, sy, tx, ty)                        # toward the target; "behind" is the other way, so it is never nearer the target than the short-range station
                 sites = profiles._cover_sites(self.state, alt)
-                room = lambda x, y: min([dist(x, y, c.x, c.y) - (samtier.get(c.variant, "station_nm") * NM if c.variant in tm.UMBRELLA_VARIANTS else r_) for c, r_ in sites] + [1e9])
+                def room(x, y):
+                    # the least distance to the edge of a SAM site's keep-out circle (an umbrella site: its station ring; others: their own ring); 1e9 with no site
+                    least_room = 1e9
+                    for site, site_ring in sites:
+                        ring_edge_m = site_ring
+                        if site.variant in tm.UMBRELLA_VARIANTS:
+                            ring_edge_m = samtier.get(site.variant, "station_nm") * NM
+                        site_room = dist(x, y, site.x, site.y) - ring_edge_m
+                        if site_room < least_room:
+                            least_room = site_room
+                    return least_room
                 for back, side in ((LRA_BACK_NM, LRA_SIDE_NM), (LRA_BACK_NM, LRA_SIDE_NM / 2), (LRA_BACK_NM / 2, LRA_SIDE_NM), (0.0, LRA_SIDE_NM), (LRA_BACK_NM, 0.0)):
                     bx, by = offset(sx, sy, brg + 180, back * NM)
                     cands = [offset(bx, by, brg + 90, side * NM), offset(bx, by, brg - 90, side * NM)] if side else [(bx, by)]
                     ok = [c for c in cands if room(*c) > 0]
                     if ok:
-                        x, y = max(ok, key=lambda c: room(*c))
+                        x, y = None, None
+                        most_room = None
+                        for candidate_xy in ok:
+                            candidate_room = room(*candidate_xy)
+                            if most_room is None or candidate_room > most_room:
+                                x, y = candidate_xy
+                                most_room = candidate_room
                         geom.stand[lk] = (x, y, ls[2], dist(x, y, tx, ty) / NM) + tuple(ls[4:])
                         break
 
@@ -410,7 +426,14 @@ class FighterStations:
         """v0.41.119: where red's fighters most likely come from, seen from (cx, cy): the nearest of red's planned patrol stations and its live
         fighter bases. None when there is neither."""
         pts = [(c_["x"], c_["y"]) for c_ in (getattr(self, "_cap_plan", None) or [])] + list(tm.fighter_bases(self.state))
-        return min(pts, key=lambda q: dist(cx, cy, q[0], q[1])) if pts else None
+        nearest_point = None
+        nearest_point_m = None
+        for candidate_point in pts:
+            candidate_m = dist(cx, cy, candidate_point[0], candidate_point[1])
+            if nearest_point_m is None or candidate_m < nearest_point_m:
+                nearest_point = candidate_point
+                nearest_point_m = candidate_m
+        return nearest_point
 
     def _sam_clear(self, x, y) -> bool:
         """v0.41.14: a friendly orbit is clear of SAMs: 35 nm from every live SA-10 (the reach measured in the runs; the ring table says 48 nm, which
