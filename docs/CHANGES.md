@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.644, README screenshots refreshed
+The README pictures show the current windows (HVAACAP in the Missions table and the kneeboard, the new AWACS and tanker texts). Docs only.
+
 ## v0.41.643, more code clean-up (S150 PR 14)
 The small one-line helpers behind the buttons, menus and tables in the windows are now plain named functions, for readability. Nothing changes in the game or the windows.
 
