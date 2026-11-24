@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.643, more code clean-up (S150 PR 14)
+The small one-line helpers behind the buttons, menus and tables in the windows are now plain named functions, for readability. Nothing changes in the game or the windows.
+
 ## v0.41.642, code clean-up (S150 PR 13)
 The last small one-line helpers outside the windows are now plain named functions, for readability. Nothing changes in the game.
 

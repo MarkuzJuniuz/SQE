@@ -20,6 +20,11 @@ def situation(state) -> dict:
     return {"background": paras, "intent": intent, "label": label, "now": now}
 
 
+# Sort key: an asset's name.
+def _asset_name(asset):
+    return asset.name
+
+
 def _bn(x: float) -> str:
     n = round(x / posture.POINTS_PER_BATTALION)
     return str(n) if n >= 1 else ("<1" if x >= ground.MIN_FORCE else "0")
@@ -77,7 +82,7 @@ def supply_rows(state) -> list:
     prev = g.get("sup_h", {})
     for side, label, pool in (("blue", "Coalition", getattr(state, "blue_assets", {})), ("red", story.enemy(state), state.assets)):
         rate = ground.supply(state, side) / ground.SUPPLY_REPAIR_DAYS
-        for a in sorted(pool.values(), key=lambda x: x.name):
+        for a in sorted(pool.values(), key=_asset_name):
             if not ground.is_supply(a):
                 continue
             h = a.health
@@ -100,11 +105,11 @@ def supply_rows(state) -> list:
 def air_defence_rows(state) -> list:
     """(side, site, kind, health %, status) for every SAM site and radar; the Coalition's sites are listed by field."""
     out = []
-    for a in sorted(state.assets.values(), key=lambda x: x.name):
+    for a in sorted(state.assets.values(), key=_asset_name):
         if a.kind in (AssetKind.SAM, AssetKind.EWR):
             st_ = "destroyed" if a.destroyed else ("radars blinded today" if getattr(a, "suppressed", False) else "operational")
             out.append((story.enemy(state), a.name, a.variant or a.kind.value, round(100 * a.health), st_))
-    for a in sorted((getattr(state, "blue_sams", None) or {}).values(), key=lambda x: x.name):
+    for a in sorted((getattr(state, "blue_sams", None) or {}).values(), key=_asset_name):
         out.append(("Coalition", a.name, a.variant or "SAM", round(100 * a.health), "destroyed" if a.destroyed else "operational"))
     return out
 

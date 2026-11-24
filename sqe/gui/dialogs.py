@@ -333,7 +333,11 @@ class SettingsDialog(QDialog):
                 ("DCS", self.inst, "Select the DCS World Install Folder", "Install folder (only needed for the MissionScripting.lua patch)"),
                 ("DCS Saves", self.saves, "Select Your DCS Saved Games Folder", r"e.g. C:\Users\You\Saved Games\DCS  or  ...\DCS_Server")):
             r = QHBoxLayout(); lb = QLabel(label); lb.setMinimumWidth(80); b = QPushButton("Browse")
-            b.clicked.connect(lambda _=0, l=line, t_=ttl: _browse(self, l, t_))
+            # The defaults bind THIS row's field and title now (a plain closure would see the last row's); `_` takes the `checked` flag Qt sends.
+            def browse_this_folder(_=0, l=line, t_=ttl):
+                _browse(self, l, t_)
+
+            b.clicked.connect(browse_this_folder)
             r.addWidget(lb); r.addWidget(line, 1); r.addWidget(b); v.addLayout(r)
             hint(v, h_)
         self.ms = QLabel(); v.addWidget(self.ms)
@@ -356,7 +360,13 @@ class SettingsDialog(QDialog):
         v.addSpacing(10)
         self.ecm_state = QLabel(); v.addWidget(self.ecm_state)
         self.ecm_inst = QPushButton("Install ECM Script"); self.ecm_rem = QPushButton("Remove")
-        self.ecm_inst.clicked.connect(lambda: self._ecm_do(S.install_ecm_script)); self.ecm_rem.clicked.connect(lambda: self._ecm_do(S.remove_ecm_script))
+        def install_ecm():
+            self._ecm_do(S.install_ecm_script)
+
+        def remove_ecm():
+            self._ecm_do(S.remove_ecm_script)
+
+        self.ecm_inst.clicked.connect(install_ecm); self.ecm_rem.clicked.connect(remove_ecm)
         r = QHBoxLayout(); r.addWidget(self.ecm_inst); r.addWidget(self.ecm_rem); r.addStretch(1); v.addLayout(r)
         hint(v, "Lets SQE read your F-16C's ECM lamp (about four times a second) so its jamming model knows when your jammer is on. It copies sqe_ecm_export.lua into "
                 "Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there (a backup, Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. "
