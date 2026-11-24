@@ -1181,6 +1181,9 @@ class RaidSpawns:
                 wp = g.add_waypoint(pt(*q), r_alt, 450 * KPH, nm_[k])
                 if k == len(rem) - 1 and bomber:
                     if sead_r:                                  # S36b: the SEAD flight fires its Kh-31P at the site's radars from the launch point (an ARM task on the site's group), then turns home
+                        # S179: a fly-over point, so the group passes over its ARM point before it turns home. As a fly-by point the group cut its turn about 10 km
+                        # early on a sharp turn, stayed beyond the range the AI launches a Kh-31P from (never above 94 km) and fired nothing.
+                        wp.action = PointAction.FlyOverPoint
                         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
                         if sead_tgt is not None:
                             ca_ = task.ControlledTask(task.AttackGroup(sead_tgt.id, weapon_type=task.WeaponType.ARM, group_attack=True, expend=task.Expend.All))      # v0.41.399: all Kh-31P at the site in one go (the Auto default fired one a jet at any radar), then home
@@ -1189,6 +1192,8 @@ class RaidSpawns:
                         zt_.stop_after_duration(int(ARM_WINDOW_S)); wp.tasks.append(zt_)          # S178: the same duration for the fallback zone task
                     elif kh59_r:                                # S48: the Kh-59M flight fires its missiles at the aim from the launch point (the point task chosen by KH59_TASK), then turns home
                         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+                        # S179: the same fly-over launch point as the SEAD flight, so the group reaches it before it turns home
+                        wp.action = PointAction.FlyOverPoint
                         tk_ = (task.AttackMapObject(mapping.Vector2(dx, dy), group_attack=True) if KH59_TASK == "AttackMapObject"
                                else task.Bombing(mapping.Vector2(dx, dy), expend=task.Expend.All, group_attack=True))
                         ca_ = task.ControlledTask(tk_)

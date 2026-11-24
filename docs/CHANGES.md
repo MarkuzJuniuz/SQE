@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.614, red SEAD and Kh-59M raids fly over their launch point
+A red SEAD or Kh-59M bomber group now flies over its launch point before it turns home. On a sharp turn it used to cut the corner about 10 km short, stay out of missile range and go home without firing.
+
 ## v0.41.613, blue guard fighters keep their radar searching
 The fighter pairs that guard bases, the carrier, the tanker and the AWACS now search with their radar all the time, as the tanker guard already did. Before, a pair could fly near red jets and not see them until it was fired on.
 
