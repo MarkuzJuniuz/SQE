@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.612, red SEAD raids still fire when they arrive late
+The time window in which a red SEAD bomber group may fire its anti-radiation missiles now runs from when the group reaches its launch point, not to a fixed clock time. A group delayed by a dive, a turn or a hold used to arrive after its window had ended and fired nothing; now it fires.
+
 ## v0.41.611, internal clean-up: the start of the mission builder in plain Python
 Fourteen lambdas and one-line loops in the first part of the mission builder were rewritten as plain loops and small named functions. Nothing changes in play: 125 test missions come out identical.
 
