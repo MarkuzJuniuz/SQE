@@ -17,6 +17,8 @@ local SOUND_YOU = "__SOUND_YOU__"
 local AITEST = __AITEST__            -- all-AI test: nobody sits in a flight, so calls go to everyone
 local CALLS = { __CALLS__ }
 local UFLT = { __UFLT__ }
+local SAMNUM = { __SAMNUM__ }      -- S184: { part of a DCS type name, the SA number as spoken }, first match wins: the system in a MAGNUM call
+local MAGVAR = __MAGVAR__          -- S184: the theatre's magnetic variation, degrees east: bullseye bearings are magnetic (brevity: BULLSEYE)
 local BTGT = { __BTGT__ }            -- S149: unit name -> the target point of a striker (bomb) flight; a bomb leaving farther than BOMB_FAR_M from it is a jettison, not a release
 local BOMB_FAR_M = __BOMBFAR__ * 1000
 local ENEMYAIR = { __ENEMYAIR__ }
@@ -274,6 +276,50 @@ local function shotCall(e)
     return "Bombs away"
   end
   return nil
+end
+-- S184: the shot call by the book. Air Control Communication (ATP 3-52.4, 2024): "Fighters should communicate GROUP BULLSEYE, altitude, and HOSTILE in the
+-- shot transmission", example "RAPTOR 1, FOX 3 LEAD GROUP BULLSEYE 1-2-5/27, TWENTY-NINE THOUSAND, HOSTILE."; SEAD example "STORM 2, MAGNUM ELEVEN
+-- BULLSEYE 3-6-0/32." (the system by its SA number). Brevity (ATP 1-02.1, 2023): BULLSEYE = bearing (magnetic) and range (nautical miles).
+-- The bearing is spoken digit by digit. SQE has no group names (LEAD, WEST ...): the call says "group". Anything missing: the plain word.
+local function bullseyeOf(p)
+  local ok, ref = pcall(function() return coalition.getMainRefPoint(coalition.side.BLUE) end)
+  if not ok or not ref then return nil end
+  local dx = p.x - ref.x
+  local dz = p.z - ref.z
+  local bearing = math.deg(math.atan2(dz, dx)) - MAGVAR
+  bearing = math.floor(bearing + 0.5) % 360
+  if bearing == 0 then bearing = 360 end
+  local range_nm = math.floor(math.sqrt(dx * dx + dz * dz) / 1852 + 0.5)
+  local digits = string.format("%03d", bearing)
+  return "bullseye " .. string.sub(digits, 1, 1) .. "-" .. string.sub(digits, 2, 2) .. "-" .. string.sub(digits, 3, 3) .. "/" .. range_nm
+end
+local function shotDetail(e, call)
+  local okt, target = pcall(function() return e.weapon:getTarget() end)
+  if not okt or not target then return call end
+  local okp, tp = pcall(function() return target:getPoint() end)
+  if not okp or not tp then return call end
+  local where = bullseyeOf(tp)
+  if not where then return call end
+  if string.sub(call, 1, 3) == "Fox" then
+    local thousands = math.floor(tp.y * 3.28084 / 1000 + 0.5)
+    local height = thousands .. " thousand"
+    if thousands < 1 then height = "low" end
+    return call .. ", group " .. where .. ", " .. height .. ", hostile"
+  end
+  if call == "Magnum" then
+    local system = ""
+    local okn, type_name = pcall(function() return target:getTypeName() end)
+    if okn and type_name then
+      for _, row in ipairs(SAMNUM) do
+        if string.find(type_name, row[1], 1, true) then
+          system = " " .. row[2]
+          break
+        end
+      end
+    end
+    return call .. system .. " " .. where
+  end
+  return call
 end
 local function logShot(ev, e, by)
   local function tname(o) local ok, t = pcall(function() return o:getTypeName() end); if ok and t then return t end return "?" end
@@ -572,7 +618,12 @@ function H:onEvent(e)
       if last and last.ev == "shot" and last.by == n then last.rk = dm / 1000 end
       if dm > BOMB_FAR_M then call = nil end
     end
-    if lab and call and throttle("shot:" .. lab .. call, 6) then say(lab .. ": " .. call .. ".") end
+    if lab and call and throttle("shot:" .. lab .. call, 6) then
+      local text = call
+      local okd, detail = pcall(shotDetail, e, call)      -- S184: what and where, by the book; any error: the plain word
+      if okd and detail then text = detail end
+      say(lab .. ": " .. text .. ".")
+    end
   elseif id == world.event.S_EVENT_HIT then
     logShot("hit", e, n)
     local tn = nameOf(e.target)

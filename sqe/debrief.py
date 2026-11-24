@@ -80,6 +80,13 @@ def _umbrella_lua(x: dict) -> str:
 BOMB_FAR_KM = 20     # S149 (XO 2026-11-22: a jumped AI striker dumps its bombs and the hook called "Bombs away"): a bomb that leaves farther than this from its flight's target point is a jettison. SQE's strikers release inside 5 nm (JDAM, `routes.JDAM_RELEASE_NM`) to the point itself; 20 km is a judgment call with margin for a CAS target that moves
 
 
+# S184: the SA number a MAGNUM call names, by a part of the DCS type name of the radar or launcher the missile goes for (first match wins).
+# Source: the NATO reporting numbers of these systems (SA-2 S-75, SA-3 S-125, SA-5 S-200, SA-6 Kub, SA-8 Osa, SA-9 Strela-1, SA-10 S-300PS, SA-11 Buk,
+# SA-13 Strela-10, SA-15 Tor, SA-19 Tunguska: public, firmness high); the type names are pydcs `vehicles.AirDefence` ids.
+SAM_NUMBER_WORDS = (("Kub", "six"), ("S-300", "ten"), ("Buk", "eleven"), ("Osa", "eight"), ("Tor 9A", "fifteen"), ("SNR_75", "two"), ("s-125", "three"),
+                    ("RPC_5N62", "five"), ("RLS_19J6", "five"), ("Tunguska", "nineteen"), ("Strela-10", "thirteen"), ("Strela-1 ", "nine"))
+
+
 def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "", group: str = "",
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
@@ -115,10 +122,12 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__COVER__", ", ".join(f'{{g={_lq(c["g"])}, n={int(c["n"])}, bf={int(c["bf"])}, rf={int(c["rf"])}, u={float(c["u"]):.0f}}}' for c in (cover or [])))
             .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}, sq={_lq(a.get("sq", ""))}}}' for a in (alerts or [])))
             .replace("__PHOME__", ("{ x = %.1f, z = %.1f }" % tuple((cfg or {})["phome"])) if (cfg or {}).get("phome") else "nil")
+            .replace("__SAMNUM__", ", ".join("{%s, %s}" % (_lq(part), _lq(word)) for part, word in SAM_NUMBER_WORDS))
+            .replace("__MAGVAR__", "%.1f" % float((cfg or {}).get("magvar", 0.0)))
             .replace("__BLUEPLACES__", ", ".join(f"[{_lq(n_)}]=true" for n_ in (cfg or {}).get("blue_places", [])))
             .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
             .replace("__RECOV__", _recov_lua((cfg or {}).get("recov")))
-            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov", "rwys", "craters", "blue_places")}).replace("'", "")))
+            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov", "rwys", "craters", "blue_places", "magvar")}).replace("'", "")))
 
 
 def _recov_lua(rs) -> str:

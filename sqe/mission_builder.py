@@ -852,7 +852,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                               "cvrec": self._wing_recovery(pbase, ptot), "recov": list(self._recov),
                               "phome": ([self._pt(pbase.x, pbase.y).x, self._pt(pbase.x, pbase.y).y] if pbase.kind == BaseKind.AIRFIELD else None),
                               "rwys": runways.fields_for_hook(st, self.t), "craters": self._crater_blasts,
-                              "blue_places": self._blue_places()})
+                              "blue_places": self._blue_places(),
+                              "magvar": runways.mag_var_deg()})          # S184: bullseye bearings in the shot calls are magnetic (the pack's `mag_var_deg`, east positive)
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"

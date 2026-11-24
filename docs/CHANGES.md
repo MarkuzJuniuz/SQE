@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.625, shot calls by the book: what was fired at, and where
+Your flights' weapon calls now follow the brevity and air control communication publications: an air-to-air shot says the group's position off the bullseye, its altitude and "hostile" ("Fox 3, group bullseye 0-8-5/27, 29 thousand, hostile"), and an anti-radar shot names the system by its SA number and its position ("Magnum eleven bullseye 3-6-0/32"). Bearings are magnetic and read digit by digit. Rifle and Bombs away are unchanged.
+
 ## v0.41.624, internal clean-up: plain functions in the package merging code
 Nine one-line functions (lambdas) in the code that folds neighbouring packages into one mission were rewritten as small named functions. Nothing changes in play: 126 test missions come out identical.
 
