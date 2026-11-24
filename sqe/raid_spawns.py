@@ -530,12 +530,14 @@ class RaidSpawns:
                 exempt.add(layer_site.guards)
         return exempt
 
-    def _raid_route_lines(self, packages) -> list:
+    def _raid_route_lines(self, packages) -> tuple:
         """S188: [(x1, y1, x2, y2)] the lines the red raids of this mission fly BEFORE they are spawned: from each wing that flies in a raid (raiders, escorts, sweep, pooled wings) to the raid's target, bent round
         blue's Patriot fields by the same `_raid_bend` the spawner uses. A raid that is already under way at mission start flies along the same line, so it is covered. Fleet (carrier) raids have no
-        land target here and are left out. The tanker track keeps `threatmap.TANKER_RAID_NM` from these lines."""
+        land target here and are left out. The tanker track keeps `threatmap.TANKER_RAID_NM` from these lines. S189: -> (lines, sweep lines): the sweep wings' lines are a list of their own
+        (`threatmap.TANKER_SWEEP_NM` / `AWACS_SWEEP_NM`: a red sweep hunts the tanker and the AWACS far from its bombers)."""
         st = self.state
         lines = []
+        sweep_lines = []
         for package in packages:
             ex = package.extra or {}
             if package.objective.type != ObjectiveType.FLEET_DEFENSE or not ex.get("land") or not ex.get("dest"):
@@ -547,22 +549,27 @@ class RaidSpawns:
             if layer_of and layer_of not in getattr(self, "_layer_present", {layer_of}):
                 continue                                          # S183: a second wave whose first wave is not in the mission is not built
             altitude_ft = SEAD_ALT_FT if ex.get("sead") else 20000
-            wing_ids = {ex.get("bomber_wing"), ex.get("escort_wing"), ex.get("sweep_wing")}
+            wing_ids = {ex.get("bomber_wing"), ex.get("escort_wing")}
             for partner in (ex.get("pool") or []):
                 wing_ids.add(partner.get("wing"))
             for partner in (ex.get("esc_pool") or []):
                 wing_ids.add(partner.get("wing"))
+            sweep_ids = {ex.get("sweep_wing")}
+            for partner in (ex.get("sweep_pool") or []):
+                sweep_ids.add(partner.get("wing"))
+            wing_ids -= sweep_ids
             self._bend_exempt = self._layer_exempt_fields(ex)
             dest = (float(ex["dest"][0]), float(ex["dest"][1]))
-            for wing_id in sorted(w for w in wing_ids if w):
-                field = st.assets.get(wing_id)
-                if field is None:
-                    continue
-                path = self._raid_bend([(field.x, field.y), dest], raided, altitude_ft)
-                for index in range(len(path) - 1):
-                    lines.append((path[index][0], path[index][1], path[index + 1][0], path[index + 1][1]))
+            for wing_ids_of_kind, into in ((wing_ids, lines), (sweep_ids, sweep_lines)):
+                for wing_id in sorted(w for w in wing_ids_of_kind if w):
+                    field = st.assets.get(wing_id)
+                    if field is None:
+                        continue
+                    path = self._raid_bend([(field.x, field.y), dest], raided, altitude_ft)
+                    for index in range(len(path) - 1):
+                        into.append((path[index][0], path[index][1], path[index + 1][0], path[index + 1][1]))
         self._bend_exempt = set()
-        return lines
+        return lines, sweep_lines
 
     def _face_patriots_to_raid(self, route, package_routes) -> None:
         """S179c (XO 2026-11-24): every blue field Patriot within reach of a red raid's route turns to face the part of the route it can reach. A DCS Patriot
