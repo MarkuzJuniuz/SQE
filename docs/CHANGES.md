@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.638, the "Bombs away" call says where and which way
+An AI flight's "Bombs away" now follows the brevity manual: it adds where the bombs left (bullseye bearing and range) and the track they fly, as a heading, for example "Bombs away, bullseye 1-2-5/27, heading 2-7-0". "Rifle" and "Magnum" are unchanged.
+
 ## v0.41.637, the tanker and the AWACS also keep clear of red sweeps
 Red's fighter sweeps hunt: in the test runs they shot down the tanker and the AWACS far from their own bombers. The tanker's track and the AWACS station now stay at least 100 nm from the route a red sweep flies, as well as 50 nm (tanker) and 40 nm (AWACS) from the raid's. The AWACS stays where it was when no spot behind it is clear. The sweeps themselves are unchanged.
 
