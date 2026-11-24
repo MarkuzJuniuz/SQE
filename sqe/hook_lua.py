@@ -293,7 +293,45 @@ local function bullseyeOf(p)
   local digits = string.format("%03d", bearing)
   return "bullseye " .. string.sub(digits, 1, 1) .. "-" .. string.sub(digits, 2, 2) .. "-" .. string.sub(digits, 3, 3) .. "/" .. range_nm
 end
+-- S190 (XO 2026-11-24): "Bombs away" by the brevity manual. ATP 1-02.1 (25 April 2025): "[number, weapon type] AWAY ... At minimum, number or weapon type required. NOTE: Include
+-- launch location in BULLSEYE format and weapons track direction when appropriate." The call says the launch location (the shooter's bullseye) and the weapon's track as a magnetic
+-- heading, digit by digit ("heading 2-7-0"): the weapon's own velocity at the release, else the line from the shooter to the weapon's target. Anything missing: what is known, else the plain word.
+local function headingWord(dx, dz)
+  local heading = math.deg(math.atan2(dz, dx)) - MAGVAR
+  heading = math.floor(heading + 0.5) % 360
+  if heading == 0 then heading = 360 end
+  local digits = string.format("%03d", heading)
+  return string.sub(digits, 1, 1) .. "-" .. string.sub(digits, 2, 2) .. "-" .. string.sub(digits, 3, 3)
+end
+local function bombsAwayDetail(e, call)
+  local oks, shooter_point = pcall(function() return e.initiator:getPoint() end)
+  if not oks or not shooter_point then return call end
+  local where = bullseyeOf(shooter_point)
+  if not where then return call end
+  local text = call .. ", " .. where
+  local track_x = nil
+  local track_z = nil
+  local okv, velocity = pcall(function() return e.weapon:getVelocity() end)
+  if okv and velocity and (math.abs(velocity.x) + math.abs(velocity.z)) > 1 then
+    track_x = velocity.x
+    track_z = velocity.z
+  else
+    local okt, target = pcall(function() return e.weapon:getTarget() end)
+    if okt and target then
+      local okp, target_point = pcall(function() return target:getPoint() end)
+      if okp and target_point then
+        track_x = target_point.x - shooter_point.x
+        track_z = target_point.z - shooter_point.z
+      end
+    end
+  end
+  if track_x ~= nil then
+    text = text .. ", heading " .. headingWord(track_x, track_z)
+  end
+  return text
+end
 local function shotDetail(e, call)
+  if call == "Bombs away" then return bombsAwayDetail(e, call) end
   local okt, target = pcall(function() return e.weapon:getTarget() end)
   if not okt or not target then return call end
   local okp, tp = pcall(function() return target:getPoint() end)
