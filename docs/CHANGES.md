@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.648, internal test logging
+A test-only logging switch for development runs. Nothing changes for players.
+
 ## v0.41.647, the ECM settings sit tidier
 In Settings > DCS Integration the "Show ECM Status" box is now right under "ECM Script", and the Install / Update ECM Script button keeps one width, so Remove no longer shifts when its label changes.
 
