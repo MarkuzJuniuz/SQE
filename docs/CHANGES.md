@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.635, the tanker and the AWACS keep clear of red raids
+In a mission with a red raid, the tanker's track now stays at least 50 nm from the routes the raid's bombers, escorts and sweeps fly, and the AWACS station moves back (up to 60 nm) when a raid booked that turn passes within 40 nm of it. In the test missions the tanker ends up further from the raids and often nearer home; the player's own route is unchanged.
+
 ## v0.41.634, Level 3: red's SEAD strips the Patriot belt in two layers
 At Level 3, when red raids an outer Patriot, a second SEAD wave goes for the Patriot behind it (the one only the outer site covers), its missiles due 5 minutes after the first wave's land. The second wave may cross the outer site's ring but no other live Patriot's. If the first wave leaves the outer Patriot standing, the second meets it too. Levels 1 and 2 are unchanged.
 
