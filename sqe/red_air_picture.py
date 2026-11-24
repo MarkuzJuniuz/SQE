@@ -333,6 +333,12 @@ class RedAirPicture:
         """Known CAP flights are airborne from t=0 on briefed stations. The rest of the defenders are alert aircraft sitting on real
         enemy airfields; they take off (scramble) when the package is detected inside the field's detection zone."""
         if package.objective.type == ObjectiveType.FLEET_DEFENSE:
+            raid_extra = package.extra or {}
+            first_wave = raid_extra.get("layer_of") or raid_extra.get("flank_after")
+            if first_wave and first_wave in getattr(self, "_layer_present", ()) and first_wave != package.objective.id and first_wave not in self._layer_impact and first_wave not in self._layer_gone:
+                # S183 / S186: this raid goes in behind another raid of the mission (a second SEAD wave, a flank raid): it is built after the mission's other packages, when that raid's missile time is known (`MissionBuilder.build`)
+                self._deferred_raid = (package, tx, ty, tot_s, geom, manifest)
+                return
             return self._spawn_raid(package, tx, ty, tot_s, geom, manifest)
         st, d, r = self.state, self.d, self.vrng
         n_fl = package.n_def // 2
