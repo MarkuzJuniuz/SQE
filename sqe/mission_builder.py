@@ -663,6 +663,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._sead_info = {}                                                 # S86: id(SEAD flight) -> the reach-crossing numbers its push was timed with (probe)
         self._layer_impact = {}                                              # S183 rule 2: raid objective id -> when its SEAD missiles land (mission seconds), for the second wave behind it
         self._layer_gone = set()                                             # ...and the raids not flown in this mission (a second wave behind one is not built)
+        self._deferred_raid = None                                           # S183 / S186: the anchor raid that waits for the raid it goes in behind (built after `_add_merged`)
         self._push_adj = {}                                                  # S38: id(flight) -> the push time an AI SEAD actually uses (timed to the strikers, not the push)
         self._commit_flights = []                                            # S158: AI cover flights the blue commit script watches (blue_commit.py)
         self._holds = []                                                     # v0.41.10: TARCAP / escort holds, extended to the last package over their target area
@@ -715,6 +716,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 t_ = st.assets[package.objective.target_id]
                 self._agm88_refs.append((t_.x, t_.y, hs_))
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
+        if self._deferred_raid is not None:
+            deferred_raid = self._deferred_raid
+            self._deferred_raid = None
+            manifest.cur_pkg = deferred_raid[0].id
+            self._spawn_raid(*deferred_raid)                                  # S183 / S186: now that the first raid's missile time is known
         self._stage_front_battles(package, manifest, tx, ty, [(w_.x, w_.y) for w_ in pw], tgt.eta_s)             # S81: the ground war on the map, under any flight
         # HAVCAP and base BARCAP guard the tanker, AWACS and home field: they stay until the last flight of ANY package in this mission is home
         # (they used to leave 40 min after your TOT, so later merged packages flew with the tanker and AWACS unguarded)
@@ -930,7 +936,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._merged_units = getattr(self, "_merged_units", 0)
         prev_ = self._counts()["units"]
         prev_id = None
-        for k, x in enumerate(list(extras) + [r for r in ruins if r.id not in {e.id for e in extras}]):
+        in_front = []
+        behind = []
+        for extra_package in extras:
+            extra_plan = extra_package.extra or {}
+            if extra_plan.get("layer_of") or extra_plan.get("flank_after"):
+                behind.append(extra_package)                      # S183 / S186: a raid that goes in behind another is built after it (it needs that raid's missile time)
+            else:
+                in_front.append(extra_package)
+        for k, x in enumerate(in_front + behind + [r for r in ruins if r.id not in {e.id for e in extras}]):
             now_ = self._counts()["units"]                  # what the previous package brought (flights, its sites, ruins) is exempt from the base limit
             self._merged_units += now_ - prev_
             if prev_id is not None:

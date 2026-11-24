@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.636, Level 3: a bomber raid comes in behind red's SEAD, from another side
+At Level 3, when red sends SEAD against a field's Patriot, it may send one bomber raid at that same field, from an axis at least 100 degrees away from the SEAD raid's, reaching its attack run about 5 minutes after the SEAD missiles are due. In the mission the Patriot keeps facing the SEAD raid, so the bombers meet only the rest of the field's defences (HAWK, guns, Stinger, your fighters). In the war simulation the field's air defence counts half against such a raid. Levels 1 and 2 are unchanged.
+
 ## v0.41.635, the tanker and the AWACS keep clear of red raids
 In a mission with a red raid, the tanker's track now stays at least 50 nm from the routes the raid's bombers, escorts and sweeps fly, and the AWACS station moves back (up to 60 nm) when a raid booked that turn passes within 40 nm of it. In the test missions the tanker ends up further from the raids and often nearer home; the player's own route is unchanged.
 
