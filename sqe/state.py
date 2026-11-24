@@ -20,6 +20,8 @@ def _upgrade_cap_tags(*parts) -> None:
             for k, v in x.items():
                 if k in ("tag", "kind") and isinstance(v, str) and v in OLD_TAG_NAMES:
                     x[k] = OLD_TAG_NAMES[v]
+                elif k == "task" and isinstance(v, str) and v.startswith("HAVCAP ("):
+                    x[k] = "HVAACAP (" + v[len("HAVCAP ("):]          # S192: the stored label "HAVCAP (guards the AWACS)" of a planned guard flight
                 else:
                     walk(v)
         elif isinstance(x, list):
@@ -223,6 +225,9 @@ class CampaignState:
         s.player = PlayerProfile(**d["player"]) if d.get("player") else None
         s.bases = {k: Base(**{**v, "kind": BaseKind(v["kind"])}) for k, v in d["bases"].items()}
         s.squadrons = {k: Squadron(**v) for k, v in d["squadrons"].items()}
+        for squadron in s.squadrons.values():
+            if squadron.role == "havcap":                                    # S192: the guard squadrons' role was renamed from "havcap" to "hvaacap"
+                squadron.role = "hvaacap"
         s.assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in d["assets"].items()}
         s.enemy_air = [wing_from_dict(w) for w in d["enemy_air"]]
         s.ground = d.get("ground") or {}

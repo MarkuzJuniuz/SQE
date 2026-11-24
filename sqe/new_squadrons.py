@@ -58,7 +58,7 @@ def form(state, b, parking) -> tuple:
     if cs is None and aircraft != "F-16C":
         aircraft, short = "F-16C", 0
         cs = callsign_for(state, aircraft)
-    size = max([q.authorized for q in state.squadrons.values() if q.aircraft == aircraft and q.role != "havcap"] or [12])
+    size = max([q.authorized for q in state.squadrons.values() if q.aircraft == aircraft and q.role != "hvaacap"] or [12])
     here = sum(q.authorized for q in state.squadrons.values() if q.base_id == b.id)
     cap = parking(b.airport, aircraft) if b.airport else None
     if cap is not None:

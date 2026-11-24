@@ -355,7 +355,7 @@ def field_detect_nm(field_xy, target_xy, state=None) -> float:
 
 
 def package_refs(state, flights) -> list:
-    """S77: where a package's flights come from: the (x, y) of the base of every flight that is not a support patrol (HAVCAP, BARCAP), one entry per flight. safe_marshal takes it as `refs`."""
+    """S77: where a package's flights come from: the (x, y) of the base of every flight that is not a support patrol (HVAACAP, BARCAP), one entry per flight. safe_marshal takes it as `refs`."""
     return [(state.bases[f.base_id].x, state.bases[f.base_id].y) for f in flights if not getattr(f, 'tag', '') and getattr(f, 'base_id', None) in state.bases]
 
 

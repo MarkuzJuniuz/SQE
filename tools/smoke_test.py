@@ -139,6 +139,19 @@ def check_saves_round_trip():
     r = mk()
     r.open(s.path)
     assert (r.state.a10_variant, r.state.f14_variant, r.state.link16) == ("A-10C", "F-14BU", True), "an old save without the era keys loads with today's equipment"
+    s = fresh_session(3, 3)                                                  # S192: HAVCAP became HVAACAP; an old save holds the guard flights' tags, their task text and the guard squadrons' role under the old name
+    s.skip_turn()
+    s.save()
+    saved_text = Path(s.path).read_text(encoding="utf-8")
+    assert "HVAACAP" in saved_text, "a new save names the guard flights HVAACAP (the check needs a campaign that has guards planned)"
+    old_text = saved_text.replace("TKR_HVAACAP", "TKR_HAVCAP").replace("HVAACAP", "HAVCAP").replace('"role": "hvaacap"', '"role": "havcap"')
+    assert '"role": "havcap"' in old_text and "HVAACAP" not in old_text, "the test rewrote the save to the old names"
+    Path(s.path).write_text(old_text, encoding="utf-8")
+    r = mk()
+    r.open(s.path)
+    reopened_text = json.dumps(r.state.to_dict())
+    assert "HAVCAP" not in reopened_text and "havcap" not in reopened_text, "an old save's HAVCAP tags, task text and squadron role are renamed on load"
+    assert any(q.role == "hvaacap" for q in r.state.squadrons.values()), "...and the guard squadron keeps its role under the new name"
     (TMP / "appdata" / "SQE").mkdir(parents=True, exist_ok=True)           # an old settings.json with the two keys loads, and they are not kept
     (TMP / "appdata" / "SQE" / "settings.json").write_text('{"pilot_influence": false, "tempo_decay": true}')
     from sqe.settings import AppSettings as _AS

@@ -48,8 +48,8 @@ Package (push / TOT are staggered: TARCAP first, then SEAD and escorts, then str
   Rattler 1      2x F-16C Viper      SEAD     push 10:14:30   TOT 10:25:05
   Dodge 1        4x F-15C Eagle      TARCAP   push 10:12:30   TOT 10:23:52
   Lobo 1         2x F-16C Viper      ESCORT   push 10:14:00   TOT 10:26:23
-  Colt 1         2x F-15C Eagle      HAVCAP   push -   TOT -
-  Colt 2         2x F-15C Eagle      HAVCAP   push -   TOT -
+  Colt 1         2x F-15C Eagle      HVAACAP   push -   TOT -
+  Colt 2         2x F-15C Eagle      HVAACAP   push -   TOT -
   Uzi 4          2x F-14B(U) Tomcat  BARCAP   push -   TOT -
 
 Your timeline (local):

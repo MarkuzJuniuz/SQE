@@ -1,4 +1,4 @@
-"""Support CAPs: the tanker CAP, HAVCAP, base BARCAP and carrier BARCAP of a mission (which ones, where they sit, their route), and moving the carrier group out of the fight.
+"""Support CAPs: the tanker CAP, HVAACAP, base BARCAP and carrier BARCAP of a mission (which ones, where they sit, their route), and moving the carrier group out of the fight.
 
 A mixin: `MissionBuilder` inherits these methods (like a C# partial class). They use `self.state`, `self.o` and the other fields the builder sets up.
 """
@@ -17,8 +17,8 @@ from .routes import FT, NM, Wpt, avoid_circles, bearing, cap2_point, dist, offse
 from .strike_tasks import KPH
 
 TANKER_COVER_NM = 30          # v0.41.26: a tanker track this close to a friendly field's Patriot (or the carrier group) counts as under friendly SAM cover
-SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HAVCAP / tanker CAP / base BARCAP engage inside this circle round what they guard
-TKR_HAVCAP_ZONE_NM = 40           # v0.41.26: the tanker CAP engages inside this circle round the tanker (an AMRAAM's reach), never further
+SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HVAACAP / tanker CAP / base BARCAP engage inside this circle round what they guard
+TKR_HVAACAP_ZONE_NM = 40           # v0.41.26: the tanker CAP engages inside this circle round the tanker (an AMRAAM's reach), never further
 CARRIER_BARCAP_ZONE_NM = 30            # v0.41.21: the carrier BARCAP engages within this of the boat (v0.41.14: 50; it reached out and set off red scrambles)
 CAP_REACH_BEYOND_NM = 25     # v0.41.113: a base / carrier BARCAP's engage circle reaches this far past its station (judgment call)
 CARRIER_BARCAP_NM = 12                 # v0.41.21: the carrier BARCAP orbits this far out from the boat toward the nearest enemy field (v0.41.7: 22)
@@ -28,7 +28,7 @@ CARRIER_BARCAP_DETECT_MARGIN_NM = 5    # v0.41.21: its orbit and engage circle s
 class SupportCaps:
     @staticmethod
     def _gather_support(package, extras):
-        """v0.41.9: the mission's support CAP comes from ALL its packages, one of each: a tanker CAP, a HAVCAP, a base BARCAP per home field and a carrier
+        """v0.41.9: the mission's support CAP comes from ALL its packages, one of each: a tanker CAP, an HVAACAP, a base BARCAP per home field and a carrier
         CAP per carrier. Yours first; what yours lacks comes from the first merged package that planned it. (A Fighter Sweep plans none, and merged
         packages' support flights were dropped, so with you on a sweep the tanker, AWACS and boat flew unguarded: the v0.41.8 Batumi run.)
         Returns a copy of the package with the extra flights added; the campaign plan is not changed."""
@@ -82,7 +82,7 @@ class SupportCaps:
             self._cv_hdg[b.id] = h
 
     def _place_support(self, package, plan, g, extras=()):
-        """v0.41.7: the AWACS sits well back (its own anchor: where the marshal used to be, 90 nm from every enemy field) with its HAVCAP; the
+        """v0.41.7: the AWACS sits well back (its own anchor: where the marshal used to be, 90 nm from every enemy field) with its HVAACAP; the
         tanker sits FORWARD, on the way home (between the base and the egress point, clear of SAM rings and the enemy fields' scramble circles),
         with its own escort, so a flight short of fuel meets it before its own runway, not 50 nm behind it."""
         def pt(x, y):
@@ -90,7 +90,7 @@ class SupportCaps:
         st = self.state
         aw_ = tm.awacs_station(st)                                          # S19: one fixed station per state, not from the player's base or target
         ax, ay, fh = aw_ if aw_ is not None else (*tm.safe_marshal(st, (g.bx, g.by), g.hdg), g.hdg)
-        self._awacs_fh = fh                                                 # the HAVCAP's route reads it too (_support_cap_route)
+        self._awacs_fh = fh                                                 # the HVAACAP's route reads it too (_support_cap_route)
         first_station = tm.awacs_first_station(st)                          # S191: the tanker's fallback track hangs off the first station, not off the raid-shifted AWACS (it moved the tanker 75 to 110 nm with it)
         anchor_x, anchor_y = (first_station[0], first_station[1]) if first_station is not None else (ax, ay)
         tanker_xy, awacs_unit = None, None
@@ -202,14 +202,14 @@ class SupportCaps:
         spec = AIRCRAFT[f.aircraft]
         base = st.bases[f.base_id]
         # v0.41.7: each guards one thing, from the side the threat comes from (the nearest enemy fighter field), and fights only inside
-        # a circle round it. HAVCAP: the AWACS (well back). TKR_HAVCAP: the tanker (forward, on the way home). base BARCAP: the home field. Carrier BARCAP: the boat.
+        # a circle round it. HVAACAP: the AWACS (well back). TKR_HVAACAP: the tanker (forward, on the way home). base BARCAP: the home field. Carrier BARCAP: the boat.
         tc_ = getattr(self, "_tanker_c", None)
         axis_ = None                                    # S9: the line CAP2 lies across (plus or minus 90); None = thr_
-        if f.tag == "TKR_HAVCAP" and tc_ is not None:
-            gx_, gy_ = tc_; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 5 * NM); zr_ = TKR_HAVCAP_ZONE_NM
+        if f.tag == "TKR_HVAACAP" and tc_ is not None:
+            gx_, gy_ = tc_; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 5 * NM); zr_ = TKR_HVAACAP_ZONE_NM
             axis_ = geom.hdg                            # S9: CAP2 along the tanker's own track (it runs on hdg + 90), not across the threat
-        elif f.tag in ("HAVCAP", "TKR_HAVCAP"):
-            gx_, gy_ = hav_xy; thr_ = getattr(self, "_awacs_fh", geom.hdg) if f.tag == "HAVCAP" else geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
+        elif f.tag in ("HVAACAP", "TKR_HVAACAP"):
+            gx_, gy_ = hav_xy; thr_ = getattr(self, "_awacs_fh", geom.hdg) if f.tag == "HVAACAP" else geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
         elif f.tag == "CARRIER_BARCAP":
             # v0.41.74: the BARCAP area of the boat that faces the target (barcap.py); the boat may have been slid back for this sortie, so the
             # area's direction is used from where the boat is now. No area today (no hostile base reaches it): the old rule, toward the nearest enemy field.
@@ -256,9 +256,9 @@ class SupportCaps:
         # S9 (v0.41.350): the leg wished for this job, across the axis, shortened until clear; None = today's point (the floor leg_ on thr_ + 90)
         from .mission_builder import CAP_SPREAD_NM          # here, not at the top: mission_builder imports this module
         wish_ = CAP_SPREAD_NM[f.tag]
-        if f.tag == "TKR_HAVCAP" and tc_ is not None:
+        if f.tag == "TKR_HVAACAP" and tc_ is not None:
             wish_ = min(wish_, getattr(self, "_tanker_race", 30 * NM) / NM)
-        elif f.tag == "HAVCAP":
+        elif f.tag == "HVAACAP":
             wish_ = min(wish_, 40)                      # the AWACS track is 40 nm
         if f.tag == "CARRIER_BARCAP":
             def clear_(x_, y_):

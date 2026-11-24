@@ -3,7 +3,7 @@
 Until now a package always got an AWACS and a tanker out of thin air. Now blue has a few airframes of each type (a table below, sources and
 judgment calls named), and a package gets the AWACS / tanker only if one is on orbit while the package flies. A support aircraft
 shot down in a flown mission leaves the count; missing airframes come back slowly. Red has no AWACS asset any more (the A-50 was deleted, XO 2026-11-08).
-The guards (HAVCAP, tanker CAP) are planned per turn (blue_barcap._plan_guards).
+The guards (HVAACAP, tanker CAP) are planned per turn (blue_barcap._plan_guards).
 
 Since v0.41.339 (campaign rules plan, Phase 4b) every airframe has its own clock and the orbit is planned PER TURN (`plan(state, turn)`, called by `Session.plan_turn`): an airframe flies its
 time on orbit (`sortie_min`: the E-3 720 = three turns), then spends the turnaround in refit (`turnaround_min`); a relief goes up HANDOVER_MIN before the airframe it replaces leaves, if one is
@@ -238,14 +238,14 @@ def lose(state, label: str, n: int = 1) -> str:
     return ""
 
 
-AWACS_LOSS_ON = False          # v0.41.348 (Phase 7b, decision 50): OFF by default (Crew Chief recommendation 2026-11-10, XO to confirm): the HAVCAP is not yet reliable, so the unguarded case would fire more often than meant
-AWACS_LOSS_GUARDED = 0.002     # chance a turn an AWACS airframe is lost on orbit with a HAVCAP pair guarding it (judgment call)
+AWACS_LOSS_ON = False          # v0.41.348 (Phase 7b, decision 50): OFF by default (Crew Chief recommendation 2026-11-10, XO to confirm): the HVAACAP is not yet reliable, so the unguarded case would fire more often than meant
+AWACS_LOSS_GUARDED = 0.002     # chance a turn an AWACS airframe is lost on orbit with an HVAACAP pair guarding it (judgment call)
 AWACS_LOSS_UNGUARDED = 0.02    # ...and with no guard that turn (judgment call). Red does not target the AWACS (XO 2026-11-10): this is a passive attrition roll
 AWACS_KEYS = ("bl_e3", "bl_e2")
 
 
 def attrition(state, turn: int) -> list:
-    """v0.41.348 (Phase 7b): the war sim's AWACS loss. Each turn an E-3 / E-2C asset is on orbit it loses one airframe with AWACS_LOSS_GUARDED if a HAVCAP pair guarded it this turn, else
+    """v0.41.348 (Phase 7b): the war sim's AWACS loss. Each turn an E-3 / E-2C asset is on orbit it loses one airframe with AWACS_LOSS_GUARDED if an HVAACAP pair guarded it this turn, else
     AWACS_LOSS_UNGUARDED (seeded per asset and turn). Goes through `lose`, so the clocks stay consistent. A turn whose AWACS was in a flown mission is not rolled (the caller skips it).
     Counts in `a["war_lost"]` (for the probe). -> log lines."""
     import random as _r
@@ -256,7 +256,7 @@ def attrition(state, turn: int) -> list:
     fl = bc.get("support_flights") or {}
     lo = clock.minute(turn) - clock.day_start_minute(clock.day_of(turn))
     hi = lo + clock.TURN_MIN
-    guarded = {f["asset"] for f in bc.get("blue_flights") or [] if f.get("turn") == turn and f.get("kind") == "HAVCAP"}
+    guarded = {f["asset"] for f in bc.get("blue_flights") or [] if f.get("turn") == turn and f.get("kind") == "HVAACAP"}
     out = []
     sa = ensure(state)
     for key in AWACS_KEYS:

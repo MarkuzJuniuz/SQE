@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.641, the AWACS and tanker guards are called HVAACAP
+The fighters that guard the AWACS and the tankers are now called HVAACAP (high value airborne asset CAP), the U.S. Air Force term, in the package table, briefings, kneeboard and guide. Old saves are converted when opened.
+
 ## v0.41.640, the AWACS finds a clear station
 On Caucasus Level 3 the AWACS station was too close to a red raid or sweep on most turns, because it only looked straight back and never found a clear spot. It now searches behind the rear base and to either side, up to 150 nm, never nearer to red and never off the map, and moves 70 to 100 nm where it has to. Its guard fighters follow it; the tanker stays where it was. Syria is unchanged.
 

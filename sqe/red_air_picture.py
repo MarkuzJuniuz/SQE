@@ -90,7 +90,7 @@ class RedAirPicture:
     def _plan_cap_stations(self, package, tx, ty, geom, keepout) -> list:
         """Known enemy CAP stations: the enemy's own air plan for the day (redair.py) decides which patrol pairs are up at the time on target near the
         target or the route, and where (20-25 nm in front of their own base, or over the contested sector for a sweep). The stations here are only moved
-        clear of the tanker, AWACS, HAVCAP and the fleet. How many enemy fighters there are overall is still the package's threat size; patrols
+        clear of the tanker, AWACS, HVAACAP and the fleet. How many enemy fighters there are overall is still the package's threat size; patrols
         fill the first places, the rest are alert aircraft."""
         self._red_sel = []
         n_fl = package.n_def // 2
@@ -388,7 +388,7 @@ class RedAirPicture:
             if i < n_cap:                                   # known CAP, on station from the start
                 cp = self._cap_plan[i]
                 sx, sy = cp["x"], cp["y"]
-                for kx, ky, knm in keepout:                 # tanker / AWACS / HAVCAP stay well clear as well
+                for kx, ky, knm in keepout:                 # tanker / AWACS / HVAACAP stay well clear as well
                     if dist(sx, sy, kx, ky) < knm * NM:
                         sx, sy = offset(kx, ky, bearing(kx, ky, sx, sy), knm * NM)
                 self._bandit_stations.append((sx, sy))       # S89 B1: a known CAP station is a wake detector (`_wire_dormant`)

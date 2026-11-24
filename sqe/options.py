@@ -25,7 +25,7 @@ class MissionOptions:
     base_defenses: bool = True
     carrier_escorts: bool = True
     enemy_cap_engage_nm: int = 50       # enemy patrol fighters chase no further than this (0 = unlimited); v0.41.61: fixed, no settings box
-    friendly_cap_engage_nm: int = 50    # HAVCAP / base BARCAP likewise (0 = unlimited); v0.41.61: fixed, no settings box
+    friendly_cap_engage_nm: int = 50    # HVAACAP / base BARCAP likewise (0 = unlimited); v0.41.61: fixed, no settings box
     fighter_engage_nm: int = 40         # AI escorts and sweeps chase no further than this (0 = unlimited)
     fighter_engage_minutes: int = 5     # AI escorts, sweeps, SEAD stop engaging this many minutes after the TOT and fly on (alert pairs: +5). 0 = no time limit
     player_is_ai: bool = False          # test: your own flight is built as an AI flight (no player / client slot) and gets the AI behaviour too (stand-off, engage window)

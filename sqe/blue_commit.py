@@ -8,7 +8,7 @@ S160 (same script, both sides):
 * at most COMMIT_MAX_PER_TARGET flights on one enemy group (T1fix5: four flights piled onto one MiG-29 pair);
 * S160b (T1fix6): a break-off buffer (SAM_BREAK_BUFFER_NM) with hysteresis (commit only beyond SAM_COMMIT_BUFFER_NM), a cool-down before a recommit on the same
   group (COMMIT_COOLDOWN_S), and a "hurt" break-off when the flight lost a jet since it committed (then COMMIT_HURT_COOLDOWN_S);
-* an optional leash round an anchor point (HAVCAPs: they must not leave the tanker / AWACS for long; S160c: the base / carrier BARCAP guards too);
+* an optional leash round an anchor point (HVAACAPs: they must not leave the tanker / AWACS for long; S160c: the base / carrier BARCAP guards too);
 * S160c: a flight that breaks off "hurt" commits on nothing for COMMIT_HURT_QUIET_S;
 * every air-to-air AI flight is registered (blue: station cover, support CAPs, alert pairs, raid interceptors, cover flights without a station; red: patrols,
   alert pairs, reliefs, standbys, raid-defence reinforcements). Red's raid escorts and sweeps are NOT registered (they fly Escort / FighterSweep with the bombers).
@@ -38,8 +38,8 @@ COMMIT_COOLDOWN_S = 120         # S160b: no recommit on the same group this long
 COMMIT_HURT_COOLDOWN_S = 300    # S160b: ...and this long after a flight lost a jet and broke off (reason hurt). Judgment call
 COMMIT_ALT_FT = 30000             # S168: the altitude blue's cover fighters fly at (F-15C 33,000 ft, the rest 25,000 to 30,000): the commit script's SAM rings are the rings against a jet this high (`samtier.ring_nm`)
 SAM_RING_MARGIN_NM = 3.0        # an enemy SAM ring counts this much bigger (scramble.STATION_RING_MARGIN_NM, the defender's margin)
-HAVCAP_REACH_NM = 30            # S160: a tanker / AWACS guard commits only this far (judgment call; its normal circle is the guard ring). S176a (v0.41.616): was 25 (46 km); red's escorts fired R-27ERs first from 41 to 56 km in 8 of 14 HAVCAP fights while the guard committed at 42 to 43 km (37 server runs, `.claude/s176-barcap-havcap-evidence.md`); 30 nm = the base / carrier BARCAP reach. Judgment call
-HAVCAP_LEASH_NM = 30            # ...and never more than this from its station (judgment call: it must stay with what it guards)
+HVAACAP_REACH_NM = 30            # S160: a tanker / AWACS guard commits only this far (judgment call; its normal circle is the guard ring). S176a (v0.41.616): was 25 (46 km); red's escorts fired R-27ERs first from 41 to 56 km in 8 of 14 HVAACAP fights while the guard committed at 42 to 43 km (37 server runs, `.claude/s176-barcap-hvaacap-evidence.md`); 30 nm = the base / carrier BARCAP reach. Judgment call
+HVAACAP_LEASH_NM = 30            # ...and never more than this from its station (judgment call: it must stay with what it guards)
 # S176b (XO 2026-11-24: "tanker pilots should be able to move away from danger ... let them save themselves if they need to move off track"): a tanker or an AWACS
 # pulls back from enemy fighters. The idea is the brevity pair RETROGRADE ("Withdraw(ing) while executing defensive procedures in response to a threat") and
 # SCRAM ("FRIENDLY asset is in immediate danger. Withdraw clear in the direction indicated for survival"), ATP 1-02.1 (2023). The distances are judgment calls
@@ -49,7 +49,7 @@ HVAA_RETRO_NM = 40              # it flies this far straight away from that figh
 HVAA_CLEAR_NM = 80              # no enemy fighter within this for HVAA_QUIET_S: it goes back to its track
 HVAA_QUIET_S = 300
 HVAA_REPLAN_S = 120             # while away and still threatened, a new point away from the nearest fighter at most this often
-BARCAP_REACH_NM = 30            # S160c (T1fix7 Caucasus: two F-14BU carrier BARCAP jets, reach 45 nm, fought away from the fleet and died): a base / carrier BARCAP guard commits only this far (judgment call, like HAVCAP_REACH_NM)
+BARCAP_REACH_NM = 30            # S160c (T1fix7 Caucasus: two F-14BU carrier BARCAP jets, reach 45 nm, fought away from the fleet and died): a base / carrier BARCAP guard commits only this far (judgment call, like HVAACAP_REACH_NM)
 BARCAP_LEASH_FLEET_NM = 25      # ...and never more than this from its station. A carrier station is `barcap.STATION_FLEET_NM` 35 nm out; 35 + 25 = 60 nm from the boat stays inside the ships' SM-2 reach (`barcap.FLEET_REACH_NM` 78, measured p90 77.5 nm in S168). Judgment call
 BARCAP_LEASH_BASE_NM = 15       # ...a base station is `barcap.STATION_BASE_NM` 25 nm out; 25 + 15 = 40 nm from the field, the Patriot's ring (HAWK edge inside it). Judgment call
 COMMIT_HURT_QUIET_S = 300       # S160c (T1fix7 Syria: Alert 10 broke off "hurt", then went straight for the strikers and a Tiyas MiG-29 killed Viper 3-4): after a hurt break-off the flight commits on NOTHING for this long, not only on the group it left. Both sides. Judgment call
