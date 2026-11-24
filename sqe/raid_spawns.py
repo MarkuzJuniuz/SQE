@@ -508,7 +508,7 @@ class RaidSpawns:
         # S171: the Patriot's ring against a jet at the raid's altitude (samtier.ring_nm: 40 low, 54 from 9,843 ft, 63 from 26,247 ft; measured, see samtier)
         patriot_ring_nm = samtier.ring_nm("Patriot", alt_ft)
         circles = [(b.x, b.y, patriot_ring_nm) for b in self.state.bases.values()
-                   if b.kind == BaseKind.AIRFIELD and b.id != raided.id and b.defense >= 0.15]
+                   if b.kind == BaseKind.AIRFIELD and b.id != raided.id and b.defense >= 0.15 and b.id not in getattr(self, "_bend_exempt", ())]
         # v0.41.31: and round the carrier group (its escorts' SM-2s), unless the fleet is what it is raiding
         circles += [(b.x, b.y, FLEET_RAID_AVOID_NM) for b in self.state.bases.values() if b.kind == BaseKind.CARRIER and b.id != raided.id]
         if not circles or len(pts) < 2:
@@ -1027,6 +1027,17 @@ class RaidSpawns:
         ex = package.extra
         if not ex:
             return
+        # S183 rule 2: wave 2 of a layered SEAD raid is built only when wave 1 is in this mission (`_layer_present`) and flown (`_layer_gone`: wave 1 had already struck); the war sim resolves it then
+        layer_of = ex.get("layer_of")
+        if layer_of and (layer_of in getattr(self, "_layer_gone", set()) or layer_of not in getattr(self, "_layer_present", {layer_of})):
+            self.warns.append(f"package #{package.number}: the second SEAD wave is not in this mission (wave 1 is not flown in it)")
+            return
+        self._bend_exempt = set()                                # S183 rule 2: the field of the outer Patriot a second wave strips past: the route does not bend round it (that crossing is the point of the layers); every other live Patriot's ring is still avoided
+        for layer_id in (ex.get("layer_sites") or []):
+            layer_site = (st.blue_sams or {}).get(layer_id)
+            if layer_site is not None:
+                self._bend_exempt.add(layer_site.guards)
+        sead_fly_s = 0.0                                         # S183: the longest missile flight of the raid's packages (all its packages' missiles land together); 0 for a raid that is not a SEAD raid
         cvb = st.bases[package.objective.target_id]
         aim = ex.get("aim", "") or ""
         # S171: the altitude the raid flies (the `alt` further down: land raids 12,000 / 20,000, SEAD raids SEAD_ALT_FT, fleet raids 30,000): the Patriot ring it bends round depends on it
@@ -1119,6 +1130,14 @@ class RaidSpawns:
                     fly_ = [arm_fly_s(kd_) for kd_ in pk_kind]
                     pk_off = [max(fly_) - f_ for f_ in fly_]      # B2: a package with a shorter missile flight launches this much later, so that every package's missiles reach the site together
                 t_tgt = arrive + dist(sx_, sy_, *launch_) / V
+                if sead_r:
+                    sead_fly_s = max(fly_)
+                    first_impact_s = (getattr(self, "_layer_impact", {}) or {}).get(layer_of) if layer_of else None
+                    if first_impact_s is not None:
+                        # S183 rule 2: arrive so that this wave's missiles land layer_gap_s after wave 1's (it never lands before wave 1's plus the gap)
+                        layer_shift_s = first_impact_s + float(ex.get("layer_gap_s", 300)) - (t_tgt + sead_fly_s)
+                        arrive += layer_shift_s
+                        t_tgt += layer_shift_s
         if standoff:
             # v0.41.256 (XO 2026-11-03: no SAMs across the mountains, so blue's F-15s could bum-rush the bombers): the red SAM sites whose ring touches the bombers' way in
             # (the route starts at most 220 nm from the fleet) are live in the mission, RAID_ROUTE_SAMS of them beyond the ones already built; the unit limit still binds
@@ -1148,6 +1167,10 @@ class RaidSpawns:
             (sx, sy), seg_i = tm.point_back_along(path, back_)
             remaining = path[seg_i:]
             hit_s = back_ / V
+        if sead_r:                                              # S183: when this raid's missiles land (mission seconds), for the wave behind it
+            if not hasattr(self, "_layer_impact"):
+                self._layer_impact = {}
+            self._layer_impact[package.objective.id] = float(hit_s + sead_fly_s)
         egr_ = offset(ox, oy, bearing(ox, oy, *remaining[-2] if len(remaining) > 1 else (sx, sy)) + 40, RAID_EGRESS_NM * NM)
         def home_of(aid_):                                       # S46: a pooled raid's members each go home to their OWN field (the lead's is `ba`)
             a_ = st.assets.get(aid_) or ba

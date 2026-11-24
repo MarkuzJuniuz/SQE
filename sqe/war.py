@@ -664,6 +664,13 @@ class WarSimulator:
                  and not state.assets[x].destroyed and state.assets[x].health > 0.25 and not getattr(state.assets[x], "suppressed", False)]
         if live_:                                                          # v0.41.305 (XO 2026-11-05: "the war planner takes into account what happened on those packages"): each SAM site still threatening the lane (the SEAD / DEAD packages ahead of the raid did not take it down) costs blue's fighters reach
             strength *= max(RAID_SAM_FLOOR, 1.0 - RAID_SAM_PRESSURE * len(live_))
+        layer_live = 0                                                     # S183 rule 2: wave 2 of a layered SEAD raid meets the outer Patriot too when wave 1 did not bring it down (the same pressure per live site as the prep sites)
+        for layer_id in (pkg.extra.get("layer_sites") or []):
+            layer_site = (getattr(state, "blue_sams", None) or {}).get(layer_id)
+            if layer_site is not None and not layer_site.destroyed and layer_site.health > 0.25:
+                layer_live += 1
+        if layer_live:
+            strength *= max(RAID_SAM_FLOOR, 1.0 - RAID_SAM_PRESSURE * layer_live)
         nb_ = int(pkg.extra.get("bombers", 4)) if pkg.extra else 4
         p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc + 0.25 * max(0, nb_ - 4))     # v0.41.155 (red zerg): a mass raid is harder to stop (judgment call)
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)

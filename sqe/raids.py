@@ -81,6 +81,10 @@ SEAD_POOL = True              # S59b: a SEAD raid whose lead wing is short takes
 SEAD_OUTSIDE_IN = True        # S183 (XO 2026-11-24: "red should focus on plinking patriots one by one and not cross a patriot coverage to hit something deeper"): a SEAD raid goes only for the blue SAM sites
                               # whose attack point the fewest OTHER live Patriots reach (the outermost ones). Evidence: server run S179c-strip: the raid on Paphos, with its attack point 10 km from the
                               # Larnaca Patriot, fired nothing and lost 3 bombers to the Larnaca and Akrotiri Patriots. The switch is for comparison runs
+SEAD_LAYERS = True            # S183 rule 2 (XO 2026-11-24: red may cross a Patriot's coverage only "like some wave of 5 minute stripping of layers"; "Level 3 only"): at Level 3 a SEAD raid on an outer
+                              # Patriot is followed by a second wave on the Patriot behind it (the site whose attack point only that outer Patriot covers). The switch is for comparison runs
+SEAD_LAYERS_MIN_LEVEL = 3     # ...Levels 1 and 2 keep rule 1 alone
+SEAD_LAYER_GAP_S = 300        # ...wave 2's missiles are due this long after wave 1's land (XO's "5 minute"; judgment call, no source)
 SEAD_PATRIOT_WEIGHT = 2.0     # S64 (XO 2026-11-12, run 21-39-54: a raid went at a HAWK while its full-strength Patriot stood beside it): a full-strength Patriot weighs this much more than a HAWK in red's draw of a SEAD target (judgment call; a Patriot below full strength keeps weight 1). The draw only offers a full Patriot red can field (`_sead_fieldable`)
 SEAD_HAWK_PACKAGES = 2          # S44 (XO 2026-11-12): a HAWK gets two packages too (a Patriot below full strength, or whatever is left of one, still one)
 SEAD_SITE_HIT = 0.15          # ...and a blue SAM site loses this much health per SEAD jet that gets through (a launch of 3 jets takes 0.45 off a HAWK, 6 take 0.9 off a Patriot; judgment call, tuned with the probe `.private/probes/s36`: 0.08 never opened a field, 0.25 wiped the SAMs by day 10, 0.15 sags them and reopens fields)
@@ -219,7 +223,12 @@ def _nearest_field(state, x: float, y: float):
 
 
 def patriots_over_attack_point(state, site, wing) -> int:
-    """S183: how many OTHER live blue Patriots reach the point a SEAD raid on `site` attacks from. The attack point lies on the line from the site toward the raiding wing's field,
+    """S183: how many OTHER live blue Patriots reach the point a SEAD raid on `site` attacks from (the count of `patriot_ids_over_attack_point`)."""
+    return len(patriot_ids_over_attack_point(state, site, wing))
+
+
+def patriot_ids_over_attack_point(state, site, wing) -> set:
+    """S183: the ids of the OTHER live blue Patriots that reach the point a SEAD raid on `site` attacks from. The attack point lies on the line from the site toward the raiding wing's field,
     the launch distance plus the IP run before it (`raid_spawns.ARM_LAUNCH_NM` + `ARM_IP_NM`). A Patriot reaches it within its ring against a high target (`samtier.ring_nm`,
     63 nm above 8 km, measured S171). A Patriot turns to face a raid in reach (S179c), so its arc gives the raid no shelter: reach alone counts. A live Patriot = the field's
     battery still has launchers (`sams.blue_battery`), the same test `covering_fields` uses."""
@@ -228,17 +237,17 @@ def patriots_over_attack_point(state, site, wing) -> int:
     from .sams import blue_battery
     wing_field = state.assets.get(wing.base_asset_id)
     if wing_field is None:
-        return 0
+        return set()
     leg_x = wing_field.x - site.x
     leg_y = wing_field.y - site.y
     leg_m = math.hypot(leg_x, leg_y)
     if leg_m < 1.0:
-        return 0
+        return set()
     out_m = (ARM_LAUNCH_NM + ARM_IP_NM) * NM
     point_x = site.x + leg_x / leg_m * out_m
     point_y = site.y + leg_y / leg_m * out_m
     reach_m = samtier.ring_nm("Patriot", 30000) * NM
-    count = 0
+    found = set()
     for base in state.bases.values():
         if base.kind != BaseKind.AIRFIELD or base.id == site.guards:
             continue
@@ -251,8 +260,8 @@ def patriots_over_attack_point(state, site, wing) -> int:
             patriot_x = patriot.x
             patriot_y = patriot.y
         if math.hypot(patriot_x - point_x, patriot_y - point_y) <= reach_m:
-            count += 1
-    return count
+            found.add("bsam_%s_pat" % base.id)
+    return found
 
 
 def candidates(state, kind: str, tu: bool = False, d_=None) -> list:
@@ -844,6 +853,42 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
     return plan
 
 
+def plan_second_layer(state, d, first_aim: str, first_oid: str, second_oid: str, turn: int):
+    """S183 rule 2 (XO 2026-11-24, "Level 3 only"): the second wave of a layered SEAD raid. Wave 1 (`first_aim`, the outer Patriot rule 1 picked) is already booked. Wave 2 goes for a live Patriot
+    whose attack point ONLY that outer Patriot covers (the next layer), booked out of the jets wave 1 left. -> (base, aim, plan) or None: Level below `SEAD_LAYERS_MIN_LEVEL`, wave 1 not a Patriot, no such
+    deeper site, or no wing with the jets for it (then nothing is booked and the raid is wave 1 alone). The plan is the ordinary SEAD plan (`_plan_sead`) plus `layer_of` (wave 1's objective id),
+    `layer_sites` (the outer Patriot: the war sim counts it live while it stands) and `layer_gap_s`. Wave 1 is not changed."""
+    if not SEAD_LAYERS:
+        return None
+    if int(getattr(d, "level", 3)) < SEAD_LAYERS_MIN_LEVEL:
+        return None
+    sam_sites = getattr(state, "blue_sams", None) or {}
+    first_site = sam_sites.get(first_aim)
+    if first_site is None or first_aim.rsplit("_", 1)[1] != "pat":
+        return None
+    fallen = set((state.ground or {}).get("fallen", []))
+    for site_id in sorted(sam_sites):
+        site = sam_sites[site_id]
+        if site_id == first_aim or site.destroyed or site_id.rsplit("_", 1)[1] != "pat":
+            continue
+        home = state.bases.get(site.guards)
+        if home is None or home.id in fallen:
+            continue
+        reach = sam_reach(state, d, site.x, site.y)
+        if reach is None:
+            continue
+        if patriot_ids_over_attack_point(state, site, reach[1]) != {first_aim}:
+            continue
+        plan = _plan_sead(state, d, home, site_id, second_oid, turn)
+        if plan is None:
+            continue
+        plan["layer_of"] = first_oid
+        plan["layer_sites"] = [first_aim]
+        plan["layer_gap_s"] = SEAD_LAYER_GAP_S
+        return home, site_id, plan
+    return None
+
+
 def plan_tu_strike(state, d, base, aim: str, oid: str, turn: int):
     """v0.41.355 (Phase 10a): book a Tu-22M3 LAND STRIKE out of the turn's free red jets: `bombers.land_tu(d)` Tu-22M3 and `bombers.land_escorts(d)` Su-27 of the bomber fields' escort squadrons, on the supply site `aim`. The same
     plan dict as `plan_raid` (`land`, `raider` Tu_22M3, `jets` ...), so the package, the war sim and the builder treat it as one more land raid. The jets the carrier raid still needs today are left alone
@@ -964,6 +1009,17 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
         warned.append(o)
         n_made += 1
         credit -= bk["bombers"]
+        if bk.get("sead") and not unwarned and state.raids is not None:
+            # S183 rule 2: at Level 3 the raid strips a second layer: wave 2 is its own booked raid, planned from the jets wave 1 left (it does not count against RAID_MAX_PER_TURN)
+            second_oid = f"obj-t{turn}-r{len(warned) + 1}"
+            layer = plan_second_layer(state, d, aim, o.id, second_oid, turn)
+            if layer is not None:
+                layer_base, layer_aim, layer_plan = layer
+                layer_obj = raid_objective(layer_base, layer_aim, describe(state, layer_base, layer_aim))
+                layer_obj.id = second_oid
+                booked[layer_obj.id] = layer_plan
+                warned.append(layer_obj)
+                credit -= layer_plan["bombers"]
     if state.raids is not None:
         state.raids["credit"] = credit
     return warned, surprise

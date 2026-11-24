@@ -439,6 +439,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 kept_extras.append(extra_package)
         extras = kept_extras
         self._extras = list(extras)
+        self._layer_present = {extra_package.objective.id for extra_package in extras}      # S183 rule 2: the objectives in this mission (the anchor and the folded ones): a second SEAD wave is built only when wave 1 is one of them
+        self._layer_present.add(package.objective.id)
         kept_ruins = []
         for ruin_package in ruins:
             if _has_untagged_flight(ruin_package):
@@ -659,6 +661,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._striker_wps = {}                                               # S86: package id -> its STRIKE / CAS flights' (natural pace) waypoints, for the time the strikers first cross the covering SAMs' reach
         self._striker_tgt = {}                                               # S38: package id -> its STRIKE / CAS flights' time over target, for the SEAD's window
         self._sead_info = {}                                                 # S86: id(SEAD flight) -> the reach-crossing numbers its push was timed with (probe)
+        self._layer_impact = {}                                              # S183 rule 2: raid objective id -> when its SEAD missiles land (mission seconds), for the second wave behind it
+        self._layer_gone = set()                                             # ...and the raids not flown in this mission (a second wave behind one is not built)
         self._push_adj = {}                                                  # S38: id(flight) -> the push time an AI SEAD actually uses (timed to the strikers, not the push)
         self._commit_flights = []                                            # S158: AI cover flights the blue commit script watches (blue_commit.py)
         self._holds = []                                                     # v0.41.10: TARCAP / escort holds, extended to the last package over their target area
@@ -997,6 +1001,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             eg2 = next((w for w in pw2 if w.name == "EGR"), pw2[-1])
             rtb2 = eg2.eta_s + leg_seconds(eg2, Wpt("RTB", base2.x, base2.y, 0, 300))
             struck = tg2.eta_s < -60
+            if raid2 and (struck or rtb2 <= 0 or (xp.id in ruin_ids and not struck)):
+                if not hasattr(self, "_layer_gone"):
+                    self._layer_gone = set()
+                self._layer_gone.add(xp.objective.id)             # S183: this raid is not flown in this mission: a second SEAD wave behind it is not built either
             if xp.id in ruin_ids and not struck:
                 continue                                       # an earlier package that has not struck yet and is not a merge candidate: left to the war sim
             ruined = False
