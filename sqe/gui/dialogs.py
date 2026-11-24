@@ -344,8 +344,10 @@ class SettingsDialog(QDialog):
         v.addSpacing(10)
         self.ecm = QCheckBox("ECM Script (SQE's Own Jamming)")
         self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
-        hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
-                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
+        hint(v, "SQE's own jamming effect; off by default. Off: jammers use DCS's own ECM; AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
+                "and switch it on over the attack leg only when a radar locks them. On: they keep it on over the whole attack leg, and a radar-guided missile fired at a jet with a jammer may be fooled: "
+                "SQE rolls a chance (higher with an ECM pod, highest for shots from far away, none inside about 12 km) and removes a fooled missile in flight. "
+                "A jammer cannot really destroy a missile; this is the closest a mission script can get. Both sides, your own jet included.")
         self.ecm_msg = QCheckBox("Show ECM Status")                      # v0.41.213 (XO): a sub-option of the ECM script
         self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
         self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")

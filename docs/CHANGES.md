@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.626, the ECM script option says what it does
+The description of the ECM Script option in Settings was wrong about what the script does. It now says it plainly: a radar-guided missile fired at a jet with a jammer may be fooled (a chance, higher with a pod and from far away, none inside about 12 km) and is then removed in flight. The guide describes it too.
+
 ## v0.41.625, shot calls by the book: what was fired at, and where
 Your flights' weapon calls now follow the brevity and air control communication publications: an air-to-air shot says the group's position off the bullseye, its altitude and "hostile" ("Fox 3, group bullseye 0-8-5/27, 29 thousand, hostile"), and an anti-radar shot names the system by its SA number and its position ("Magnum eleven bullseye 3-6-0/32"). Bearings are magnetic and read digit by digit. Rifle and Bombs away are unchanged.
 

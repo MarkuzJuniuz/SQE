@@ -122,6 +122,15 @@ limit** there (250 by default) lets you trade detail for performance: over it, t
 **Target Area Radius** (15 nm) sets how much of the ground war round your target is built. `--full-map` (alone or with the AI test) builds
 every sortie with everything on the map, as a stress test, not for play.
 
+**ECM Script** (Settings, off by default). With the option off, jammers work as DCS models them. With it on, SQE adds an effect of its own: a radar-guided missile fired at a jet that
+has a jammer may be fooled: SQE rolls a chance and, when it comes up, removes the missile partway through its flight. The chance is 20% for a jet with an internal jammer, 45% for
+a jet carrying an ECM pod and 30% for a jet without a pod flying within 2 nm of one that has it. The full chance applies to a missile launched from 40 km or more; it shrinks in a
+straight line to nothing at 12 km, and inside 12 km the missile "burns through" and jamming does nothing. The same rule serves both sides, your own jet included. A jammer cannot
+really destroy a missile: this is the closest a mission script can get to a missile that loses its target, and the numbers are SQE's own judgment, not measured figures. The idea
+of scripted jamming in DCS missions is not SQE's: it goes back to the "Complete Electronic War" jamming script that ESAc_matador published on the Eagle Dynamics forum in 2016,
+and the campaign tool DCS Retribution offers an electronic warfare script as a plugin. SQE uses no code from either; its script was written for SQE from a description of the
+effect.
+
 **Experimental: Fly on the local DCS dedicated server** (Settings > Mission Build, off by default). The idea: the server runs the same mission with the AI at real time and without
 a screen, so it may carry bigger missions than the game on its own, and you join it as a client at 127.0.0.1:10308 (no password). It needs the MissionScripting patch, the
 `DCS_Server` profile folder (start the dedicated server once by hand so DCS creates it), a free port 10308 and real time only: no time acceleration. SQE keeps your own
