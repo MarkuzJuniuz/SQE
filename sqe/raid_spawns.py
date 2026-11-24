@@ -1112,10 +1112,10 @@ class RaidSpawns:
         arrive = tot_s + (u_ if u_ is not None else r.uniform(60, 150))                    # at the station: 1-2.5 min after our scramble's TOT
         t_tgt = arrive + dist(sx_, sy_, dx, dy) / V            # the raid's own TOT
         if ex.get("flank_after") and not sead_r:
-            # S186: the flank raid's bombs fall layer_gap_s after the SEAD raid's missiles land (when that raid is built before it; else the engine's start gap stands)
+            # S186 (XO 2026-11-24): the flank raid reaches its IP (the station point `arrive` is the time at) layer_gap_s after the SEAD raid's missiles are due to land; the bomb run follows
             sead_impact_s = (getattr(self, "_layer_impact", {}) or {}).get(ex["flank_after"])
             if sead_impact_s is not None:
-                flank_shift_s = sead_impact_s + float(ex.get("layer_gap_s", 120)) - t_tgt
+                flank_shift_s = sead_impact_s + float(ex.get("layer_gap_s", 300)) - arrive
                 arrive += flank_shift_s
                 t_tgt += flank_shift_s
         # v0.41.29: the raid flies blue's shape. Marshal on red's side (in a red SAM's cover along its way in, else just off its field), PUSH,
