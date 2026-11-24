@@ -91,6 +91,8 @@ class SupportCaps:
         aw_ = tm.awacs_station(st)                                          # S19: one fixed station per state, not from the player's base or target
         ax, ay, fh = aw_ if aw_ is not None else (*tm.safe_marshal(st, (g.bx, g.by), g.hdg), g.hdg)
         self._awacs_fh = fh                                                 # the HAVCAP's route reads it too (_support_cap_route)
+        first_station = tm.awacs_first_station(st)                          # S191: the tanker's fallback track hangs off the first station, not off the raid-shifted AWACS (it moved the tanker 75 to 110 nm with it)
+        anchor_x, anchor_y = (first_station[0], first_station[1]) if first_station is not None else (ax, ay)
         tanker_xy, awacs_unit = None, None
         awacs_xy = offset(*offset(ax, ay, fh + 180, 6 * NM), fh - 90, 20 * NM) if any(s_.slot == "AWACS" for s_ in package.support) else None   # the AWACS track's start (set before the loop: the tanker fallback needs it)
         hav_xy = offset(ax, ay, fh + 180, 8 * NM)
@@ -151,7 +153,7 @@ class SupportCaps:
                         self._tanker_c = c_; self._tanker_race = race
                 else:                                                        # nothing forward is clear: behind the AWACS anchor, as before
                     back = 12 if s.slot == "TANKER1" else 24
-                    x, y = offset(*offset(ax, ay, g.hdg + 180, back * NM), g.hdg - 90, 15 * NM); race = 30 * NM
+                    x, y = offset(*offset(anchor_x, anchor_y, g.hdg + 180, back * NM), g.hdg - 90, 15 * NM); race = 30 * NM
                     for more_back in range(0, 70, 10):             # S188: the fallback track also keeps tm.TANKER_RAID_NM from the red raids' routes: back along the axis until clear (stays where it was when none is)
                         trial_x, trial_y = offset(x, y, g.hdg + 180, more_back * NM)
                         trial_far_end = offset(trial_x, trial_y, g.hdg + 90, race)

@@ -320,11 +320,7 @@ class RaidSpawns:
         """(top, bottom, left, right) of the map in DCS metres (x runs north, y east): the active pack's `map_box` {x0, x1, y0, y1} (S90 J8: pydcs's Syria bounds have top below bottom and stop short of Jordan), else the
         terrain's own bounds with top the larger x (the Caucasus: the same numbers as before)."""
         from . import theatres
-        mb = theatres.hook("map_box")
-        if mb is not None:
-            return float(mb["x1"]), float(mb["x0"]), float(mb["y0"]), float(mb["y1"])
-        b = self.t.bounds
-        return max(b.top, b.bottom), min(b.top, b.bottom), b.left, b.right
+        return theatres.map_edges(self.t)
 
     def _raid_edge(self, dx, dy, brg):
         """The point where the ray from the carrier on `brg` leaves the map (RAID_EDGE_MARGIN_NM inside it), at most RAID_EDGE_MAX_NM out."""
