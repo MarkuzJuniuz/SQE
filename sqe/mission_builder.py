@@ -508,6 +508,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         manifest.cur_pkg = package.id
         self.groups_by_asset, self.flight_groups = {}, []; self._armor_comps = {}
         self._support_units = {}                       # v0.41.87: support asset key -> its aircraft's unit name in this mission
+        self._patriot_faced = {}                       # S179c: Patriot group id -> "target" / "cover": the sites already turned to face a red raid of this mission
         self.base_ad = {}                              # v0.41.84: base id -> {"pat": group, "hawk": group} (blue field air defence, the targets of a red SEAD pair)
 
         # ---- bases, base defenses, carrier + escorts --------------------------------------------------------

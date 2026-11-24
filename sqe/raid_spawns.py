@@ -109,6 +109,9 @@ ARM58_MPS = 1050              # B2: the Kh-58U's average speed over the shot, fo
 ARM31_MPS = 1000              # B2: the Kh-31P's average speed over the shot (about 1,000 m/s, Wikipedia "Kh-31": Mach 3.1 to 3.5 at altitude; judgment call on the average)
 SEAD_ALT_FT = 30000          # S107 (XO 2026-11-18): the SEAD raid's whole route, escorts and sweep included (the raid shares one level): the Kh-31P's range is for a high launch; 30 000 ft is inside its 100 m to 15 km envelope and a loaded Su-24M's reach (judgment call)
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
+PATRIOT_FACE_NM = 63          # S179c: a blue Patriot turns to face a raid's route where it passes this close: the Patriot's reach against a high target (`samtier.RING_BY_ALT_NM`, S171: 63 nm above 8 km, measured)
+PATRIOT_FACE_STEP_M = 5000.0  # S179c: the route is sampled this often for that (a judgment call: fine enough for a 63 nm ring)
+SEAD_ARC_DEG = 40             # S179c: a SEAD package's launch point lies at most this far off the facing of the target's Patriot radar. Measured on the dedicated server (2026-11-24, `.claude/test-runs/S179b-strip/REPORT.md`): a DCS Patriot detects, engages and can be targeted by an ARM only inside its radar's sector: bombers 44 deg off its facing fired, 52 and 65 deg off never did; turned to face them, they fired. The real AN/MPQ-53 searches about 90 deg (public figure, firmness medium). 40 = the measured 44 with a margin
 ARM_IP_NM = 6                 # S179b: the SEAD raid's ARM task starts at an IP this far before the ARM point, on the straight inbound leg (blue's AI HARM flights do the same: `routes.plan_route`, "the IP sits 6 nm before the launch point"; 57 of 82 of them fired in the server runs). Judgment call
 # S48: the switch KH59_RAIDS (and the share, the hit size) live in `raids.py`: the plan reads them too, and `raids` cannot import this module. The spawner reads `raids.KH59_RAIDS` at call time.
 KH59_LAUNCH_NM = 50           # the Kh-59M raid fires from this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M with margin for a low launch, outside HAWK_NM 25 and PATRIOT_NM 40 (judgment call; the probe, 2026-11-12: the Su-34 fired at 54.9 nm, the Su-24M at 58.6 nm, the missiles hit: 50 is safe inside the range)
@@ -517,6 +520,49 @@ class RaidSpawns:
             if len(wps) == n0:
                 break
         return [(w.x, w.y) for w in wps]
+
+    def _face_patriots_to_raid(self, route, package_routes) -> None:
+        """S179c (XO 2026-11-24): every blue field Patriot within reach of a red raid's route turns to face the part of the route it can reach. A DCS Patriot
+        sees and shoots only inside its radar's sector (about 45 degrees either side, measured), and the builder faces it to the nearest enemy fighter field,
+        so raiders passed a neighbouring field's Patriot on its blind side. A site a SEAD raid goes for keeps facing its own raid; a site already turned for
+        an earlier raid of this mission keeps that facing. Only headings change: no unit moves."""
+        routes = [list(route)]
+        for package_route in (package_routes or []):
+            routes.append(list(package_route))
+        for field_groups in self.base_ad.values():
+            group = field_groups.get("pat")
+            if group is None or group.id in self._patriot_faced:
+                continue
+            radar = None
+            for unit in group.units:
+                if unit.type == "Patriot str":
+                    radar = unit
+            if radar is None:
+                continue
+            # the mean bearing of the route points within the Patriot's reach, sampled every PATRIOT_FACE_STEP_M along each leg
+            sum_north = 0.0
+            sum_east = 0.0
+            samples = 0
+            for one_route in routes:
+                for index in range(len(one_route) - 1):
+                    start = one_route[index]
+                    end = one_route[index + 1]
+                    steps = max(1, int(dist(start[0], start[1], end[0], end[1]) / PATRIOT_FACE_STEP_M))
+                    for step in range(steps + 1):
+                        x = start[0] + (end[0] - start[0]) * step / steps
+                        y = start[1] + (end[1] - start[1]) * step / steps
+                        if dist(radar.position.x, radar.position.y, x, y) > PATRIOT_FACE_NM * NM:
+                            continue
+                        angle = math.radians(bearing(radar.position.x, radar.position.y, x, y))
+                        sum_north += math.cos(angle)
+                        sum_east += math.sin(angle)
+                        samples += 1
+            if samples == 0:
+                continue
+            facing = math.degrees(math.atan2(sum_east, sum_north)) % 360
+            for unit in group.units:
+                unit.heading = facing
+            self._patriot_faced[group.id] = "cover"
 
     def _raid_launch(self, package, station, w1=None):
         """v0.41.248: where a raid on the FLEET fires from: on the raid's bearing, RAID_LAUNCH_OUT_NM beyond the blue CAP `station`, not closer than RAID_LAUNCH_MIN_NM
@@ -1036,8 +1082,32 @@ class RaidSpawns:
                 path = pts_ + [launch_]
                 if sead_r:                                      # S59a: P packages, package k launches from a point on bearing b0 + (k - (P - 1) / 2) * SEAD_AXIS_DEG (b0 = the old launch bearing); each flies the shared way in, then its own leg. B2: a package's launch point is its kind's ring from the site, and its way in loses the points inside that ring + 10 (`_arm_pts`)
                     b0_ = bearing(dx, dy, *pts_[-1])
+                    # S179c (XO 2026-11-24: "Both"): a Patriot works only inside its radar's sector. The targeted site turns to face the raid's way in (its crew knows
+                    # the threat axis), and every package's launch bearing is kept inside the arc, so each SEAD group has an emitter to fire at.
+                    site_group = (self.base_ad.get(cvb.id) or {}).get(aim.rsplit("_", 1)[1])
+                    radar_facing = None
+                    if site_group is not None:
+                        has_sector_radar = False
+                        for site_unit in site_group.units:
+                            if site_unit.type == "Patriot str":
+                                has_sector_radar = True
+                        if has_sector_radar:
+                            radar_facing = b0_ % 360
+                            for site_unit in site_group.units:
+                                site_unit.heading = radar_facing
+                            self._patriot_faced[site_group.id] = "target"      # it keeps facing its own raid, whatever else flies past
+                    package_bearings = []
+                    for k_ in range(len(pk_kind)):
+                        package_bearing = b0_ + (k_ - (len(pk_sizes) - 1) / 2.0) * SEAD_AXIS_DEG
+                        if radar_facing is not None:
+                            off_facing = (package_bearing - radar_facing + 180) % 360 - 180
+                            if off_facing > SEAD_ARC_DEG:
+                                package_bearing = radar_facing + SEAD_ARC_DEG
+                            if off_facing < -SEAD_ARC_DEG:
+                                package_bearing = radar_facing - SEAD_ARC_DEG
+                        package_bearings.append(package_bearing)
                     pk_path = [(pts_ if arm_ring_nm(kd_) == ring_ else self._arm_pts(path_in, dx, dy, ring_nm=arm_ring_nm(kd_)))
-                               + [offset(dx, dy, b0_ + (k_ - (len(pk_sizes) - 1) / 2.0) * SEAD_AXIS_DEG, arm_ring_nm(kd_) * NM)] for k_, kd_ in enumerate(pk_kind)]
+                               + [offset(dx, dy, package_bearings[k_], arm_ring_nm(kd_) * NM)] for k_, kd_ in enumerate(pk_kind)]
                     fly_ = [arm_fly_s(kd_) for kd_ in pk_kind]
                     pk_off = [max(fly_) - f_ for f_ in fly_]      # B2: a package with a shorter missile flight launches this much later, so that every package's missiles reach the site together
                 t_tgt = arrive + dist(sx_, sy_, *launch_) / V
@@ -1047,6 +1117,7 @@ class RaidSpawns:
             near_ = ((getattr(self, "_rsp", {}) or {}).get(package.id) or {}).get("ip")                  # v0.41.285 (XO 2026-11-04): every route SAM is live; the unit limit trims the ones furthest from the intercept point
             self._spawn_opfor_ground(package, dx, dy, manifest, list(path), route_sites=RAID_ROUTE_SAMS, route_near=(near_["ip"] if near_ else launch), all_sams=bool(ex.get("setpiece")))
         ox, oy = launch if standoff else (launch_ if launch_ is not None else (dx, dy))               # where the route ends: the launch point, else the target
+        self._face_patriots_to_raid(path, pk_path)
         L = sum(dist(*path[i], *path[i + 1]) for i in range(len(path) - 1))
         Lc, Lcap = L, L                                        # S59a: Lc = the central route; L = the longest package route (the raid pushes so that it arrives on time); Lcap = the shortest (a raid already under way cannot start further back than that)
         pk_L = None

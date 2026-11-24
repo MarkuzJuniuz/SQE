@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.618, a raided field's Patriot faces the raid, and red's SEAD attacks inside its arc
+A Patriot only sees, shoots and can be hit by anti-radar missiles inside about 45 degrees either side of where its radar faces. The Patriot of a field that a red SEAD raid goes for now faces the raid's way in, every other blue Patriot within reach of a raid's route turns to face it too, and red's SEAD groups launch from inside the targeted Patriot's arc. Before, half of red's SEAD bombers attacked from outside it and went home without firing, and the Patriot did not shoot at raiders on its blind side.
+
 ## v0.41.617, red SEAD raids start their attack run before the launch point
 A red SEAD bomber group now starts its missile attack at a point on the straight leg 6 nm before its launch point. The fly-over launch point of v0.41.614 is taken back: a group that had dodged a SAM circled back low to overfly it and did not fire.
 
