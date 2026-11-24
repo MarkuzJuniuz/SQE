@@ -18,6 +18,11 @@ from . import sites as _sites_mod
 from . import road_sites as _road_sites_mod
 from . import works as _works_mod
 
+# S150: the sort keys this module uses (they were lambdas)
+def _squadron_id(squadron):
+    return squadron.id
+
+
 def THEATRES() -> dict:
     """{id: name} of the installed theatre packs."""
     return theatres.available()
@@ -64,7 +69,9 @@ def placement(th: dict, level: int = 2, player_squadron: str | None = None, terr
         except Exception:
             pos[f["id"]] = (0.0, 0.0)
     out, used = {}, {}
-    order = sorted(th["squadrons"], key=lambda q: (q["id"] != player_squadron, q["id"]))
+    def player_first_then_id(q):
+        return (q["id"] != player_squadron, q["id"])
+    order = sorted(th["squadrons"], key=player_first_then_id)
     for q in order:
         cnt = _size(q["count"], sc)
         if q["base"] not in fields:                                   # the carrier (or a field the pack did not list): where the pack puts it
@@ -80,7 +87,9 @@ def placement(th: dict, level: int = 2, player_squadron: str | None = None, terr
             used[q["base"]] = used.get(q["base"], 0) + cnt
             continue
         bx, by = pos[q["base"]]
-        alt = sorted((fid for fid in fields if fid != q["base"] and (room(fid) or 0) >= cnt), key=lambda fid: math.hypot(pos[fid][0] - bx, pos[fid][1] - by))
+        def distance_to_pack_base(fid):
+            return math.hypot(pos[fid][0] - bx, pos[fid][1] - by)
+        alt = sorted((fid for fid in fields if fid != q["base"] and (room(fid) or 0) >= cnt), key=distance_to_pack_base)
         dest = alt[0] if alt else q["base"]                           # nowhere with room: it stays (and the caller reports it)
         out[q["id"]] = dest
         used[dest] = used.get(dest, 0) + cnt
@@ -118,7 +127,9 @@ def snap_assets_to_land(st) -> int:
         elif a.id.startswith("fsam_"):
             pair[a.id] = "armor_" + a.id[5:]
     n = 0
-    for a in sorted(st.assets.values(), key=lambda a: a.id in pair):          # parents first
+    def in_pair(a):
+        return a.id in pair
+    for a in sorted(st.assets.values(), key=in_pair):          # parents first
         if _sites_mod.on_spot(a.x, a.y):
             continue                                                      # sits on a condensed site spot (sites.py): dry, flat ground, kept 500 m off the sea
         if a.kind == AssetKind.AIRFIELD:
@@ -154,7 +165,7 @@ def _slots(terrain, airport: str, types: list) -> int | None:
 def _disperse_blue(st, th: dict, terrain, player_squadron=None) -> None:
     """Move the squadrons whose pack field cannot park them to the field `placement` gives them (v0.40.7: Batumi held 32 jets on 10 slots; v0.41.353: the player's squadron too)."""
     where = placement(th, st.level, player_squadron, terrain)
-    for q in sorted(st.squadrons.values(), key=lambda q: q.id):
+    for q in sorted(st.squadrons.values(), key=_squadron_id):
         dest = where.get(q.id, q.base_id)
         if dest != q.base_id:
             st.note(f"{q.name} is based at {st.bases[dest].name}: {st.bases[q.base_id].name} cannot park it.")
@@ -223,7 +234,8 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     d: Difficulty = get_difficulty(level)
     rng = random.Random(seed)
     t = theatres.terrain()
-    ap = lambda n: t.airports[n].position
+    def ap(n):
+        return t.airports[n].position
     era = th["era"]                                       # S103a: Era Equipment, chosen at creation (None = the theatre's own era value) and saved with the campaign
     st = CampaignState(name=name, theatre=theatre, level=d.level, start_date=start_date, night_ops=night_ops,
                        start_hour=int(th.get("start_hour", clock_mod.DEFAULT_START_HOUR)), a10_variant=a10_variant or era["a10_variant"], f14_variant=f14_variant or era["f14_variant"], link16=era["link16"] if link16 is None else bool(link16))
@@ -238,7 +250,8 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         st.bases[f["id"]] = Base(f["id"], f["name"], BaseKind.AIRFIELD, x=p.x, y=p.y, airport=f["airport"], divert=bool(f.get("divert")))
 
     sc = d.friendly_scale
-    n = lambda base: _size(base, sc)
+    def n(base):
+        return _size(base, sc)
     # The squadron structure is in the theatre pack (`squadrons`; 272 jets in the Caucasus, the same at every level since v0.41.353). Callsigns are unique across the whole coalition (group names must never collide).
     st.squadrons = {q["id"]: Squadron(q["id"], q["name"], era_aircraft(q["aircraft"], st.a10_variant, st.f14_variant), q["base"], n(q["count"]), n(q["count"]), q["callsign"], role=q.get("role", "")) for q in th["squadrons"]}      # S103b: the slot's airframe is the campaign's A-10 / F-14 variant
     for s in st.squadrons.values():                       # sanity: land jets on land, carrier jets on the boat
@@ -299,7 +312,8 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         return out_
     tu_share = _split_bombers(d.bomber_wing) if d.bomber_wing > 0 else []
     for bi_, bb_ in enumerate(bfields if d.bomber_wing > 0 else []):
-        share = lambda n_: n_ // len(bfields) + (1 if bi_ < n_ % len(bfields) else 0)
+        def share(n_):
+            return n_ // len(bfields) + (1 if bi_ < n_ % len(bfields) else 0)
         bname = st.assets[bb_].name
         host = st.enemy_air_at(bb_)
         fresh = host is None                                              # a bomber field that is also a normal red field (Syria) keeps ONE wing (every lookup by field assumes it): the Tu-22M3 and escort squadrons join it, under ids of their own (`_tu`, `_tuesc`: the field's own squadrons are `_1`, `_2` ...)

@@ -57,6 +57,27 @@ LATE_SEAD_MIN = 15           # launch option --late-sead: SEAD-stage packages go
                              # about 5 min ahead of them and reaches its gate with the radars still up: it holds (HOLD_S = 12 min) and goes in once
                              # the late SEAD blinds the site. A test of the hold; it changes that day's plan in the save.
 
+# S150: the sort keys this module uses (they were lambdas)
+def _modified_time(path):
+    return path.stat().st_mtime
+
+
+def _first_two(row):
+    return (row[0], row[1])
+
+
+def _largest_group_first(group):
+    return (-len(group), group[0])
+
+
+def _package_number(package):
+    return package.number
+
+
+def _largest_second_first(row):
+    return -row[1]
+
+
 def _hm(start: str) -> int:
     """A package's "HH:MM" start as minutes since midnight."""
     return int(start[:2]) * 60 + int(start[3:5])
@@ -100,7 +121,7 @@ class Session(Merging, SeadTiming):
 
     def list_campaigns(self) -> list:
         d = self.campaigns_dir()
-        return sorted(d.glob(f"*{CAMPAIGN_EXT}"), key=lambda p: p.stat().st_mtime, reverse=True) if d.exists() else []
+        return sorted(d.glob(f"*{CAMPAIGN_EXT}"), key=_modified_time, reverse=True) if d.exists() else []
 
     def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str | None = None, night_ops: bool = True,
             squadron: str | None = None, theatre: str = "caucasus", tactical_edge: bool = False, tactical_edge_decay: bool = False,
@@ -314,7 +335,7 @@ class Session(Merging, SeadTiming):
                 break
         if not tries:
             return None, 0
-        miss, w, pkg, view, sh, after = min(tries, key=lambda t: (t[0], t[1]))
+        miss, w, pkg, view, sh, after = min(tries, key=_first_two)
         ledger.settle(view, w)
         pb.short.extend(sh)
         names.clear()
@@ -403,7 +424,7 @@ class Session(Merging, SeadTiming):
                 groups.setdefault(root(i), []).append(i)
             quota = _tod.split_waves(len(objs))               # the wave of the k-th job in the order below: the first quota, the next ...
             seen, out = 0, {}
-            for g in sorted(groups.values(), key=lambda g: (-len(g), g[0])):
+            for g in sorted(groups.values(), key=_largest_group_first):
                 w_g = quota[min(seen, len(quota) - 1)] if quota else 1       # the whole group goes where its first job falls (a group may overshoot a wave's share, as before)
                 for i in g:
                     out[i] = 1 if (carrier_raid(st, objs[i]) or objs[i].id in prep_obj_ids) else w_g
@@ -418,7 +439,9 @@ class Session(Merging, SeadTiming):
             used_hold = {}
             pref = preferred_waves()
             out, names = [], self._day_names()          # callsign counter for the whole day: Enfield 1, Enfield 2 ... never two Enfield 1s
-            for i, o in sorted(enumerate(objs, 1), key=lambda t: (0 if carrier_raid(st, t[1]) else (1 if t[1].id in prep_obj_ids else 2))):      # v0.41.107: the setpiece is built FIRST (it is rare and needs the carrier squadrons), numbers unchanged
+            def setpiece_first_then_prep(t):
+                return (0 if carrier_raid(st, t[1]) else (1 if t[1].id in prep_obj_ids else 2))
+            for i, o in sorted(enumerate(objs, 1), key=setpiece_first_then_prep):      # v0.41.107: the setpiece is built FIRST (it is rare and needs the carrier squadrons), numbers unchanged
                 fps = (True, False) if (((i - 1) in forced or carrier_raid(st, o) or o.type == ObjectiveType.FLEET_DEFENSE) and not ai_only(st, o)) else (False,)
                 if o.type == ObjectiveType.FLEET_DEFENSE and any(hold_left.values()):           # a raid intercept is crewed from the hold first, then the ordinary free jets; ordinary packages never see the hold
                     before = {sid: ledger.free.get(sid, 0) for sid in hold_left}
@@ -463,7 +486,9 @@ class Session(Merging, SeadTiming):
                     tries += 1
                     cand_copy = copy.copy(cand)
                     cand_copy.id = f"obj-t{turn}-refill{tries}"
-                    start_wave = min(wave_count, key=lambda w: (wave_count[w], w))        # the least crowded wave first, later waves after it
+                    def least_crowded_then_wave(w):
+                        return (wave_count[w], w)
+                    start_wave = min(wave_count, key=least_crowded_then_wave)        # the least crowded wave first, later waves after it
                     refill_pkg, refill_wave = self._build_wave(pb, cand_copy, len(objs) + 50 + tries, ledger, (False,), names, waves=tuple(range(start_wave, _tod.NWAVES + 1)))
                     if refill_pkg is None:
                         if cand.aim == "STANDOFF":
@@ -475,14 +500,14 @@ class Session(Merging, SeadTiming):
                     built_jobs += 1
             if st.barcap is not None:
                 st.barcap["react_used"] = used_hold                                          # blue hold jets this turn's raid intercepts crewed from (probe / Overview)
-            out.sort(key=lambda p: p.number)
+            out.sort(key=_package_number)
             # Fighter Sweep (v0.40.2): where intel expects more enemy fighters there than the packages' own TARCAP and escort can take, a sweep
             # package of 4-ships goes in ahead of them. One per area (targets within SWEEP_AREA_KM), sized to the worst package there.
             from .packages import is_sweep, sweep_4ships
             need = [(p, sweep_4ships(p.n_def // 2)) for p in out if p.objective.type in (ObjectiveType.STRIKE, ObjectiveType.DEAD, ObjectiveType.CAS)
                     and p.objective.target_id in st.assets]
             areas = []
-            for p, n4 in sorted(need, key=lambda x: -x[1]):
+            for p, n4 in sorted(need, key=_largest_second_first):
                 if n4 <= 0:
                     continue
                 t = st.assets[p.objective.target_id]
@@ -508,7 +533,8 @@ class Session(Merging, SeadTiming):
                 out.append(pkg)
             return out
 
-        mine = lambda pk: sum(1 for p in pk if any(f.squadron_id == psq and not f.tag for f in p.flights))
+        def mine(pk):
+            return sum(1 for p in pk if any(f.squadron_id == psq and not f.tag for f in p.flights))
         rng = self._rng(3)
         pkgs = build_all(set(rng.sample(range(len(objs)), min(len(objs), max(1, (len(objs) + 1) // 2)))))     # your squadron is tasked on about half of them
         _L0 = make_ledger()
@@ -548,14 +574,16 @@ class Session(Merging, SeadTiming):
         groups: dict = {}
         for i in range(len(pkgs)):
             groups.setdefault(root(i), []).append(i)
-        order = [i for g in sorted(groups.values(), key=lambda g: (-len(g), g[0])) for i in g]
+        order = [i for g in sorted(groups.values(), key=_largest_group_first) for i in g]
         for i, (m, _w) in zip(order, _tod.turn_times(len(pkgs), t0, self._rng(5), [pkgs[i].extra.get("wave", 1) for i in order])):
             pkgs[i].start = _fmt_hm(m)
         self._sync_sead(pkgs)                                        # SEAD flights on the same ground (within SEAD_SYNC_KM) arrive together, not one after another
         self._wave_times(pkgs)                                       # v0.41.367 (S20 Phase 2): and the groups go in one after another, nearest first, SAM_WAVE_GAP_MIN apart
         self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
         self._late_sead(pkgs)                                        # test option --late-sead: the SEAD stage goes in late, so the DEAD stage holds
-        floor = lambda p: t0 + _tod.wave_open(p.extra.get("wave", 1))      # no package starts before its wave opens (its jets are not ready earlier)
+        # no package starts before its wave opens (its jets are not ready earlier)
+        def floor(p):
+            return t0 + _tod.wave_open(p.extra.get("wave", 1))
         self._time_raid_prep(pkgs, prep_ids, floor)                  # v0.41.305: the carrier raid's SEAD / Standoff DEAD packages go in RAID_PREP_LEAD_MIN ahead of it (before the sweeps are timed from their packages)
         from . import sweep as sweep_
         dropped = set()
@@ -592,7 +620,9 @@ class Session(Merging, SeadTiming):
             if detection.is_raid(st, p) and detection.blue_cast(st, p, turn) == "unseen":
                 p.extra["unseen_raid"] = True
                 st.raids["unseen"].append({"turn": turn, "id": p.objective.id, "text": p.objective.description})
-        pkgs.sort(key=lambda p: (bool(p.extra.get("unseen_raid")), p.start))
+        def seen_first_then_start(p):
+            return (bool(p.extra.get("unseen_raid")), p.start)
+        pkgs.sort(key=seen_first_then_start)
         base = 1 + max([d["number"] for d in st.plan_done] + [0])    # the day's packages are numbered on: turn 2 carries on after turn 1 (the resolved ones are in `plan_done`)
         for n_, p in enumerate(pkgs, base):                          # numbers follow the clock
             p.number, p.id = n_, f"pkg{n_}"
@@ -603,7 +633,8 @@ class Session(Merging, SeadTiming):
                 p.extra["covers"] = sorted(c.number for c in sweeps[id(p)])           # the packages this Fighter Sweep goes in ahead of
         # v0.41.304 (XO 2026-11-05: no dice, "only what red actually tries", no hidden ones): every raid red plans is a listed, flyable package; an unwarned one says so, and the
         # contested sector under the hardest pressure marks its planned CAS as troops in contact. An unwarned raid that could not be built is still settled overnight.
-        _unw = lambda o: bool(re.search(r"-s\d+$", o.id or ""))
+        def _unw(o):
+            return bool(re.search(r"-s\d+$", o.id or ""))
         built_ = {p.objective.id for p in pkgs}
         self._set_surprise(turn, n_unbuilt + sum(1 for o in objs if _unw(o) and o.id not in built_))      # the turn's unwarned raids nobody could build (counted once per turn: a replan replaces it)
         self._keep_bookings(pkgs, turn)                                                                   # the red jets of the raids that are packages go to refit at the end of the turn (`_red_sorties`)
@@ -719,7 +750,13 @@ class Session(Merging, SeadTiming):
         dest = ex.get("dest") or (b.x, b.y)
         have = {o.target_id for o in objs if o.type == ObjectiveType.DEAD}
         new, sites = [], {}
-        pid = (lambda n: f"obj-t{st.turn}-p{n}") if ahead is not None else (lambda n: f"obj-d{st.day}-p{n}")
+        def pid_by_turn(n):
+            return f"obj-t{st.turn}-p{n}"
+        def pid_by_day(n):
+            return f"obj-d{st.day}-p{n}"
+        pid = pid_by_day
+        if ahead is not None:
+            pid = pid_by_turn
         lapsing = [a for a in st.assets.values() if ahead is not None and a.suppressed and a.suppressed_turn >= 0 and ahead - a.suppressed_turn >= SUPPRESS_TURNS]
         for a in lapsing:                                            # v0.41.356: a radar blinded now whose blindness runs out before the raid's turn is back up when the raid flies: it counts as a live site (probe: seed 7, two such sites were missing from the record)
             a.suppressed = False
@@ -885,7 +922,9 @@ class Session(Merging, SeadTiming):
         # S139a (XO 2026-11-20): the unit budget. Build 1 takes everything in the time window. If it fits and nothing was left out for the unit limit, that is the mission (the common
         # small-map case). Otherwise build 2 is your package alone (+ its ruins): its units are what your target area keeps, and the packages are taken nearest first while they fit
         # in what is left (their sizes come from build 1); build 3 is that list. The safety loop then drops the last ruin, then the furthest package, until it fits.
-        trims = lambda r: sorted(w for w in r.warnings if "left out to stay under" in w and "wrecks" not in w)      # what the unit limit cut out of the mission (the wrecks are decor and fit last)
+        # what the unit limit cut out of the mission (the wrecks are decor and fit last)
+        def trims(r):
+            return sorted(w for w in r.warnings if "left out to stay under" in w and "wrecks" not in w)
         extras, n_all, left_out, cut, base_trims = list(cands), len(cands), [], False, None
         res = build(extras, ruins)
         if extras and (res.counts["units"] > cap or res.trimmed):
@@ -1119,7 +1158,9 @@ class Session(Merging, SeadTiming):
         avail0 = (st.red_air or {}).get("avail0") if (st.red_air or {}).get("turn") == st.turn else None
         if avail0:
             left = {sid: max(0, int(avail0.get(sid, 0)) - owner[sid].available) for sid in owner}
-            for e in sorted(out, key=lambda e: (e["launch_min"], e["key"])):
+            def launch_then_key(e):
+                return (e["launch_min"], e["key"])
+            for e in sorted(out, key=launch_then_key):
                 k = min(e["flew"], left.get(e["unit"].id, 0))
                 e["lost"] = k
                 left[e["unit"].id] = left.get(e["unit"].id, 0) - k

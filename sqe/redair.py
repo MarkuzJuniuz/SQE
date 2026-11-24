@@ -40,6 +40,11 @@ RED_CAP_SHARE = {1: (0.20, 0.05), 2: (0.40, 0.15), 3: (0.55, 0.20)}
 SWEEP_START_SPREAD_MIN = 30                                    # a sweep goes up this soon (random, steps of 10) after its wave opens (judgment call)
 
 
+# S150: the sort keys this module uses (they were lambdas)
+def _wing_field_id(wing):
+    return wing.base_asset_id
+
+
 def _level(d) -> int:
     return max(1, min(3, int(getattr(d, "level", 1))))
 
@@ -84,7 +89,9 @@ def take_ready(state, wing, types, n: int) -> list:
     `state.red_air["free"]` (and `["left"]` for fighters), so a second raid, a patrol or an escort does not take them again; the day's sortie cap is `spend`'s job."""
     ra = getattr(state, "red_air", None) or {}
     free = ra.get("free") if ra.get("turn") == state.turn else None
-    pool = sorted((q for q in wing.sqns if q.aircraft in types), key=lambda q: (-(int(free.get(q.id, 0)) if free is not None else q.available), q.id))
+    def most_free_then_id(q):
+        return (-(int(free.get(q.id, 0)) if free is not None else q.available), q.id)
+    pool = sorted((q for q in wing.sqns if q.aircraft in types), key=most_free_then_id)
     out, left_n = [], int(n)
     for q in pool:
         k = min(left_n, int(free.get(q.id, 0)) if free is not None else int(q.available))
@@ -128,7 +135,7 @@ def red_ledger(state, level: int, t_abs: int):
     from .packages import Ledger
     led = Ledger.blank()
     units = []
-    for w in sorted(state.enemy_air, key=lambda w: w.base_asset_id):
+    for w in sorted(state.enemy_air, key=_wing_field_id):
         a = state.assets.get(w.base_asset_id)
         if a is None or a.destroyed or runways.is_closed(state, w.base_asset_id):      # v0.41.254: a cratered field flies no patrols
             continue
@@ -168,7 +175,7 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
     gb = bombers.guard_base(state, lvl)                                    # S116: the quiet day before a carrier raid: no ordinary patrol from the bomber field, fighters from other fields cover it (B1: [(field, pairs)], one per bomber field that is up)
     gids = {g_[0] for g_ in gb}
     flights, cands = [], []
-    for w in sorted(state.enemy_air, key=lambda w: w.base_asset_id):
+    for w in sorted(state.enemy_air, key=_wing_field_id):
         sqs = [q for q in w.sqns if q.id in led.free]
         if w.base_asset_id in gids:
             continue
@@ -193,8 +200,10 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
         areas = [ar for ar in bc["red"] if ar["asset"] == gid_]
         if areas:
             ar = areas[0]
+            def wing_distance_then_id(w):
+                return (dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y), w.base_asset_id)
             src = sorted((w for w in state.enemy_air if w.base_asset_id not in gids and dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y) <= bombers.GUARD_FROM_NM * NM),
-                         key=lambda w: (dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y), w.base_asset_id))
+                         key=wing_distance_then_id)
             made = 0
             for w in src:
                 if made >= gpairs_:
@@ -304,7 +313,9 @@ def assign_guards(state, d, objectives) -> None:
             continue
         reads = rng.random() < GUARD_READ[lvl]
         exp = tgt_xy if reads else []
-        ranked = sorted(cands, key=lambda s: (-guard_score(state, s, blue_af, attacked, exp), s.id))
+        def best_guard_score_then_id(s):
+            return (-guard_score(state, s, blue_af, attacked, exp), s.id)
+        ranked = sorted(cands, key=best_guard_score_then_id)
         site = ranked[0]
         f["guard"], f["gx"], f["gy"], f["read"] = site.id, site.x, site.y, reads
 
@@ -333,7 +344,9 @@ def pick(state, tot_min: float, pts: list, tx: float, ty: float, limit: int) -> 
     A wing never supplies more pairs than it has aircraft for right now."""
     out, used = [], {}
     t = tot_min % 1440
-    for f in sorted((state.red_air or {}).get("flights", []), key=lambda f: dist(f["x"], f["y"], tx, ty)):
+    def flight_distance_to_target(f):
+        return dist(f["x"], f["y"], tx, ty)
+    for f in sorted((state.red_air or {}).get("flights", []), key=flight_distance_to_target):
         if len(out) >= limit:
             break
         if not (f["start"] <= t <= f["end"] or f["start"] <= t + 1440 <= f["end"]):
