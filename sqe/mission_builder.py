@@ -2018,15 +2018,21 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if w_.name == "CAP1":
                     station_ = (w_.x, w_.y)
                     break
+            # S176a: the race-track's far end, so the leash is round the whole track the patrol flies
+            track_end = None
+            for w_ in wps:
+                if w_.name == "CAP2":
+                    track_end = (w_.x, w_.y)
+                    break
             if f.tag in ("HAVCAP", "TKR_HAVCAP"):
-                self._commit_register("blue", g, blue_commit.HAVCAP_REACH_NM, 0, commit_end_, station_, blue_commit.HAVCAP_LEASH_NM)
+                self._commit_register("blue", g, blue_commit.HAVCAP_REACH_NM, 0, commit_end_, station_, blue_commit.HAVCAP_LEASH_NM, track_end)
             else:
                 # S160c: a base / carrier BARCAP guard is on a leash round its station too, so it does not fight out of its SAM and SM-2 cover
                 barcap_leash_nm = blue_commit.BARCAP_LEASH_BASE_NM
                 if f.tag == "CARRIER_BARCAP":
                     barcap_leash_nm = blue_commit.BARCAP_LEASH_FLEET_NM
                 barcap_reach_nm = min(cover_reach_nm(f.aircraft), blue_commit.BARCAP_REACH_NM)
-                self._commit_register("blue", g, barcap_reach_nm, 0, commit_end_, station_, barcap_leash_nm)
+                self._commit_register("blue", g, barcap_reach_nm, 0, commit_end_, station_, barcap_leash_nm, track_end)
         elif stw is not None and (not f.is_player or o.player_is_ai):
             # no chasing. A sweep engages inside a circle round its station (25 nm for the long-range shooters, 15 for the rest). A TARCAP or
             # escort covers the package: the circle is round the package's launch points (HARM / JSOW points, or the IP), COVER_ZONE_NM, and
@@ -3280,7 +3286,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if not geom.sweep:
             self._stagger_stations(geom, package, tx, ty)        # v0.41.139 (XO 2026-10-27): a long-range TARCAP stands behind and to one side of a short-range escort
 
-    def _commit_register(self, side, g, reach_nm, t0, t1, anchor=None, leash_nm=0) -> None:
+    def _commit_register(self, side, g, reach_nm, t0, t1, anchor=None, leash_nm=0, anchor_end=None) -> None:
         """S160: put an AI air-to-air group on its side's commit script (blue_commit.py). t1 is a mission time, or a hold dict whose (extended) end is used.
         anchor (x, y) + leash_nm: the flight must stay within the leash of that point (HAVCAPs). Players are never registered (callers test it)."""
         entry = {"side": side, "g": g.name, "reach": reach_nm * NM, "t0": t0, "t1": t1}
@@ -3288,6 +3294,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             entry["ax"] = anchor[0]
             entry["az"] = anchor[1]
             entry["leash"] = leash_nm * NM
+            if anchor_end is not None:
+                entry["bx"] = anchor_end[0]          # S176a: the leash is round the race-track CAP1 to CAP2, not round CAP1 alone
+                entry["bz"] = anchor_end[1]
         self._commit_flights.append(entry)
 
     def _add_commit_scripts(self) -> None:

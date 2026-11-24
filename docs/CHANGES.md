@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.616, blue guard fighters react anywhere on their patrol track
+A base or carrier BARCAP could not go after a bandit while it flew the far end of its own race-track (its leash was measured from the start of the track). The leash now covers the whole track. The tanker and AWACS guards also go after bandits a little farther out (30 nm, was 25), because red escorts were firing first.
+
 ## v0.41.615, F-14B kneeboard: every route point to enter by hand
 The plain F-14B holds only three waypoints. Every other point of your route now shows its position on page 1, right under its row (or on an extra page after page 1 when they do not fit), all of them in route order (before: only the turn points round SAM rings, at most eight, on page 2).
 
