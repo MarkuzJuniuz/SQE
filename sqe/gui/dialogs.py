@@ -344,18 +344,26 @@ class SettingsDialog(QDialog):
         v.addSpacing(10)
         self.ecm = QCheckBox("ECM Script (SQE's Own Jamming)")
         self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
-        hint(v, "SQE's own jamming effect; off by default. Off: jammers use DCS's own ECM; AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
-                "and switch it on over the attack leg only when a radar locks them. On: they keep it on over the whole attack leg, and a radar-guided missile fired at a jet with a jammer may be fooled: "
-                "SQE rolls a chance (higher with an ECM pod, highest for shots from far away, none inside about 12 km) and removes a fooled missile in flight. "
-                "A jammer cannot really destroy a missile; this is the closest a mission script can get. Both sides, your own jet included.")
-        self.ecm_msg = QCheckBox("Show ECM Status")                      # v0.41.213 (XO): a sub-option of the ECM script
+        self.ecm_msg = QCheckBox("Show ECM Status")                      # v0.41.213 (XO): a sub-option of the ECM script; v0.41.647: right under its parent
         self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
         self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")
         self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and \"Cockpit: ECM On\" / \"Cockpit: ECM Off\" for the F10 SQE ECM Switch / SQE ECM OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
         v.addWidget(self.ecm_msg)
+        hint(v, "SQE's own jamming effect; off by default. Off: jammers use DCS's own ECM; AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
+                "and switch it on over the attack leg only when a radar locks them. On: they keep it on over the whole attack leg, and a radar-guided missile fired at a jet with a jammer may be fooled: "
+                "SQE rolls a chance (higher with an ECM pod, highest for shots from far away, none inside about 12 km) and removes a fooled missile in flight. "
+                "A jammer cannot really destroy a missile; this is the closest a mission script can get. Both sides, your own jet included.")
         v.addSpacing(10)
         self.ecm_state = QLabel(); v.addWidget(self.ecm_state)
         self.ecm_inst = QPushButton("Install ECM Script"); self.ecm_rem = QPushButton("Remove")
+        # Fixed width: the label changes between "Install ECM Script" and "Update ECM Script", and the button must not resize and push Remove sideways.
+        self.ecm_inst.ensurePolished()                       # so the sizes below include the app stylesheet (padding, font)
+        widest_label = 0
+        for label_text in ("Install ECM Script", "Update ECM Script"):
+            self.ecm_inst.setText(label_text)
+            widest_label = max(widest_label, self.ecm_inst.sizeHint().width())
+        self.ecm_inst.setText("Install ECM Script")
+        self.ecm_inst.setFixedWidth(widest_label)
         def install_ecm():
             self._ecm_do(S.install_ecm_script)
 
