@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.645, one command for the smoke test
+`tools\smoke_test.bat` runs the self-test from any folder using the project's `.venv` (it makes the venv first if it is missing). Extra arguments are passed on, e.g. `--only locks`.
+
 ## v0.41.644, README screenshots refreshed
 The README pictures show the current windows (HVAACAP in the Missions table and the kneeboard, the new AWACS and tanker texts). Docs only.
 

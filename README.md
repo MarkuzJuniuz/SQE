@@ -62,6 +62,7 @@ Start here: **docs/GUIDE.md**   |   Sample briefing: docs/SAMPLE_BRIEFING.txt
     py -m venv .venv && .venv\Scripts\Activate.ps1
     pip install -r requirements.txt
     python tools/smoke_test.py      # headless self-test
+    tools\smoke_test.bat           # the same in one command, any folder, no venv activation
     python -m sqe                   # the app
 
 
