@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.618, the AWACS guard is a four-ship
+The fighters that guard the AWACS now fly as four when their squadron has the jets (most turns), not as a pair; red raid escorts were shooting the AWACS down past a pair. The guard squadron (194th FS, F-15C) grows from 8 to 16 jets in new campaigns and guards the AWACS before the tankers. With 16 jets it is based at Kobuleti on the Caucasus (Batumi parks 10), and on Syria the 510th FS moves from Larnaca to Akrotiri to make room.
 ## v0.41.618, a raided field's Patriot faces the raid, and red's SEAD attacks inside its arc
 A Patriot only sees, shoots and can be hit by anti-radar missiles inside about 45 degrees either side of where its radar faces. The Patriot of a field that a red SEAD raid goes for now faces the raid's way in, every other blue Patriot within reach of a raid's route turns to face it too, and red's SEAD groups launch from inside the targeted Patriot's arc. Before, half of red's SEAD bombers attacked from outside it and went home without firing, and the Patriot did not shoot at raiders on its blind side.
 

@@ -126,7 +126,8 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
 
 # the guard of each support asset: key -> flight tag. The assets and their guards are standing entities on their own schedule (S71, XO 2026-11-13): every package that carries the asset gets the guard.
 # A second tanker (another direction) is one more TABLE row in support_assets and one more entry here.
-GUARDS = {"bl_kc135": "TKR_HAVCAP", "bl_s3": "TKR_HAVCAP", "bl_e3": "HAVCAP", "bl_e2": "HAVCAP"}      # tankers first: their guard is not optional
+AWACS_GUARD_JETS = 4       # S182 (XO 2026-11-24: "awacs guards a minimum of 4 ships"): the AWACS guard's size when the HAVCAP squadron can give it. Evidence: the AWACS died with a pair on guard in the S174 and S177 server runs (raid escorts). Judgment call
+GUARDS = {"bl_e3": "HAVCAP", "bl_e2": "HAVCAP", "bl_kc135": "TKR_HAVCAP", "bl_s3": "TKR_HAVCAP"}      # S182: the AWACS guards draw first, so the HAVCAP squadron's jets make their four-ship; a tanker's guard is still not optional (it takes any capable squadron's pair). Before: tankers first
 
 
 def _havcap_squadrons(state, base) -> list:
@@ -180,8 +181,16 @@ def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
             lo = max(lo, t0 + wave_open(w))
         if sq is None or lo >= hi:
             continue
-        (ledger.htake if hav else ledger.take)(sq.id, 2, w)
-        flights.append({"id": f"bg{turn}-{key}", "kind": tag, "asset": key, "area": "", "squadron": sq.id, "aircraft": sq.aircraft, "size": 2, "start": lo,
+        # S182: the AWACS guard is a four-ship when the HAVCAP squadron has the jets in this wave; a pair otherwise (and always a pair from an
+        # ordinary squadron, whose jets the packages need, and for the tanker)
+        guard_jets = 2
+        if tag == "HAVCAP" and hav and ledger.hroom(sq.id, w) >= AWACS_GUARD_JETS:
+            guard_jets = AWACS_GUARD_JETS
+        if hav:
+            ledger.htake(sq.id, guard_jets, w)
+        else:
+            ledger.take(sq.id, guard_jets, w)
+        flights.append({"id": f"bg{turn}-{key}", "kind": tag, "asset": key, "area": "", "squadron": sq.id, "aircraft": sq.aircraft, "size": guard_jets, "start": lo,
                         "end": hi, "callsign": "", "turn": turn, "wave": w})
 
 
