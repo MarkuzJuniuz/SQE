@@ -746,6 +746,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._extend_holds([((tx, ty), ptot)] + own_ + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")],
                            egr_events=self._striker_egr)
         self._exit_s = next((h_["end"] for h_ in self._holds if h_.get("you")), None)
+        self._finish_late_tankers(manifest, clock)               # S193 PR 3: when a late tanker may launch (after the raids are spawned)
         self._add_commit_scripts()                               # S158 / S160: after the holds are extended, so each commit window ends with its hold            # S141d: when your flight leaves its station: the same time an AI flight in your seat gets
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + ([geom.cas_floor[1]] if geom.cas_floor else []) + list(self._red_intel)
@@ -2098,6 +2099,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if w_.name == "CAP2":
                     track_end = (w_.x, w_.y)
                     break
+            if f.tag == "TKR_HVAACAP" and getattr(self, "_late_tanker_flag", None):
+                self._late_flag(g, self._late_tanker_flag)            # S193 PR 3: the tanker's guard launches with the late tanker (same flag)
             if f.tag in ("HVAACAP", "TKR_HVAACAP"):
                 self._commit_register("blue", g, blue_commit.HVAACAP_REACH_NM, 0, commit_end_, station_, blue_commit.HVAACAP_LEASH_NM, track_end)
             else:
@@ -3423,7 +3426,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 sams = blue_commit.red_sam_circles(self.state)
             else:
                 sams = blue_commit.blue_sam_circles(self.state)
-            script = blue_commit.commit_lua(side, flights, sams, hvaa)
+            late_rows = []
+            if side == "blue":
+                late_rows = [e for e in (getattr(self, "_late_tankers", None) or []) if e.get("flown")]
+            script = blue_commit.commit_lua(side, flights, sams, hvaa, late_rows)
             trig = triggers.TriggerOnce(comment=f"SQE {side} commit")
             trig.add_condition(condition.TimeAfter(2))
             trig.add_action(action.DoScript(String(script)))

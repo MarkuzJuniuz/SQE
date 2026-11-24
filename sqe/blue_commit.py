@@ -98,7 +98,7 @@ def _lua_string(text) -> str:
     return '"' + str(text).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def commit_lua(side, flights, sams, hvaa=None) -> str:
+def commit_lua(side, flights, sams, hvaa=None, late=None) -> str:
     """The mission script for one side ("blue" or "red").
     `flights`: [{"g": group name, "reach": m, "t0": s, "t1": s, optional "ax", "az", "leash" (m), optional "bx", "bz" (the far end of the patrol's race-track; the leash is round the segment)}], `sams`: [(x, z, radius m)] of the ENEMY's cover."""
     if side == "blue":
@@ -122,6 +122,9 @@ def commit_lua(side, flights, sams, hvaa=None) -> str:
     hvaa_rows = []                  # S176b: the group names of the side's tankers and AWACS that may pull back
     for group_name in (hvaa or []):
         hvaa_rows.append("{g=%s}" % _lua_string(group_name))
+    late_rows = []                  # S193 PR 3: tankers waiting on the ground: the flag to set, their station, the time they may open
+    for entry in (late or []):
+        late_rows.append("{g=%s, flag=%d, x=%d, z=%d, t=%d}" % (_lua_string(entry["g"]), int(entry["flag"]), int(entry["x"]), int(entry["z"]), int(entry["t"])))
     sam_rows = []
     for x, z, radius in sams:
         sam_rows.append("{%d, %d, %d}" % (int(x), int(z), int(radius)))
@@ -132,6 +135,7 @@ def commit_lua(side, flights, sams, hvaa=None) -> str:
     data += ("\n%s.hvaa = {%s}\n%s.scram = %d\n%s.retro = %d\n%s.clear = %d\n%s.hvaaquiet = %d\n%s.replan = %d"
              % (table, ", ".join(hvaa_rows), table, int(HVAA_SCRAM_NM * 1852), table, int(HVAA_RETRO_NM * 1852), table, int(HVAA_CLEAR_NM * 1852),
                 table, HVAA_QUIET_S, table, HVAA_REPLAN_S))
+    data += "\n%s.late = {%s}" % (table, ", ".join(late_rows))
     return data + "\n" + COMMIT_BODY.replace("__TABLE__", table)
 
 
@@ -334,10 +338,24 @@ local function hvaaTick(now, seenBySide)
     end
   end
 end
+local function lateTick(now)
+  for _, L in ipairs(C.late or {}) do
+    if not L.done and now >= L.t then
+      local d = nearestFighter({x = L.x, y = 0, z = L.z})
+      if d == nil or d > C.scram then
+        trigger.action.setUserFlag(L.flag, true)
+        L.done = true
+        env.info("SQECOMMIT " .. C.side .. " " .. L.g .. " launches at " .. math.floor(now))
+        pcall(function() trigger.action.outTextForCoalition(OWN, string.upper(L.g) .. ": launching, the raid is over.", 10) end)
+      end
+    end
+  end
+end
 local function tick(_, t)
   local now = timer.getTime()
   NOWT = now
   local seenBySide = sideSees()
+  pcall(lateTick, now)                  -- S193 PR 3: a late tanker launches when its time has come and no red fighter is near its station
   pcall(hvaaTick, now, seenBySide)      -- S176b: never lets an error here stop the commits
   for _, f in ipairs(C.flights) do
     if not f.cool then f.cool = {} end

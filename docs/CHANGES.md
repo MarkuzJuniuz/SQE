@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.652, a tanker with no safe station waits for the raid to end
+When no tanker spot is clear of the mission's red raids and sweeps, the tanker no longer sits out beyond the covered area: it waits on the ground and launches about ten minutes after the last raid's time over its target, once no red fighter is near its track, and its guard launches with it. The briefing's intelligence gives the time. A tanker that could only launch long after your planned recovery does not fly that mission.
+
 ## v0.41.651, the AWACS and the tankers stay under cover
 The AWACS and the tankers are placed under blue cover (a defended field, the carrier group, or a BARCAP flying that turn) first, and keep clear of red's raid routes second. On Syria the AWACS no longer ends up at the western edge of the map; on the Caucasus it now sits under cover on almost every turn (it was under cover on about half the Level 3 turns).
 
