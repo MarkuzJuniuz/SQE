@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.624, internal clean-up: plain functions in the package merging code
+Nine one-line functions (lambdas) in the code that folds neighbouring packages into one mission were rewritten as small named functions. Nothing changes in play: 126 test missions come out identical.
+
 ## v0.41.623, internal clean-up: plain functions in the route planner and the red air picture
 Twenty one-line functions (lambdas) in the route planner and in the code that places red patrols were rewritten as plain loops and small named functions. Nothing changes in play: 126 test missions come out identical.
 
