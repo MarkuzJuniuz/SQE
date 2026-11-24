@@ -1,5 +1,6 @@
 """Kneeboard pages (PNG 768x1024), laid out like a printed form: shaded section bands, ruled rows, and exactly three type sizes.
 Page 1: comms ladder + waypoints (numbered the way YOUR jet's cockpit numbers them), the tolerances, the time zone and the minimum safe altitude (with the ground-height scan).
+Page 1b (plain F-14A / B only, S175): every route point the jet cannot hold, with its position, to enter by hand.
 Page 2: fuel, codes, weather, target lat/long, bullseye, package who's-who (with Link 16 STNs).
 Page 3: the other packages in the mission (own push / TOT), threats near the target, intelligence.
 Every clock time is hh:mm:ss. Text wraps only at logical breaks (after a comma or a sentence), never inside an item."""
@@ -182,6 +183,18 @@ def render_pages(outdir, ctx: dict) -> list:
             f.line(ln, True, gap=2)
     pages.append(f.save(outdir / "1_comms_times.png"))
 
+    # ------------------------------------------------ page 1b (plain F-14A / B only): every route point the jet cannot hold, to enter by hand
+    # S175: all of them, in route order (degrees, minutes, thousandths: enter the minutes as they are). A flight with none has no page.
+    if ctx.get("hand_table"):
+        f = _Form(head)
+        f.band("", [(0, "#"), (3, "ROUTE POINTS (ENTER BY HAND)"), (27, "LAT / LONG"), (53, "ALT")])
+        for r in ctx["hand_table"]:
+            label = r["name"]
+            if r["leg"]:
+                label = r["name"] + " " + r["leg"]
+            f.row([(0, r["n"]), (3, label[:23]), (27, r["pos"]), (53, r["alt"])], gap=3)
+        pages.append(f.save(outdir / "1b_route_points.png"))
+
     # ------------------------------------------------ page 2: fuel, codes, weather, target, package
     f = _Form(head)
     f.band("FUEL")
@@ -197,12 +210,6 @@ def render_pages(outdir, ctx: dict) -> list:
         f.line(ctx["objective"], color=DIM)
     f.band("BULLSEYE")
     f.row([(0, ctx["bullseye"])])
-    if ctx.get("avd_table"):                         # S140c: the plain F-14A / B holds three waypoints: the turn points round the SAM rings go in by hand, in route order (degrees, minutes, thousandths: enter the minutes and tenths)
-        f.band("ROUTE POINTS (enter by hand)")
-        for r in ctx["avd_table"][:8]:
-            f.row([(0, r["n"]), (6, r["leg"][:16]), (23, r["pos"])], gap=3)
-        if len(ctx["avd_table"]) > 8:
-            f.line(f"and {len(ctx['avd_table']) - 8} more", color=DIM, gap=4)
     l16 = not ctx.get("link16_off")                  # S103a: a campaign with Link 16 off has no STN column
     f.band("", [(0, "PACKAGE (STN = LINK 16 / SADL)" if l16 else "PACKAGE"), (19, "TYPE"), (26, "TASK"), (34, "M3")] + ([(39, "STN")] if l16 else []))
     for r in ctx["whois"]:
