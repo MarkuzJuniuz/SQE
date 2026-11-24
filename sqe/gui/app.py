@@ -768,6 +768,8 @@ class MainWindow(QMainWindow):
     _auto_goto_missions = False               # S23: the run follows a flown sortie: show the Missions page when it stops
     def __init__(self, session: Session):
         super().__init__(); self.session = session
+        from .. import frame_hook
+        frame_hook.sync(session.settings.dcs_saves)       # SQE_DEBUG=1: the frame-time hook goes in (otherwise it is taken out); DCS reads it at its next start
         self.setWindowTitle(f"{APP_NAME}"); self.setMinimumSize(*WIN_MIN); self._place_window()
         root = QWidget(); root.setObjectName("root"); self.setCentralWidget(root)
         lay = QHBoxLayout(root); lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(0)

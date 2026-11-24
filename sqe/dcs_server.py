@@ -229,6 +229,8 @@ def start_server(dcs_install: str, dcs_saves: str, miz_path, wait_for_client: bo
     problems = check_ready(dcs_install, dcs_saves)
     if problems:
         return False, " ".join(problems)
+    from . import frame_hook
+    frame_hook.sync(dcs_saves)                       # SQE_DEBUG=1: the frame-time hook goes in before the server starts (otherwise it is taken out)
     settings_path = server_settings_path(dcs_saves)
     try:
         backup_note = backup_settings_once(dcs_saves)
