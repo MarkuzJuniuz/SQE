@@ -49,7 +49,10 @@ GRID = "#2a3644"
 def table(headers, rows, center=(), nowrap=False, widths=()) -> str:
     """A gridded table (S131, XO 2026-11-20): every header centred, even padding of PAD, a thin border. rows: lists of cells; a cell is a string (escaped) or ('html', raw), e.g. a bar image
     (centred). `center` = the column numbers whose text is centred too (Health, State, Type, the figure columns); the others stay left. `nowrap`: keep each cell on one line (the site tables, which have the room). `widths`: a column width in px per column (0 = none), so tables under each other line up (S132)."""
-    wd = lambda i: f" width='{widths[i]}'" if i < len(widths) and widths[i] else ""
+    # The width attribute of column i (empty when it has no width).
+    def wd(i):
+        return f" width='{widths[i]}'" if i < len(widths) and widths[i] else ""
+
     th = "".join(f"<th align='center'{wd(i)} style='{HEAD}'>{e(h)}</th>" for i, h in enumerate(headers))
     out = [f"<table border='1' cellspacing='0' cellpadding='{PAD}' style='border-color:{GRID};border-style:solid'><tr>{th}</tr>"]
     for r in rows:

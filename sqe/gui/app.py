@@ -50,6 +50,11 @@ RELEASES_URL = "https://github.com/MarkuzJuniuz/SQE/releases/latest"
 CAMPAIGN_URL = "https://github.com/MarkuzJuniuz/SQE/blob/main/docs/CAMPAIGN.md"     # the online copy (the newest code, may run ahead of the build you have)
 
 
+# The Overview page's default getters (the main window replaces them with the real ones): they answer "nothing".
+def _no_value():
+    return None
+
+
 def campaign_doc_path() -> Path | None:
     """S74: the copy of docs/CAMPAIGN.md that goes with this build: beside SQE.exe in a release zip (build_exe.bat copies `docs`), the repo's own `docs` when run from source. None when it is not there."""
     base = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]
@@ -89,7 +94,7 @@ class OverviewPage(QWidget):
         self.txt = QTextBrowser(); self.txt.setFrameShape(QFrame.NoFrame); self.txt.setStyleSheet("background:transparent;border:none;")   # v0.41.149: Background and Intent, scrollable, collapsible
         c.layout().addWidget(self.txt, 1)
         self.now = QLabel(); self.now.setWordWrap(True); self.now.setStyleSheet("font-size:14px;"); c.layout().addWidget(self.now)              # the Now line stays pinned at the bottom, open or closed
-        self._sit_open = True; self._st = None; self.get_settings = lambda: None; self.get_session = lambda: None; self._left = left; self._sit_card = c
+        self._sit_open = True; self._st = None; self.get_settings = _no_value; self.get_session = _no_value; self._left = left; self._sit_card = c
         gc = card(); left.addWidget(gc, 1)                                 # v0.41.149: the detail tabs (they replaced the one long sector list)
         self.dtabs = QTabWidget(); gc.layout().addWidget(self.dtabs)
         self.dviews = {}
@@ -464,7 +469,11 @@ class MissionsPage(QWidget):
             if yours:
                 b = QPushButton("FLY"); b.setObjectName("fly"); b.setEnabled(active); b.setFixedSize(84, 30)
                 b.setToolTip(self._fly_note(p))
-                b.clicked.connect(lambda _=0, n=p.number, fid=f.id: self.win.do_fly(n, fid))
+                # The defaults bind THIS row's mission and flight now (a plain closure would see the last row's values when the button is pressed); `_` takes the `checked` flag Qt sends.
+                def fly_this_mission(_=0, n=p.number, fid=f.id):
+                    self.win.do_fly(n, fid)
+
+                b.clicked.connect(fly_this_mission)
                 cont = QWidget(); cl = QHBoxLayout(cont); cl.setContentsMargins(4, 4, 4, 4); cl.addWidget(b, 0, Qt.AlignCenter)
                 t.setCellWidget(i, 5, cont)
             else:
@@ -603,7 +612,14 @@ class ForcesPage(QWidget):
             self.ea.setCellWidget(i, 4, self._bar(q.on_hand / max(1, q.authorized), theme.RED))
         from .. import sams as _sams, support_assets as _sa
         bl = list(st.bases.values()); self.bs.setRowCount(len(bl))
-        col = lambda h: theme.GREEN if h > 0.6 else theme.AMBER if h > 0.25 else theme.RED
+        # The bar colour for a health figure: green above 0.6, amber above 0.25, else red.
+        def col(h):
+            if h > 0.6:
+                return theme.GREEN
+            if h > 0.25:
+                return theme.AMBER
+            return theme.RED
+
         for i, b in enumerate(bl):
             self.bs.setItem(i, 0, _item(b.name)); self.bs.setItem(i, 1, _item("Carrier (escorted)" if b.kind.value == "CARRIER" else "Airfield"))
             if b.kind.value == "AIRFIELD":
@@ -625,7 +641,11 @@ class ForcesPage(QWidget):
         sa = _sa.ensure(st)
         fl = (getattr(st, "barcap", None) or {}).get("support_flights") or {}
         self.sup.setRowCount(len(sa))
-        for i, (k, a) in enumerate(sorted(sa.items(), key=lambda kv: (kv[1]["side"] != "blue", kv[0]))):
+        # Blue's assets first, then red's, each by key.
+        def blue_first_then_key(item):
+            return (item[1]["side"] != "blue", item[0])
+
+        for i, (k, a) in enumerate(sorted(sa.items(), key=blue_first_then_key)):
             red = a["side"] != "blue"
             base = st.bases.get(a["base_id"]) or st.assets.get(a["base_id"])
             mins = 0; hi = 0
@@ -661,7 +681,10 @@ class ForcesPage(QWidget):
         from .. import works as _works
         self.as_.setRowCount(0); self.as_.clearSpans()                                       # a fresh table: no stale spans, row heights or bars from the last refresh
         wk = _works.rows(st)                                                                # S131: a pack's works are pinned at the top under their own heading (they are hard to find among the depots)
-        al = sorted((a for a in st.assets.values() if not _works.is_works(a)), key=lambda a: (a.kind.value, a.name))
+        def kind_then_name(asset):
+            return (asset.kind.value, asset.name)
+
+        al = sorted((a for a in st.assets.values() if not _works.is_works(a)), key=kind_then_name)
         off = (1 + len(wk)) if wk else 0
         self.as_.setRowCount(off + len(al))
         from .. import theatres as _th; _tl = _th.active()["tier_labels"]
@@ -754,12 +777,23 @@ class MainWindow(QMainWindow):
         sub = QLabel("Squadron Campaign Engine"); sub.setObjectName("small"); sl.addWidget(sub); sl.addSpacing(18)
         self.stack = QStackedWidget()
         self.p_over, self.p_miss, self.p_forces, self.p_pilot, self.p_log = OverviewPage(), MissionsPage(self), ForcesPage(), PilotPage(), LogPage()
-        self.p_over.get_settings = lambda: self.session.settings
-        self.p_over.get_session = lambda: self.session
+        # The Overview page asks the window for the current session and its settings when it draws.
+        def current_settings():
+            return self.session.settings
+
+        def current_session():
+            return self.session
+
+        self.p_over.get_settings = current_settings
+        self.p_over.get_session = current_session
         grp = QButtonGroup(self); grp.setExclusive(True)
         for i, (name, page) in enumerate((("Overview", self.p_over), ("Missions", self.p_miss), ("Forces", self.p_forces), ("Pilot", self.p_pilot), ("War Log", self.p_log))):
             b = QPushButton(name); b.setObjectName("nav"); b.setCheckable(True); grp.addButton(b, i); sl.addWidget(b)
-            self.stack.addWidget(page); b.clicked.connect(lambda _=0, k=i: self.stack.setCurrentIndex(k))
+            # The default `k=i` binds THIS button's page now (a plain closure would see the last page); `_` takes the `checked` flag Qt sends.
+            def show_this_page(_=0, k=i):
+                self.stack.setCurrentIndex(k)
+
+            self.stack.addWidget(page); b.clicked.connect(show_this_page)
             if i == 1:
                 self.nav_missions = b
         grp.button(0).setChecked(True); sl.addSpacing(18); sl.addWidget(self.p_miss.auto_box); sl.addStretch(1)      # S23: the Auto-Skip box right under the nav buttons, away from Settings
@@ -808,7 +842,10 @@ class MainWindow(QMainWindow):
         h = mb.addMenu("&Help")
         a = QAction("&About SQE...", self); a.triggered.connect(self.about); h.addAction(a)
         a = QAction("&Campaign rules", self); a.triggered.connect(self.campaign_rules); h.addAction(a)
-        a = QAction("&Latest release (GitHub)", self); a.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(RELEASES_URL))); h.addAction(a)
+        def open_releases_page():
+            QDesktopServices.openUrl(QUrl(RELEASES_URL))
+
+        a = QAction("&Latest release (GitHub)", self); a.triggered.connect(open_releases_page); h.addAction(a)
 
     def campaign_rules(self):
         """Help > Campaign rules: the page that came with this build; the online page (newest code) when it is missing."""
@@ -835,7 +872,11 @@ class MainWindow(QMainWindow):
     def _recent(self):
         self.recent.clear()
         for p in self.session.list_campaigns()[:8]:
-            a = QAction(p.stem, self); a.triggered.connect(lambda _=0, q=p: self._open(q)); self.recent.addAction(a)
+            # The default `q=p` binds THIS campaign file now (a plain closure would open the last one); `_` takes the `checked` flag Qt sends.
+            def open_this_campaign(_=0, q=p):
+                self._open(q)
+
+            a = QAction(p.stem, self); a.triggered.connect(open_this_campaign); self.recent.addAction(a)
         if self.recent.isEmpty():
             self.recent.addAction(QAction("(none found)", self)).setEnabled(False)
 
@@ -1031,7 +1072,10 @@ class MainWindow(QMainWindow):
     def _skip_nosave(sess):
         """One Skip Turn without its own save (Session.skip_turn saves and writes a backup every call; the auto-skip run saves once at the end). The engine stays untouched: the instance's
         `save` is shadowed for the call (like assigning a method on an object in JS), then removed."""
-        sess.save = lambda *a, **k: None
+        def no_save(*args, **kwargs):
+            return None
+
+        sess.save = no_save
         try:
             return sess.skip_turn()
         finally:

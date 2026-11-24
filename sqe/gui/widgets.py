@@ -26,7 +26,11 @@ class StepSpin(QWidget):
         self._minus, self._plus = QToolButton(), QToolButton()
         for b, txt, step in ((self._minus, "\u2212", self._spin.stepDown), (self._plus, "+", self._spin.stepUp)):
             b.setText(txt); b.setObjectName("step"); b.setAutoRepeat(True); b.setFocusPolicy(Qt.NoFocus); b.setCursor(Qt.PointingHandCursor)
-            b.clicked.connect(lambda _=False, f=step: f())
+            # The default `f=step` binds THIS button's step method now (a plain closure would see the last one); `_` takes the `checked` flag so it is not passed on as a step count.
+            def press_step(_=False, f=step):
+                f()
+
+            b.clicked.connect(press_step)
         lay.addWidget(self._minus); lay.addWidget(self._spin, 1); lay.addWidget(self._plus)
         self._spin.valueChanged.connect(self.valueChanged)
 
@@ -141,7 +145,10 @@ class MapView(QWidget):
         minx, maxx, miny, maxy = min(xs) - pad, max(xs) + pad, min(ys) - pad, max(ys) + pad
         sc = min(self.width() / max(1, maxx - minx), self.height() / max(1, maxy - miny))
         ox = (self.width() - sc * (maxx - minx)) / 2; oy = (self.height() - sc * (maxy - miny)) / 2
-        P = lambda x, y: QPointF(ox + (y - minx) * sc, oy + ((-x) - miny) * sc)
+        # A map point (x north, y east) to a screen point.
+        def P(x, y):
+            return QPointF(ox + (y - minx) * sc, oy + ((-x) - miny) * sc)
+
         # land, lakes, coast, borders
         p.setPen(QPen(QColor(COAST), 1.2)); p.setBrush(QBrush(QColor(LAND)))
         for ring in _GEO["land"]:
