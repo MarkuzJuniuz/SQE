@@ -365,7 +365,9 @@ class StrikeTasks:
                 near = tm.poly_dist(a.x, a.y, leg) <= TOR_COVER_KM * 1000
             if near:
                 out.append((a, g))
-        return sorted(out, key=lambda ag: dist(ag[0].x, ag[0].y, t.x, t.y))
+        def distance_to_target(entry):
+            return dist(entry[0].x, entry[0].y, t.x, t.y)
+        return sorted(out, key=distance_to_target)
 
     def _jsow_ramp_tasks(self, wp, f, package, eta_s=None) -> None:
         """v0.41.313 (XO 2026-11-06): the JSOW-As of a Standoff Counter-Air, one per aim point: the first parked jet and the one furthest from it (the JSOW's cluster
@@ -377,7 +379,14 @@ class StrikeTasks:
         n_ = max(1, JSOW_PER_JET.get(f.aircraft, 2))
         aims = [pts[0]]
         if len(pts) > 1 and n_ > 1:
-            aims.append(max(pts, key=lambda q: math.hypot(q[0] - pts[0][0], q[1] - pts[0][1])))
+            farthest_aim = None
+            farthest_aim_gap = None
+            for aim_point in pts:
+                aim_gap = math.hypot(aim_point[0] - pts[0][0], aim_point[1] - pts[0][1])
+                if farthest_aim_gap is None or aim_gap > farthest_aim_gap:
+                    farthest_aim = aim_point
+                    farthest_aim_gap = aim_gap
+            aims.append(farthest_aim)
         each = max(1, n_ // len(aims))
         exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))   # v0.41.327 (XO): designated points only, no hunting
@@ -537,7 +546,14 @@ class StrikeTasks:
         """The attack heading along the line of parked jets (the bearing between the two furthest apart), or None when the ramp is shorter than `RAMP_AXIS_MIN_M`."""
         from .mission_builder import RAMP_AXIS_MIN_M                # the builder's module imports this one, so it is imported here, when called
         if pts and span >= RAMP_AXIS_MIN_M:
-            p1_, p2_ = max(((p, q) for p in pts for q in pts), key=lambda pq: dist(pq[0][0], pq[0][1], pq[1][0], pq[1][1]))
+            p1_, p2_ = None, None
+            widest_gap = None
+            for first_point in pts:
+                for second_point in pts:
+                    pair_gap = dist(first_point[0], first_point[1], second_point[0], second_point[1])
+                    if widest_gap is None or pair_gap > widest_gap:
+                        p1_, p2_ = first_point, second_point
+                        widest_gap = pair_gap
             return int(round(math.degrees(math.atan2(p2_[1] - p1_[1], p2_[0] - p1_[0])))) % 360
         return None
 
@@ -567,7 +583,13 @@ class StrikeTasks:
             return [(us_[0].position.x, us_[0].position.y)] * SLAM_AIMS if us_ else [aim] * SLAM_AIMS
         spots = list(self._bld_xy.get(package.objective.target_id) or [])
         if len(spots) > SLAM_AIMS:
-            far = max(spots[1:], key=lambda s_: dist(s_[0], s_[1], spots[0][0], spots[0][1]))
+            far = None
+            far_gap = None
+            for other_spot in spots[1:]:
+                other_gap = dist(other_spot[0], other_spot[1], spots[0][0], spots[0][1])
+                if far_gap is None or other_gap > far_gap:
+                    far = other_spot
+                    far_gap = other_gap
             spots = [spots[0], far][:SLAM_AIMS]
         return spots or [aim]
 
@@ -604,10 +626,29 @@ class StrikeTasks:
         if k_ < 2:
             return None
         cen_ = (sum(s_[0] for s_ in spots) / len(spots), sum(s_[1] for s_ in spots) / len(spots))
-        chosen = [min(spots, key=lambda s_: dist(s_[0], s_[1], cen_[0], cen_[1]))]
+        central_spot = None
+        central_gap = None
+        for spot in spots:
+            spot_gap = dist(spot[0], spot[1], cen_[0], cen_[1])
+            if central_gap is None or spot_gap < central_gap:
+                central_spot = spot
+                central_gap = spot_gap
+        chosen = [central_spot]
         while len(chosen) < k_:
             rest = [s_ for s_ in spots if s_ not in chosen]
-            chosen.append(max(rest, key=lambda s_: min(dist(s_[0], s_[1], c_[0], c_[1]) for c_ in chosen)))
+            # the spot farthest from the ones already chosen (its distance to the nearest chosen spot is the largest)
+            farthest_spot = None
+            farthest_gap = None
+            for rest_spot in rest:
+                nearest_chosen = None
+                for chosen_spot in chosen:
+                    chosen_gap = dist(rest_spot[0], rest_spot[1], chosen_spot[0], chosen_spot[1])
+                    if nearest_chosen is None or chosen_gap < nearest_chosen:
+                        nearest_chosen = chosen_gap
+                if farthest_gap is None or nearest_chosen > farthest_gap:
+                    farthest_spot = rest_spot
+                    farthest_gap = nearest_chosen
+            chosen.append(farthest_spot)
         each = n_ // k_
         exp = _expend_for(each)
         out = []

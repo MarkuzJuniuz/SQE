@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.630, internal clean-up: plain functions in the strike task, threat map and SEAD timing code
+Twelve more one-line functions (lambdas) were rewritten as plain loops and small named functions. Nothing changes in play: 127 test missions come out identical.
+
 ## v0.41.629, internal clean-up: plain functions in the support CAP, station, sweep and site layout code
 Twelve more one-line functions (lambdas) were rewritten as plain loops and small named functions. Nothing changes in play: 127 test missions come out identical.
 
