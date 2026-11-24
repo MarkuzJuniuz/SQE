@@ -62,8 +62,19 @@ def server_state_path(dcs_saves: str) -> Path:
     return server_saves_dir(dcs_saves) / "SQE" / "SQE_state.json"
 
 
+SERVER_MISSION_FILE = "SQE_Sortie.miz"        # the name DCS shows in the server list
+OLD_SERVER_MISSION_FILE = "SQE_test.miz"      # what SQE called its copy before v0.41.649
+
+
 def server_mission_path(dcs_saves: str) -> Path:
-    return server_saves_dir(dcs_saves) / "Missions" / "SQE_test.miz"
+    return server_saves_dir(dcs_saves) / "Missions" / SERVER_MISSION_FILE
+
+
+def remove_old_mission_copy(dcs_saves: str) -> None:
+    """Delete the copy under the old name (only that exact file), so the server folder does not keep a stale mission."""
+    old_copy = server_saves_dir(dcs_saves) / "Missions" / OLD_SERVER_MISSION_FILE
+    if old_copy.exists():
+        old_copy.unlink()
 
 
 def dcs_exe_path(dcs_install: str) -> Path:
@@ -234,6 +245,7 @@ def start_server(dcs_install: str, dcs_saves: str, miz_path, wait_for_client: bo
     settings_path = server_settings_path(dcs_saves)
     try:
         backup_note = backup_settings_once(dcs_saves)
+        remove_old_mission_copy(dcs_saves)
         shutil.copyfile(miz_path, server_mission_path(dcs_saves))
         text, newline = read_text_keep_ending(settings_path)
         text = edit_settings_text(text, newline, server_mission_path(dcs_saves), wait_for_client)

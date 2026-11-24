@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.650, the server mission is called SQE_Sortie
+On the local dedicated server the mission is now named SQE_Sortie in DCS's server list (it was SQE_test). The old copy is deleted when the server starts.
+
 ## v0.41.649, the waiting window shows the whole "how to join" line
 The instructions at the top of the waiting window (connect to the local server, or open the mission file) wrap onto a second line instead of being cut off.
 
