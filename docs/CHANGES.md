@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.628, red's SEAD takes your Patriots from the outside in
+Red's SEAD raids no longer fly past one live Patriot to attack a site behind it. A raid goes for the outermost sites first (the ones red can attack without another live Patriot reaching its attack point); a site behind them becomes a target when the ones in front are down.
+
 ## v0.41.627, tankers and AWACS pull back from enemy fighters
 A blue tanker or AWACS now leaves its track when an enemy fighter comes within 60 nm: it flies 40 nm straight away from it and orbits there (and moves again if it is still being chased), then goes back to its track once no fighter has been within 80 nm for five minutes. You get a line when it moves and when it is back; the tanker's TACAN stays on.
 

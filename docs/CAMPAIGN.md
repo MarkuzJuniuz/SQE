@@ -224,7 +224,9 @@ Red's **SEAD raids** go after blue's Patriot and HAWK sites with anti-radiation 
 by three packages (two at Level 3, where a raid never flies more than 16 jets), a HAWK by two, escorted and preceded (at
 Levels 2 and 3) by a fighter sweep that tries to draw blue's fighters away. A package is 4 jets (8 at Level 3) with two
 missiles a jet. Every package fires the **Kh-31P** from about 50 nm out, and the launch times are set so that every package's
-missiles reach the site together. 
+missiles reach the site together. Red works from the **outside in**: a SEAD raid goes only for the sites it can attack
+without another live Patriot reaching its attack point (the outermost ones); a site behind them is raided once the ones
+in front are down. 
 Only the **Su-24M** flies SEAD (it carries the pod its anti-radiation missiles need); the Su-17M4 does the CAS and bombing work.
 
 At Levels 2 and 3 the **Tu-22M3 bomber wing** (at Mozdok on the Caucasus, split over Damascus and Bassel Al-Assad in Syria) can raid the carrier, after a quiet day, and then not again for 8 days (5 when it is desperate). At Level 3 red sends it when it
