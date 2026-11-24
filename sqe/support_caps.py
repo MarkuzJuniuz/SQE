@@ -32,7 +32,12 @@ class SupportCaps:
         CAP per carrier. Yours first; what yours lacks comes from the first merged package that planned it. (A Fighter Sweep plans none, and merged
         packages' support flights were dropped, so with you on a sweep the tanker, AWACS and boat flew unguarded: the v0.41.8 Batumi run.)
         Returns a copy of the package with the extra flights added; the campaign plan is not changed."""
-        key = lambda f_: (f_.tag, (getattr(f_, "guard", "") or f_.base_id) if f_.tag in ("BASE_BARCAP", "CARRIER_BARCAP") else "")
+        def key(f_):
+            # one support CAP of each kind; a base or carrier BARCAP also by what it guards
+            guarded_thing = ""
+            if f_.tag in ("BASE_BARCAP", "CARRIER_BARCAP"):
+                guarded_thing = getattr(f_, "guard", "") or f_.base_id
+            return (f_.tag, guarded_thing)
         have = {key(f_) for f_ in package.flights if f_.tag}
         add = []
         for x in extras:
@@ -80,7 +85,8 @@ class SupportCaps:
         """v0.41.7: the AWACS sits well back (its own anchor: where the marshal used to be, 90 nm from every enemy field) with its HAVCAP; the
         tanker sits FORWARD, on the way home (between the base and the egress point, clear of SAM rings and the enemy fields' scramble circles),
         with its own escort, so a flight short of fuel meets it before its own runway, not 50 nm behind it."""
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         st = self.state
         aw_ = tm.awacs_station(st)                                          # S19: one fixed station per state, not from the player's base or target
         ax, ay, fh = aw_ if aw_ is not None else (*tm.safe_marshal(st, (g.bx, g.by), g.hdg), g.hdg)
@@ -203,7 +209,12 @@ class SupportCaps:
             # every enemy field's scramble circle, so it never sets off red's alert pairs ahead of the package (seen in the v0.41.19 runs)
             leg_ = 10 * NM
             det_ = [(fx_, fy_, tm.field_detect_nm((fx_, fy_), (geom.tx, geom.ty), st) + CARRIER_BARCAP_DETECT_MARGIN_NM) for fx_, fy_ in tm.fighter_bases(st)]
-            out_ = lambda x_, y_: all(dist(x_, y_, fx_, fy_) >= r_ * NM for fx_, fy_, r_ in det_)
+            def out_(x_, y_):
+                # True when the point is outside every enemy field's scramble circle
+                for field_x, field_y, field_r in det_:
+                    if not dist(x_, y_, field_x, field_y) >= field_r * NM:
+                        return False
+                return True
             for _ in range(20):
                 if (out_(sx, sy) and out_(*offset(sx, sy, thr_ + 90, leg_))) or dist(sx, sy, gx_, gy_) < 2 * NM:
                     break
@@ -220,9 +231,15 @@ class SupportCaps:
         elif f.tag == "HAVCAP":
             wish_ = min(wish_, 40)                      # the AWACS track is 40 nm
         if f.tag == "CARRIER_BARCAP":
-            clear_ = lambda x_, y_: (-1.0 if not (out_(x_, y_) and self._sam_clear(x_, y_)) else 0.0)
+            def clear_(x_, y_):
+                if not (out_(x_, y_) and self._sam_clear(x_, y_)):
+                    return -1.0
+                return 0.0
         else:
-            clear_ = lambda x_, y_: (0.0 if self._sam_clear(x_, y_) else -1.0)
+            def clear_(x_, y_):
+                if self._sam_clear(x_, y_):
+                    return 0.0
+                return -1.0
         c2_ = cap2_point(sx, sy, thr_ if axis_ is None else axis_, wish_, clear_, floor_nm=leg_ / NM)
         if c2_ is None:
             c2_ = offset(sx, sy, thr_ + 90, leg_)

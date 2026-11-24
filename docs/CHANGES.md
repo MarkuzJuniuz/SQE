@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.629, internal clean-up: plain functions in the support CAP, station, sweep and site layout code
+Twelve more one-line functions (lambdas) were rewritten as plain loops and small named functions. Nothing changes in play: 127 test missions come out identical.
+
 ## v0.41.628, red's SEAD takes your Patriots from the outside in
 Red's SEAD raids no longer fly past one live Patriot to attack a site behind it. A raid goes for the outermost sites first (the ones red can attack without another live Patriot reaching its attack point); a site behind them becomes a target when the ones in front are down.
 

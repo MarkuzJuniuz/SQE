@@ -79,7 +79,13 @@ def _home_guess(state, x, y):
     """The nearest friendly airfield or carrier (the planner does not know the sweep's base until the package is built)."""
     from . import fleet
     bs = [b for b in state.bases.values() if b.kind in (BaseKind.AIRFIELD, BaseKind.CARRIER) and not fleet.is_sunk_base(state, b.id)]
-    b = min(bs, key=lambda b: dist(b.x, b.y, x, y), default=None)
+    b = None
+    nearest_base_m = None
+    for candidate_base in bs:
+        candidate_base_m = dist(candidate_base.x, candidate_base.y, x, y)
+        if nearest_base_m is None or candidate_base_m < nearest_base_m:
+            b = candidate_base
+            nearest_base_m = candidate_base_m
     return (b.x, b.y) if b is not None else (x, y)
 
 
@@ -112,4 +118,11 @@ def pick(state, tx, ty, first_start_min: int):
     """The red flight this sweep goes after: a candidate up in its window, nearest the area first. None: no sweep today."""
     lo, hi = first_start_min - WINDOW_BEFORE_MIN, first_start_min + WINDOW_AFTER_MIN
     c = [f for f in candidates(state, tx, ty) if up_in(f, lo, hi)]
-    return min(c, key=lambda f: (dist(f["x"], f["y"], tx, ty), f["id"])) if c else None
+    nearest_field = None
+    nearest_key = None
+    for field_row in c:
+        field_key = (dist(field_row["x"], field_row["y"], tx, ty), field_row["id"])
+        if nearest_key is None or field_key < nearest_key:
+            nearest_field = field_row
+            nearest_key = field_key
+    return nearest_field
