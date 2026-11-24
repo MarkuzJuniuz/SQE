@@ -109,6 +109,7 @@ ARM58_MPS = 1050              # B2: the Kh-58U's average speed over the shot, fo
 ARM31_MPS = 1000              # B2: the Kh-31P's average speed over the shot (about 1,000 m/s, Wikipedia "Kh-31": Mach 3.1 to 3.5 at altitude; judgment call on the average)
 SEAD_ALT_FT = 30000          # S107 (XO 2026-11-18): the SEAD raid's whole route, escorts and sweep included (the raid shares one level): the Kh-31P's range is for a high launch; 30 000 ft is inside its 100 m to 15 km envelope and a loaded Su-24M's reach (judgment call)
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
+ARM_IP_NM = 6                 # S179b: the SEAD raid's ARM task starts at an IP this far before the ARM point, on the straight inbound leg (blue's AI HARM flights do the same: `routes.plan_route`, "the IP sits 6 nm before the launch point"; 57 of 82 of them fired in the server runs). Judgment call
 # S48: the switch KH59_RAIDS (and the share, the hit size) live in `raids.py`: the plan reads them too, and `raids` cannot import this module. The spawner reads `raids.KH59_RAIDS` at call time.
 KH59_LAUNCH_NM = 50           # the Kh-59M raid fires from this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M with margin for a low launch, outside HAWK_NM 25 and PATRIOT_NM 40 (judgment call; the probe, 2026-11-12: the Su-34 fired at 54.9 nm, the Su-24M at 58.6 nm, the missiles hit: 50 is safe inside the range)
 KH59_WINDOW_S = 240           # ...and the missile task runs this long after the jets reach the launch point (judgment call, like ARM_WINDOW_S; the probe: the jets turn for home on their own within about 25 s of the second missile, so the window never bites)
@@ -1178,22 +1179,33 @@ class RaidSpawns:
                     hold_stop(ct_, g, name, hold, False); g.points[0].tasks.append(ct_)
                     g.points[0].name = "MSHL"
             for k, q in enumerate(rem):
+                task_wp = None
+                if k == len(rem) - 1 and bomber and sead_r:
+                    # S179b: the ARM task hangs on an IP on the straight leg into the ARM point, not on the ARM point itself. DCS starts a point's tasks only
+                    # when the group gets close to the point; on a sharp turn home the group cut the fly-by ARM point about 10 km short, its task never
+                    # started and it fired nothing (S174 / S178 runs: Raid Bomber 3 and 4). A fly-over ARM point (S179) made a group that had dodged a SAM
+                    # circle back low to overfly it and fire nothing either (S179 run). At the IP there is no turn to cut.
+                    leg_start = pos
+                    if k > 0:
+                        leg_start = rem[k - 1]
+                    leg_m = dist(leg_start[0], leg_start[1], q[0], q[1])
+                    ip_back_m = ARM_IP_NM * NM
+                    if leg_m < 2 * ip_back_m:
+                        ip_back_m = leg_m / 2.0
+                    ip_xy = offset(q[0], q[1], bearing(q[0], q[1], leg_start[0], leg_start[1]), ip_back_m)
+                    task_wp = g.add_waypoint(pt(*ip_xy), r_alt, 450 * KPH, "IP")
                 wp = g.add_waypoint(pt(*q), r_alt, 450 * KPH, nm_[k])
                 if k == len(rem) - 1 and bomber:
                     if sead_r:                                  # S36b: the SEAD flight fires its Kh-31P at the site's radars from the launch point (an ARM task on the site's group), then turns home
-                        # S179: a fly-over point, so the group passes over its ARM point before it turns home. As a fly-by point the group cut its turn about 10 km
-                        # early on a sharp turn, stayed beyond the range the AI launches a Kh-31P from (never above 94 km) and fired nothing.
-                        wp.action = PointAction.FlyOverPoint
+                        wp = task_wp                             # S179b: the tasks below go on the IP
                         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
                         if sead_tgt is not None:
                             ca_ = task.ControlledTask(task.AttackGroup(sead_tgt.id, weapon_type=task.WeaponType.ARM, group_attack=True, expend=task.Expend.All))      # v0.41.399: all Kh-31P at the site in one go (the Auto default fired one a jet at any radar), then home
-                            ca_.stop_after_duration(int(ARM_WINDOW_S)); wp.tasks.append(ca_)          # S59a / S178: the window runs ARM_WINDOW_S from when the group REACHES the ARM point (it was an absolute time: a group delayed by an evasive dive arrived after it had ended and never fired, S174)
+                            ca_.stop_after_duration(int(ARM_WINDOW_S)); wp.tasks.append(ca_)          # S59a / S178 / S179b: the window runs ARM_WINDOW_S from when the group reaches the point that carries the task (the IP) (it was an absolute time: a group delayed by an evasive dive arrived after it had ended and never fired, S174)
                         zt_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(dx, dy), int(SEAD_ZONE_NM * NM), [task.Targets.All.GroundUnits.AirDefence]))      # S59a: the fallback, after the AttackGroup: the site's own air defence, inside SEAD_ZONE_NM
                         zt_.stop_after_duration(int(ARM_WINDOW_S)); wp.tasks.append(zt_)          # S178: the same duration for the fallback zone task
                     elif kh59_r:                                # S48: the Kh-59M flight fires its missiles at the aim from the launch point (the point task chosen by KH59_TASK), then turns home
                         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
-                        # S179: the same fly-over launch point as the SEAD flight, so the group reaches it before it turns home
-                        wp.action = PointAction.FlyOverPoint
                         tk_ = (task.AttackMapObject(mapping.Vector2(dx, dy), group_attack=True) if KH59_TASK == "AttackMapObject"
                                else task.Bombing(mapping.Vector2(dx, dy), expend=task.Expend.All, group_attack=True))
                         ca_ = task.ControlledTask(tk_)

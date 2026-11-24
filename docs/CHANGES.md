@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.617, red SEAD raids start their attack run before the launch point
+A red SEAD bomber group now starts its missile attack at a point on the straight leg 6 nm before its launch point. The fly-over launch point of v0.41.614 is taken back: a group that had dodged a SAM circled back low to overfly it and did not fire.
+
 ## v0.41.616, blue guard fighters react anywhere on their patrol track
 A base or carrier BARCAP could not go after a bandit while it flew the far end of its own race-track (its leash was measured from the start of the track). The leash now covers the whole track. The tanker and AWACS guards also go after bandits a little farther out (30 nm, was 25), because red escorts were firing first.
 
