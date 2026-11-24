@@ -1071,7 +1071,7 @@ class RaidSpawns:
         if not ex:
             return
         # S183 rule 2: wave 2 of a layered SEAD raid is built only when wave 1 is in this mission (`_layer_present`) and flown (`_layer_gone`: wave 1 had already struck); the war sim resolves it then
-        layer_of = ex.get("layer_of")
+        layer_of = ex.get("layer_of") or ex.get("flank_after")          # S186: a flank raid waits for its SEAD raid like a second layer does
         if layer_of and (layer_of in getattr(self, "_layer_gone", set()) or layer_of not in getattr(self, "_layer_present", {layer_of})):
             self.warns.append(f"package #{package.number}: the second SEAD wave is not in this mission (wave 1 is not flown in it)")
             return
@@ -1111,6 +1111,13 @@ class RaidSpawns:
         u_ = (getattr(self, "_rclock", {}).get(package.id) or {}).get("u")          # (v0.41.280: drawn earlier by `_raid_clock_prep`, the same number)
         arrive = tot_s + (u_ if u_ is not None else r.uniform(60, 150))                    # at the station: 1-2.5 min after our scramble's TOT
         t_tgt = arrive + dist(sx_, sy_, dx, dy) / V            # the raid's own TOT
+        if ex.get("flank_after") and not sead_r:
+            # S186: the flank raid's bombs fall layer_gap_s after the SEAD raid's missiles land (when that raid is built before it; else the engine's start gap stands)
+            sead_impact_s = (getattr(self, "_layer_impact", {}) or {}).get(ex["flank_after"])
+            if sead_impact_s is not None:
+                flank_shift_s = sead_impact_s + float(ex.get("layer_gap_s", 120)) - t_tgt
+                arrive += flank_shift_s
+                t_tgt += flank_shift_s
         # v0.41.29: the raid flies blue's shape. Marshal on red's side (in a red SAM's cover along its way in, else just off its field), PUSH,
         # ingress bent round blue's Patriot fields (not the one it is raiding), the target at its TOT, then egress and home.
         lane = [mshl, offset(*mshl, bearing(*mshl, *(w1 if dist(*mshl, *w1) > 15 * NM else station)), RAID_PUSH_NM * NM)]

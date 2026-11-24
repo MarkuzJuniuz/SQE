@@ -85,6 +85,13 @@ SEAD_LAYERS = True            # S183 rule 2 (XO 2026-11-24: red may cross a Patr
                               # Patriot is followed by a second wave on the Patriot behind it (the site whose attack point only that outer Patriot covers). The switch is for comparison runs
 SEAD_LAYERS_MIN_LEVEL = 3     # ...Levels 1 and 2 keep rule 1 alone
 SEAD_LAYER_GAP_S = 300        # ...wave 2's missiles are due this long after wave 1's land (XO's "5 minute"; judgment call, no source)
+SEAD_FLANK = True             # S186 (XO 2026-11-24, option B: "flank raid at Level 3"): behind a SEAD raid on a field's Patriot, red may book ONE bomber raid on that field from another axis. In a mission a Patriot
+                              # keeps the facing it took for the first raid (`MissionBuilder._patriot_faced`), so the second raid comes in on its blind side; the other defences (HAWK, AAA, Stinger, fighters) still shoot. The switch is for comparison runs
+SEAD_FLANK_MIN_LEVEL = 3      # ...Levels 1 and 2 never get one (XO: Level 2 is played for fun; Level 1 already goes in under the cover)
+SEAD_FLANK_OFF_DEG = 100      # ...its way in is at least this far round from the SEAD raid's (the measured Patriot arc is 44 deg either side, S179c: 100 is beyond twice the arc, judgment call)
+SEAD_FLANK_WAY_IN_NM = 120     # ...the way in is checked this far out (the under-way start of a raid can lie that far: the S186 run's bombers died 30 to 60 s into the mission); another live Patriot's ring over it rules the axis out
+SEAD_FLANK_GAP_S = 120        # ...its bombs are due on the field this long after the SEAD raid's missiles land (a SEAD raid that works has already hit; one that did not leaves a Patriot still facing the first axis; judgment call, no source)
+SEAD_FLANK_AD_SHARE = 0.5     # ...in the war sim the field's air defence counts this share against it (the Patriot cannot face both axes; the rest of the layer still fires; judgment call, no source)
 SEAD_PATRIOT_WEIGHT = 2.0     # S64 (XO 2026-11-12, run 21-39-54: a raid went at a HAWK while its full-strength Patriot stood beside it): a full-strength Patriot weighs this much more than a HAWK in red's draw of a SEAD target (judgment call; a Patriot below full strength keeps weight 1). The draw only offers a full Patriot red can field (`_sead_fieldable`)
 SEAD_HAWK_PACKAGES = 2          # S44 (XO 2026-11-12): a HAWK gets two packages too (a Patriot below full strength, or whatever is left of one, still one)
 SEAD_SITE_HIT = 0.15          # ...and a blue SAM site loses this much health per SEAD jet that gets through (a launch of 3 jets takes 0.45 off a HAWK, 6 take 0.9 off a Patriot; judgment call, tuned with the probe `.private/probes/s36`: 0.08 never opened a field, 0.25 wiped the SAMs by day 10, 0.15 sags them and reopens fields)
@@ -781,7 +788,7 @@ def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
     return plan
 
 
-def plan_raid(state, d, base, aim: str, oid: str, turn: int):
+def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool = False):
     """Book one raid out of the turn's free red jets and plan it: the wing and type that fly it, the raiders (`bombers`), the escort wing and type with the escorts, the bearing it arrives on. v0.41.341 (Phase 5b): this was done
     at build time (`PackageBuilder._land_raid_plan`) from the wings' serviceable jets, and a wing that could not reach any more by then left the package with no plan (the KeyError in `raid_spawns._raid_axis`); now the draw,
     the booking and the package agree. -> {extras of the package, "jets": [[squadron id, jets, "raid" | "esc"]]}, or None when no wing can field it (then nothing is booked and there is no raid). S36b (XO 2026-11-11):
@@ -795,15 +802,17 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
     kh59 = False                                                                            # S48: a Kh-59M raid (fixed target, never covered: `reach_for` is None under cover; never Level 1's banzai raids)
     share_ = KH59_SHARE.get(max(1, min(3, int(getattr(d, "level", 3)))), 0.0)
     r = None
-    if KH59_RAIDS and share_ > 0 and aim_kind(aim) in KH59_KINDS and not getattr(d, "raid_banzai", False)             and random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:kh59").random() < share_:      # a NEW stream: `rnd` is not touched, so a plan that is not a Kh-59M raid is what S46 made
+    if KH59_RAIDS and share_ > 0 and not ignore_cover and aim_kind(aim) in KH59_KINDS and not getattr(d, "raid_banzai", False)             and random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:kh59").random() < share_:      # a NEW stream: `rnd` is not touched, so a plan that is not a Kh-59M raid is what S46 made
         r = reach_for(state, aim_kind(aim), ax, ay, d=d, want=want, only=bomber_types())       # the Su-25 cannot carry it: no bomber wing that can field it, the ordinary draw below
         kh59 = r is not None
-    if r is None:
+    if r is None and ignore_cover:
+        r = _reach(state, aim_kind(aim), ax, ay, True, want=want)                          # S186: a flank raid goes in under cover on purpose (the cover test is skipped)
+    elif r is None:
         r = reach_for(state, aim_kind(aim), ax, ay, d=d, want=want)                         # S43: the wing that can field the size drawn, the nearest otherwise
     if r is None:
         return None
     bw, raider = r[1], r[2]
-    if not sead_plan(state, d, base, aim, bw, raider)[0]:
+    if not ignore_cover and not sead_plan(state, d, base, aim, bw, raider)[0]:
         return None
     ba = state.assets[bw.base_asset_id]
     rdy = redair.ready_of(state, bw, (raider,))
@@ -887,6 +896,77 @@ def plan_second_layer(state, d, first_aim: str, first_oid: str, second_oid: str,
         plan["layer_gap_s"] = SEAD_LAYER_GAP_S
         return home, site_id, plan
     return None
+
+
+def plan_flank_raid(state, d, first_aim: str, first_plan: dict, oid: str, turn: int, first_oid: str = ""):
+    """S186 (XO 2026-11-24, option B): the flank raid behind a SEAD raid. `first_aim` is the Patriot site the SEAD raid (`first_plan`) goes for; the flank raid is an ordinary bomber raid on that site's field (the runway),
+    booked from the jets the SEAD raid left, whose way in is `SEAD_FLANK_OFF_DEG` to `SEAD_FLANK_OFF_DEG` + 40 round from the SEAD raid's, on the side nearer the raiding wing's own field (the flatter bend).
+    -> (base, plan) or None: switch off, Level below `SEAD_FLANK_MIN_LEVEL`, not a Patriot site, or no wing can field a bomber raid. The plan carries `flank_of` (the SEAD raid's objective id)
+    and an explicit `brg`; the war sim counts the field's air defence at `SEAD_FLANK_AD_SHARE` against it. Nothing is booked when None."""
+    if not SEAD_FLANK:
+        return None
+    if int(getattr(d, "level", 3)) < SEAD_FLANK_MIN_LEVEL:
+        return None
+    site = (getattr(state, "blue_sams", None) or {}).get(first_aim)
+    if site is None or first_aim.rsplit("_", 1)[1] != "pat":
+        return None
+    base = state.bases.get(site.guards)
+    if base is None or base.kind != BaseKind.AIRFIELD:
+        return None
+    first_brg = float(first_plan.get("brg", 0.0))
+    rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:flank")
+    first_side = 1.0
+    if rnd.random() < 0.5:
+        first_side = -1.0
+    chosen_brg = None
+    for extra_deg in range(0, 81, 10):
+        for side in (first_side, -first_side):
+            candidate_brg = (first_brg + side * (SEAD_FLANK_OFF_DEG + extra_deg)) % 360
+            if patriots_over_way_in(state, base, candidate_brg) == 0:
+                chosen_brg = candidate_brg
+                break
+        if chosen_brg is not None:
+            break
+    if chosen_brg is None:
+        return None                                      # every way in at least SEAD_FLANK_OFF_DEG round crosses another live Patriot's ring: no flank raid
+    plan = plan_raid(state, d, base, "", oid, turn, ignore_cover=True)
+    if plan is None:
+        return None
+    plan["brg"] = round(chosen_brg, 1)
+    plan["flank_of"] = first_aim
+    if first_oid:
+        plan["flank_after"] = first_oid                  # the SEAD raid's objective id: the engine starts this raid just after it, the builder times its bombs `layer_gap_s` after the SEAD missiles land
+        plan["layer_gap_s"] = SEAD_FLANK_GAP_S
+    return base, plan
+
+
+def patriots_over_way_in(state, base, brg: float) -> int:
+    """S186: how many OTHER live blue Patriots reach a raid's way in to the field `base` on bearing `brg`: points every 10 nm from the field out to `SEAD_FLANK_WAY_IN_NM`, a Patriot reaching one within its ring
+    against a bomber at 20,000 ft (`samtier.ring_nm`). The field's own Patriot is not counted (the flank raid goes in over it on purpose). The first flight of the S186 server run (Caucasus L3 seed 9) lost six
+    bombers in the first minute to the Batumi and Kobuleti Patriots: its way in ran over them."""
+    from . import samtier
+    from .sams import blue_battery
+    reach_m = samtier.ring_nm("Patriot", 20000) * NM
+    sample_points = []
+    for step_nm in range(10, SEAD_FLANK_WAY_IN_NM + 1, 10):
+        sample_points.append((base.x + step_nm * NM * math.cos(math.radians(brg)), base.y + step_nm * NM * math.sin(math.radians(brg))))
+    count = 0
+    for other in state.bases.values():
+        if other.kind != BaseKind.AIRFIELD or other.id == base.id:
+            continue
+        if not blue_battery(other, state)["patriot_ln"]:
+            continue
+        patriot = (getattr(state, "blue_sams", None) or {}).get("bsam_%s_pat" % other.id)
+        patriot_x = other.x
+        patriot_y = other.y
+        if patriot is not None:
+            patriot_x = patriot.x
+            patriot_y = patriot.y
+        for point_x, point_y in sample_points:
+            if math.hypot(patriot_x - point_x, patriot_y - point_y) <= reach_m:
+                count += 1
+                break
+    return count
 
 
 def plan_tu_strike(state, d, base, aim: str, oid: str, turn: int):
@@ -1020,6 +1100,16 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
                 booked[layer_obj.id] = layer_plan
                 warned.append(layer_obj)
                 credit -= layer_plan["bombers"]
+            # S186 option B: the flank bomber raid behind the SEAD raid (Level 3, a field's Patriot)
+            flank_oid = f"obj-t{turn}-r{len(warned) + 1}"
+            flank = plan_flank_raid(state, d, aim, bk, flank_oid, turn, o.id)
+            if flank is not None:
+                flank_base, flank_plan = flank
+                flank_obj = raid_objective(flank_base, "", describe(state, flank_base, ""))
+                flank_obj.id = flank_oid
+                booked[flank_obj.id] = flank_plan
+                warned.append(flank_obj)
+                credit -= flank_plan["bombers"]
     if state.raids is not None:
         state.raids["credit"] = credit
     return warned, surprise

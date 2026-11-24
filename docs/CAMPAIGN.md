@@ -226,7 +226,7 @@ Levels 2 and 3) by a fighter sweep that tries to draw blue's fighters away. A pa
 missiles a jet. Every package fires the **Kh-31P** from about 50 nm out, and the launch times are set so that every package's
 missiles reach the site together. Red works from the **outside in**: a SEAD raid goes only for the sites it can attack
 without another live Patriot reaching its attack point (the outermost ones); a site behind them is raided once the ones
-in front are down. At Level 3 a raid on an outer Patriot is followed by a second wave on the Patriot behind it (the one only that outer site covers), its missiles due 5 minutes after the first wave's land; it may cross the outer site's ring, but no other live Patriot's.
+in front are down. At Level 3 red may also send one bomber raid at that field behind its SEAD, from an axis at least 100 degrees away: the Patriot keeps facing the SEAD raid, so the bombers meet only the rest of the field's defences. At Level 3 a raid on an outer Patriot is followed by a second wave on the Patriot behind it (the one only that outer site covers), its missiles due 5 minutes after the first wave's land; it may cross the outer site's ring, but no other live Patriot's.
 Only the **Su-24M** flies SEAD (it carries the pod its anti-radiation missiles need); the Su-17M4 does the CAS and bombing work.
 
 At Levels 2 and 3 the **Tu-22M3 bomber wing** (at Mozdok on the Caucasus, split over Damascus and Bassel Al-Assad in Syria) can raid the carrier, after a quiet day, and then not again for 8 days (5 when it is desperate). At Level 3 red sends it when it

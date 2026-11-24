@@ -649,7 +649,8 @@ class WarSimulator:
         if pkg.extra.get("land") and not pkg.extra.get("sead") and not kh59_:           # v0.41.30: the batteries round the raid's target fight it too (sams.covering_ad, AD_RAID_WEIGHT); S36b: not a SEAD raid, which fires its Kh-31P from standoff, outside the site's reach; S48: nor a Kh-59M raid, which launches from about 50 nm, outside the point defences
             from .sams import covering_ad, AD_RAID_WEIGHT
             from .raids import aim_xy
-            strength += AD_RAID_WEIGHT * covering_ad(state, *aim_xy(state, pkg.objective.aim, state.bases[pkg.objective.target_id]))
+            ad_share = raids.SEAD_FLANK_AD_SHARE if pkg.extra.get("flank_of") else 1.0          # S186: a flank raid came in on the Patriot's blind side: the field's air defence counts less
+            strength += AD_RAID_WEIGHT * ad_share * covering_ad(state, *aim_xy(state, pkg.objective.aim, state.bases[pkg.objective.target_id]))
         up_, psq_ = False, None
         from . import blue_barcap
         if pkg.extra.get("land") and pkg.extra.get("bomber_wing"):        # v0.41.86: a base patrol on station on the side the raid comes from adds a pair

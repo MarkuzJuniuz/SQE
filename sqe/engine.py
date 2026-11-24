@@ -831,7 +831,7 @@ class Session(Merging, SeadTiming):
         for package in pkgs:
             by_objective[package.objective.id] = package
         for package in pkgs:
-            first_id = (package.extra or {}).get("layer_of")
+            first_id = (package.extra or {}).get("layer_of") or (package.extra or {}).get("flank_after")          # S186: the flank raid is timed behind its SEAD raid the same way
             if not first_id:
                 continue
             first = by_objective.get(first_id)
