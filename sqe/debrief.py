@@ -85,14 +85,6 @@ BOMB_FAR_KM = 20     # S149 (XO 2026-11-22: a jumped AI striker dumps its bombs 
 # SA-13 Strela-10, SA-15 Tor, SA-19 Tunguska: public, firmness high); the type names are pydcs `vehicles.AirDefence` ids.
 SAM_NUMBER_WORDS = (("Kub", "six"), ("S-300", "ten"), ("Buk", "eleven"), ("Osa", "eight"), ("Tor 9A", "fifteen"), ("SNR_75", "two"), ("s-125", "three"),
                     ("RPC_5N62", "five"), ("RLS_19J6", "five"), ("Tunguska", "nineteen"), ("Strela-10", "thirteen"), ("Strela-1 ", "nine"))
-# S184: magnetic variation by theatre, degrees EAST (magnetic bearing = true bearing - this). From memory of the DCS maps (about 6 E on the Caucasus,
-# about 5 E on Syria), firmness low: check against the F10 map ruler / a DCS chart; 0 for a theatre not listed.
-MAGVAR_EAST_DEG = {"caucasus": 6.0, "syria": 5.0}
-
-
-def magvar_east_deg(theatre) -> float:
-    # the theatre's magnetic variation in degrees east (0 when unknown)
-    return MAGVAR_EAST_DEG.get(str(theatre).lower(), 0.0)
 
 
 def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "", group: str = "",
