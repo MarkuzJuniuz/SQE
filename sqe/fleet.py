@@ -115,7 +115,14 @@ def apply_debrief(state, manifest, data: dict) -> list:
     fallen_ = set((state.ground or {}).get("fallen", []))
     standing = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and not b.divert and b.id not in fallen_]
     diverts = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and b.divert and b.id not in fallen_]          # Phase 9b: the last resort
-    for sq in sorted((s for s in state.squadrons.values() if s.base_id == cv.id), key=lambda s: s.id):
+    # Squadron id order, so the survivors are placed in the same order every time.
+    def squadron_id(squadron):
+        return squadron.id
+
+    def distance_from_carrier_then_id(base):
+        return (math.hypot(base.x - cv.x, base.y - cv.y), base.id)
+
+    for sq in sorted((s for s in state.squadrons.values() if s.base_id == cv.id), key=squadron_id):
         units = [u for g in manifest.groups if g["kind"] == "friendly" and g.get("squadron") == sq.id for u in g["units"]]
         flying = [u for u in units if u not in lost_set]
         aboard = [u for u in flying if u in landings and t_sink is not None and float(landings[u].get("t", 1e9)) <= t_sink
@@ -128,7 +135,7 @@ def apply_debrief(state, manifest, data: dict) -> list:
         # Phase 9a: each squadron picks its own field: the nearest with parking for the jets that got away (the others already there count at their authorized strength). With none
         # to land, none got away (Phase 9b: the standing non-divert fields first, then the divert fields). A squadron with no survivors only changes its base on paper: the nearest field.
         if sq.available <= 0:
-            dest = min(standing, key=lambda b: (math.hypot(b.x - cv.x, b.y - cv.y), b.id)) if standing else None
+            dest = min(standing, key=distance_from_carrier_then_id) if standing else None
         else:
             dest = ground.landing_field(state, cv.x, cv.y, sq, sq.available, standing, diverts)
         homeless = sq.available if dest is None else 0                       # jets that got away but have no field with room: lost

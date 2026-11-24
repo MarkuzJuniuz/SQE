@@ -71,7 +71,11 @@ def _support_airfield(state):
         return b
     starters = {f["id"] for f in th.get("blue_fields", []) if not f.get("divert")}
     fields = [x for x in state.bases.values() if x.kind == BaseKind.AIRFIELD and not x.divert and x.id not in fallen and (x.id in starters or not starters)]
-    return max(fields, key=lambda x: (_large_spots(x), x.id)) if fields else None
+    # The field with the most large parking spots; the id breaks a tie.
+    def large_spots_then_id(field_base):
+        return (_large_spots(field_base), field_base.id)
+
+    return max(fields, key=large_spots_then_id) if fields else None
 
 
 def ensure(state) -> dict:

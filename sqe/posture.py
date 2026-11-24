@@ -99,7 +99,11 @@ def _warnings(state) -> list:
     """(kind, text) pairs. Kinds: fall, retake, counter_due, counter_on, lost, clock."""
     g, out = state.ground, []
     n = ground.n_zones(g)
-    for k, bid in sorted(g.get("fall", {}).items(), key=lambda kv: int(kv[0])):
+    # Zone number order (the keys are strings).
+    def zone_number(item):
+        return int(item[0])
+
+    for k, bid in sorted(g.get("fall", {}).items(), key=zone_number):
         if bid in g["fallen"] or bid not in state.bases:
             continue
         i = int(k)

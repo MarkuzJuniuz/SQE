@@ -85,7 +85,11 @@ def routes_from_raw(raw) -> list:
         if o.get("kind") != "roads" or len(o.get("pts") or []) < 2:
             continue
         out.append(simplify([tuple(p) for p in o["pts"]]))
-    out.sort(key=lambda r: -sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(r, r[1:])))
+    # Longest road first.
+    def longest_first(road):
+        return -sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(road, road[1:]))
+
+    out.sort(key=longest_first)
     return out
 
 

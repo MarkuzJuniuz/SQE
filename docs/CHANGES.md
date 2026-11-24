@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.642, code clean-up (S150 PR 13)
+The last small one-line helpers outside the windows are now plain named functions, for readability. Nothing changes in the game.
+
 ## v0.41.641, the AWACS and tanker guards are called HVAACAP
 The fighters that guard the AWACS and the tankers are now called HVAACAP (high value airborne asset CAP), the U.S. Air Force term, in the package table, briefings, kneeboard and guide. Old saves are converted when opened.
 

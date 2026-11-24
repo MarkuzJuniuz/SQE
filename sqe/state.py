@@ -118,6 +118,11 @@ class SaveIncompatible(Exception):
 _OLD_STAMP = re.compile(r"^\[day (\d+) (\d\d)(\d\d)\] ")     # S129: the war-log stamp before v0.41.538
 
 
+# A fresh campaign id (a dataclass default must be built by a function, so each campaign gets its own).
+def _new_campaign_id() -> str:
+    return uuid.uuid4().hex[:10]
+
+
 @dataclass
 class CampaignState:
     name: str
@@ -126,7 +131,7 @@ class CampaignState:
     a10_variant: str = "A-10C"                     # S103a (Era Equipment): chosen when the campaign is created and never changed; an old save loads as the A-10C / F-14B(U) / Link 16 on it always was (no format change: the loader defaults the three)
     f14_variant: str = "F-14BU"
     link16: bool = True                            # False: no jet is a Link 16 member or donor (no STN codes, no package net, no briefing text)
-    campaign_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
+    campaign_id: str = field(default_factory=_new_campaign_id)
     day: int = 1
     start_hour: int = 8                            # S90 J5b: the hour Day 1 / turn 0 starts (the theatre pack's `start_hour`, fixed when the campaign is created; an old save has none = 8, the Caucasus clock). `clock.use` makes it the current one
     turn: int = 0                                  # v0.41.334: the clock (clock.py): four-hour turns since 08:00 (S25; two-hour before) on Day 1; `day` stays equal to clock.day_of(turn). Session._tick moves it one turn at a time (v0.41.337, Phase 3)
@@ -245,7 +250,11 @@ class CampaignState:
         s.blue_sams = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_sams") or {}).items()}      # missing in an older save: sams.ensure_blue_sams builds them from each field's `defense`
         s.plan, s.pending = d.get("plan", []), d.get("pending")
         s.plan_done = d.get("plan_done") or []                            # missing in a save from before v0.41.337: nothing resolved yet today
-        s.history, s.log = d.get("history", []), [_OLD_STAMP.sub(lambda m: f"[Day {m.group(1)}, {m.group(2)}:{m.group(3)}] ", x, count=1) if isinstance(x, str) else x for x in d.get("log", [])]
+        # Rewrites an old log stamp to the "[Day n, hh:mm]" form.
+        def new_log_stamp(match):
+            return f"[Day {match.group(1)}, {match.group(2)}:{match.group(3)}] "
+
+        s.history, s.log = d.get("history", []), [_OLD_STAMP.sub(new_log_stamp, x, count=1) if isinstance(x, str) else x for x in d.get("log", [])]
         _upgrade_runway_text(s.plan, s.plan_done, s.pending, s.history)                # S78: the old runway-strike description
         _upgrade_cap_tags(s.plan, s.plan_done, s.barcap, s.pending)                  # S52: a save from before the rename holds "BASECAP" / "CVCAP" in flight tags and patrol kinds
         if not s.ground:                           # a campaign from before the ground war (format 4): give it one for its level

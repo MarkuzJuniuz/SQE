@@ -134,13 +134,22 @@ def choose(state, role, p, pts, tgt, cloud_base_ft: float | None = None, skip=()
     sites = covering(state, pts, tgt, skip)
     if not sites:
         return t0
-    score = lambda c: exposure(sites, c[1], c[2], pts[1:]) + PENALTY[c[0]]
-    best = min(cands, key=lambda c: (score(c), cands.index(c)))
+    # How exposed a candidate profile is, plus its penalty (lower is better).
+    def score(c):
+        return exposure(sites, c[1], c[2], pts[1:]) + PENALTY[c[0]]
+
+    def score_then_position(c):
+        return (score(c), cands.index(c))
+
+    best = min(cands, key=score_then_position)
     if best is base or score(base) - score(best) < MIN_GAIN:
         return t0
     # name what the change actually gets away from: sites that engage the role altitude but not the new one (or only weakly)
+    def heaviest_threat_first(pair):
+        return -WEIGHT.get(pair[0], 1.0)
+
     hit = sorted({(v, w) for _a, v, w in sites if hits(v, base[1]) and (not hits(v, best[1]) or (best[2] and v in RADAR))},
-                 key=lambda t: -WEIGHT.get(t[0], 1.0))
+                 key=heaviest_threat_first)
     names = ", ".join(dict.fromkeys(v for v, _w in hit))
     where = "target" if any(w == "target" for _v, w in hit) else "route"
     lab = label_for(best[1], best[2])
@@ -197,7 +206,13 @@ def column_ad_units(group):
         e = COLUMN_AD.get(str(getattr(u, "type", "")))
         if e:
             out.append((u, e[0], e[1], e[2]))
-    return sorted(out, key=lambda x: 0 if x[1] == "sam" else 1)
+    # SAM launchers first, the other column air defence after (the sort is stable).
+    def sam_first(row):
+        if row[1] == "sam":
+            return 0
+        return 1
+
+    return sorted(out, key=sam_first)
 
 
 def cas_floor(state, pts, column=None):
@@ -265,7 +280,10 @@ def standoff(state, pts, alt_ft: int, margin_nm: float = STANDOFF_MARGIN_NM):
             short = ((stop[0] - pts[-1][0]) ** 2 + (stop[1] - pts[-1][1]) ** 2) ** 0.5 / NM
             if short < STANDOFF_MIN_SHORT_NM:
                 return None
-            names = sorted({v for _a, v in c}, key=lambda v: -WEIGHT.get(v, 1.0))
+            def heaviest_variant_first(variant):
+                return -WEIGHT.get(variant, 1.0)
+
+            names = sorted({v for _a, v in c}, key=heaviest_variant_first)
             return stop[0], stop[1], names, short
     return None
 
@@ -296,7 +314,10 @@ def _long_range_threat(state, tgt, alt_ft):
 
 def _nearest_enemy_field(state, x, y):
     fl = [a for a in state.assets.values() if a.kind == AssetKind.AIRFIELD and not a.destroyed]
-    return min(fl, key=lambda a: (a.x - x) ** 2 + (a.y - y) ** 2) if fl else None         # a TARCAP / escort station with no SAM cover in the way: this far short of the target, on the run-in
+    def squared_distance(asset):
+        return (asset.x - x) ** 2 + (asset.y - y) ** 2
+
+    return min(fl, key=squared_distance) if fl else None         # a TARCAP / escort station with no SAM cover in the way: this far short of the target, on the run-in
 
 
 def _cover_sites(state, alt_ft, margin_nm=STANDOFF_MARGIN_NM):

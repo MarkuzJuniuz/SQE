@@ -221,7 +221,10 @@ def build(st, th: dict, d, ap: dict, rng: random.Random | None = None) -> dict:
     rts = road_front.routes(th)
     rsides = road_front.route_sides(st, th, rts) if rts else None
     for x, y in spots:
-        near = min(names, key=lambda n: math.hypot(ap[n][0] - x, ap[n][1] - y))
+        def distance_to_airport(name):
+            return math.hypot(ap[name][0] - x, ap[name][1] - y)
+
+        near = min(names, key=distance_to_airport)
         if math.hypot(ap[near][0] - x, ap[near][1] - y) < AIRFIELD_CLEAR_M:
             continue
         if any(math.hypot(x - tx, y - ty) < ASSET_CLEAR_M for tx, ty in taken_assets):
@@ -229,7 +232,10 @@ def build(st, th: dict, d, ap: dict, rng: random.Random | None = None) -> dict:
         side = road_front.site_side(st, th, rts, rsides, x, y) if rts else ("blue" if near in blue_ap else "red")          # v0.41.258: the side its road connects to (road_front.py)
         tier = 1
         if side == "red" and red_fields:
-            fid = min(red_fields, key=lambda f: math.hypot(f[1][0] - x, f[1][1] - y))[0]
+            def distance_to_red_field(red_field):
+                return math.hypot(red_field[1][0] - x, red_field[1][1] - y)
+
+            fid = min(red_fields, key=distance_to_red_field)[0]
             tier = int(tiers.get(fid, 3))
         dfront = min((math.hypot(x - cx, y - cy) for cx, cy in centres), default=1e9) / 1000.0
         too_far = min((math.hypot(x - fx, y - fy) for fx, fy in own_fields[side]), default=0.0) / 1000.0 > OWNER_MAX_KM
@@ -287,7 +293,10 @@ def build(st, th: dict, d, ap: dict, rng: random.Random | None = None) -> dict:
                 c["variant"] = "ROAD0"
             n_bat = round(float(getattr(d, "road_battalion", 0.0)) * len(sites_))
             guarded = [c for c in sites_ if c.get("variant") != "ROAD0"]
-            guarded.sort(key=lambda c: (c["dfront"] > ground.GARRISON_CAS_MAX_KM, r.random()))        # near the front first: those are the CAS jobs
+            def far_from_front_then_random(site):
+                return (site["dfront"] > ground.GARRISON_CAS_MAX_KM, r.random())
+
+            guarded.sort(key=far_from_front_then_random)        # near the front first: those are the CAS jobs
             for c in guarded[:n_bat]:
                 c["battalion"] = True
         for c in sites_:
@@ -301,7 +310,10 @@ def build(st, th: dict, d, ap: dict, rng: random.Random | None = None) -> dict:
             c["kind"] = AssetKind.FUEL if i % 2 == 0 else AssetKind.DEPOT
         for c in plants:
             c["kind"] = AssetKind.FUEL if c["variant"] == "REFINERY" else AssetKind.DEPOT
-        added[side] = sorted(sites_, key=lambda c: (c["place"], c["x"], c["y"]))
+        def place_then_position(site):
+            return (site["place"], site["x"], site["y"])
+
+        added[side] = sorted(sites_, key=place_then_position)
     count: dict = {}
     for side in ("red", "blue"):
         pool = st.assets if side == "red" else st.blue_assets

@@ -85,7 +85,11 @@ def set_value(text: str, key: str, value_lua: str) -> str:
     found = pattern.findall(text)
     if len(found) != 1:
         raise ValueError("serverSettings.lua: expected one %s, found %d" % (key, len(found)))
-    return pattern.sub(lambda match: match.group(1) + value_lua + match.group(3), text)
+    # Keep the text before and after the value, swap in the new value.
+    def swap_value(match):
+        return match.group(1) + value_lua + match.group(3)
+
+    return pattern.sub(swap_value, text)
 
 
 def set_mission_list(text: str, newline: str, miz_path) -> str:
@@ -95,7 +99,11 @@ def set_mission_list(text: str, newline: str, miz_path) -> str:
         raise ValueError("serverSettings.lua: missionList block not found exactly once")
     escaped = str(miz_path).replace("\\", "\\\\")
     block = ('["missionList"] = ' + newline + "\t{" + newline + '\t\t[1] = "' + escaped + '",' + newline + '\t}, -- end of ["missionList"]')
-    return pattern.sub(lambda match: block, text)
+    # The whole match becomes the new block.
+    def new_block(match):
+        return block
+
+    return pattern.sub(new_block, text)
 
 
 def edit_settings_text(text: str, newline: str, miz_path, wait_for_client: bool = False) -> str:

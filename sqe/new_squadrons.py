@@ -33,7 +33,11 @@ def need(state, b) -> tuple:
         if t and math.hypot(x - b.x, y - b.y) / NM <= NEED_RADIUS_NM:
             counts[t] = counts.get(t, 0) + 1
     if counts:
-        t = max(sorted(counts), key=lambda k: counts[k])
+        # The type with the most jets (a tie goes to the first in sorted order).
+        def jets_of_type(type_key):
+            return counts[type_key]
+
+        t = max(sorted(counts), key=jets_of_type)
         if counts[t] >= NEED_MIN:
             return t, counts[t]
     return "F-16C", counts.get("F-16C", 0)

@@ -135,7 +135,10 @@ def from_grid(x0: float, y0: float, step: float, hi: list, mean: list | None = N
     """Install a grid directly (tests, tools). hi / mean: rows[i][j] in metres, i along x, j along y."""
     global _R, _MTIME, _FIXED
     mean = mean or hi
-    conv = lambda g: [array("H", (int(round(v / UNIT_M)) for v in r)) for r in g]
+    # A grid of metres as rows of unsigned 16-bit units.
+    def conv(g):
+        return [array("H", (int(round(v / UNIT_M)) for v in r)) for r in g]
+
     _R = {"x0": float(x0), "y0": float(y0), "step": float(step), "nx": len(hi), "ny": len(hi[0]), "max": conv(hi), "mean": conv(mean)}
     _MTIME, _FIXED = -1.0, True
 

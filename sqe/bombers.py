@@ -142,7 +142,11 @@ def bomber_wings(state) -> list:
     """B1: every Tu-22M3 wing whose field is up (not destroyed, runway not cut), in the pack's `bomber_bases` order (`bomber_base_ids`): the lead first. One entry in the Caucasus. A closed field is skipped."""
     order = {a: i for i, a in enumerate(bomber_base_ids())}
     ws = [w for w in state.enemy_air if "Tu_22M3" in w.types and not state.assets[w.base_asset_id].destroyed and not runways.is_closed(state, w.base_asset_id)]
-    return sorted(ws, key=lambda w: order.get(w.base_asset_id, len(order)))
+    # The pack's bomber_bases order; a field not in it goes last.
+    def field_order(wing):
+        return order.get(wing.base_asset_id, len(order))
+
+    return sorted(ws, key=field_order)
 
 
 def _bomber_wing(state):
@@ -195,8 +199,14 @@ def escort_options(state, bw, cv):
             if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm:
                 out.append((sum(q.available for q in sq if q.aircraft == t), w, t))
     own = [r for r in out if _is_in(r[1], bws) and r[0] >= escorts_for(MIN_RAID)]
-    own.sort(key=lambda r: next((i for i, b in enumerate(bws) if b is r[1]), 0))                 # B1: the lead field's escorts first (one field: the order it had)
-    rest = sorted((r for r in out if r not in own), key=lambda r: (-r[0], r[1].base_asset_id, r[2]))
+    def bomber_field_index(row):
+        return next((i for i, b in enumerate(bws) if b is row[1]), 0)
+
+    def most_escorts_then_field(row):
+        return (-row[0], row[1].base_asset_id, row[2])
+
+    own.sort(key=bomber_field_index)                 # B1: the lead field's escorts first (one field: the order it had)
+    rest = sorted((r for r in out if r not in own), key=most_escorts_then_field)
     return own + rest
 
 
@@ -241,7 +251,10 @@ def decide(state, d) -> dict:
     """Today's call on the carrier raid: {"mode": "hold" | "safe" | "desperate", "n": bombers, "escorts", "wing", "type", "why"}. Pure: the same state gives
     the same answer, so the planner and the raid plan agree. v0.41.109: a raid is STAGED the day before (QUIET_DAYS): the day red decides to go it only
     holds ("quiet": True, "stage": {...}; the planner records it with `note_stage`), and the raid launches on the staged day."""
-    hold = lambda why: {"mode": "hold", "n": 0, "escorts": 0, "wing": "", "type": "", "why": why}
+    # The "no raid today" answer, with the reason.
+    def hold(why):
+        return {"mode": "hold", "n": 0, "escorts": 0, "wing": "", "type": "", "why": why}
+
     bws, cv = bomber_wings(state), _carrier(state)                # B1: every bomber field that is up; a cut or destroyed one is skipped
     bw = bws[0] if bws else None
     if getattr(d, "bomber_policy", "none") == "none" or bw is None or cv is None:
@@ -309,7 +322,10 @@ def stage_extras(state, launch: int) -> dict:
     range; the pack's `raid_bearing_deg` where it has one, S90 J8) and the turn it launches in ("turn", seeded, among the launch day's planned turns that have a planned turn right before them on the same day; absent when none has). Seeded by campaign and launch day only."""
     rnd = random.Random(f"{state.campaign_id}:{launch}:stage")
     out = {"brg": raid_bearing(state, rnd)}
-    ok = lambda t: bool(getattr(state, "night_ops", False)) or not clock.is_night_turn(t)
+    # A turn the raid may use: any turn with night ops on, else a day turn.
+    def ok(turn):
+        return bool(getattr(state, "night_ops", False)) or not clock.is_night_turn(turn)
+
     cands = [t for t in range(clock.first_turn(launch) + 1, clock.first_turn(launch + 1)) if ok(t) and ok(t - 1)]
     if cands:
         out["turn"] = rnd.choice(cands)
