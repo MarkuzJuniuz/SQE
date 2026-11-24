@@ -41,7 +41,7 @@ You pick the level when you start a campaign. It sets how strong red is and how 
 | Red counter-attacks on blue bases (`counterstrike`) | low (0.10) | 0.30 | 0.55 |
 | Ground war pressure (`red_attack`) | 0.15 | 0.45 | 0.80 |
 
-Blue is the same at every level: 18 squadrons with 292 jets in total across the coalition fields and the carrier (F-14B(U), F/A-18C, F-16C, F-15C
+Blue is the same at every level: 18 squadrons with 284 jets in total across the coalition fields and the carrier (F-14B(U), F/A-18C, F-16C, F-15C
 and A-10C squadrons, plus F-15E and HAVCAP squadrons and the F-117A squadron that the AI flies). A person can fly the F-14B(U),
 F/A-18C, F-16C, F-15C and A-10C; the F-15E and F-117A are AI only. You can change the AI skill of each side in Settings.
 
@@ -199,7 +199,7 @@ It holds back **25%** of each squadron's ready fighters as a **reaction reserve*
 reinforcements; the rest are free for patrols and raids. Jets that fly go to refit; shot-down jets are gone until replaced.
 
 **How red's jets are laid out.** At Levels 2 and 3 red fields about as many jets as blue (the Tu-22M3 wing not counted): on the Caucasus about 240 at Level 2 and 284 at
-Level 3, on Syria 270 and 284 (blue has 292). Level 3 is harder than Level 2 through its types, its pilots and its SAMs, not through the count. Each field has a fixed
+Level 3, on Syria 270 and 284 (blue has 284). Level 3 is harder than Level 2 through its types, its pilots and its SAMs, not through the count. Each field has a fixed
 share of the jets, sized to its parking, and the fields have room left for squadrons that fall back from a lost field. Level 1 fills its four fields to about 70% (Gelendzhik about 60%). (These are the Caucasus figures; Syria's are in section 10.) The jets are grouped into squadrons of a few types per field, up to 6 jets at
 Level 1, and 14 at Levels 2 and 3 (about 10 to 12 is the Soviet and Russian norm, so these are big squadrons), so a field flies one or two types in full squadrons, not
 two or three jets of everything. The Forces screen lists them with in-universe names such as "Sochi-Adler MiG-21Bis Sqn #2"; a squadron that withdraws keeps its name.
@@ -289,9 +289,9 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
   only if one is on orbit while it flies: a jet with a boom gets a KC-135, a probe-and-drogue jet (F-14, F/A-18C) the carrier's
   S-3B. A lost airframe is replaced slowly. Today the war sim does **not** take AWACS losses on its own (`AWACS_LOSS_ON` is off).
 * **Each of them has its own guard (HAVCAP).** Fighters guard the E-3, the E-2C and the tanker for as long as the
-  asset is on orbit in the turn, flown by the HAVCAP squadron (16 F-15C) where it has the jets and by an ordinary fighter squadron
-  otherwise. An AWACS guard from the HAVCAP squadron is a four-ship (most turns); a tanker guard, and any guard from an ordinary
-  squadron, is a pair. The AWACS guards are crewed before the tanker guards. The
+  asset is on orbit in the turn. The HAVCAP squadron (8 F-15C) guards the land-based E-3 only: a four-ship when it has four jets
+  ready (four fly one turn, the other four the next), a pair when it has fewer. The tankers and the carrier's E-2C get a guard pair
+  from the ordinary fighter squadrons, as does the E-3 when the HAVCAP squadron has no jets ready. The
   guard goes up in the last wave that opens before the asset's window starts (the first wave when the asset is up already), or in a later
   wave when no pair is ready sooner.
   Every package that carries the asset carries its guard. The pair can refuel on the orbit.
@@ -342,7 +342,7 @@ Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4
 
 ### Blue in Syria
 
-Blue has 18 squadrons and 292 jets at every level: two F-14B squadrons and two F/A-18C squadrons on the carrier, five F-16C, three F-15C (plus the AI-only HAVCAP F-15C), three F-15E (AI only), one A-10 squadron at Incirlik and the **8th FS 'Black Sheep' (12 F-117A, AI only)**. You can fly the F-14B, F/A-18C, F-16C, F-15C and A-10. The **Era Equipment** setting (New Campaign) picks the airframes of the year: Syria 2001 defaults to the A-10A, the F-14B and no Link 16 data. The weapons follow the year: the A-10A carries no JDAM and no targeting pod (Mavericks, laser and cluster bombs), the F-14B and the F-117A drop laser-guided bombs only, while the F-16C, F/A-18C and F-15E carry JDAM, JSOW and SLAM-ER, all in service by 2001 but still new, and not on every jet.
+Blue has 18 squadrons and 284 jets at every level: two F-14B squadrons and two F/A-18C squadrons on the carrier, five F-16C, three F-15C (plus the AI-only HAVCAP F-15C), three F-15E (AI only), one A-10 squadron at Incirlik and the **8th FS 'Black Sheep' (12 F-117A, AI only)**. You can fly the F-14B, F/A-18C, F-16C, F-15C and A-10. The **Era Equipment** setting (New Campaign) picks the airframes of the year: Syria 2001 defaults to the A-10A, the F-14B and no Link 16 data. The weapons follow the year: the A-10A carries no JDAM and no targeting pod (Mavericks, laser and cluster bombs), the F-14B and the F-117A drop laser-guided bombs only, while the F-16C, F/A-18C and F-15E carry JDAM, JSOW and SLAM-ER, all in service by 2001 but still new, and not on every jet.
 
 ### The opening night
 

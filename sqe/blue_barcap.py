@@ -127,7 +127,7 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
 # the guard of each support asset: key -> flight tag. The assets and their guards are standing entities on their own schedule (S71, XO 2026-11-13): every package that carries the asset gets the guard.
 # A second tanker (another direction) is one more TABLE row in support_assets and one more entry here.
 AWACS_GUARD_JETS = 4       # S182 (XO 2026-11-24: "awacs guards a minimum of 4 ships"): the AWACS guard's size when the HAVCAP squadron can give it. Evidence: the AWACS died with a pair on guard in the S174 and S177 server runs (raid escorts). Judgment call
-GUARDS = {"bl_e3": "HAVCAP", "bl_e2": "HAVCAP", "bl_kc135": "TKR_HAVCAP", "bl_s3": "TKR_HAVCAP"}      # S182: the AWACS guards draw first, so the HAVCAP squadron's jets make their four-ship; a tanker's guard is still not optional (it takes any capable squadron's pair). Before: tankers first
+GUARDS = {"bl_e3": "HAVCAP", "bl_e2": "HAVCAP", "bl_kc135": "TKR_HAVCAP", "bl_s3": "TKR_HAVCAP"}      # S182: the AWACS guards are crewed first; a tanker's guard is still not optional (it takes any capable squadron's pair). Before: tankers first
 
 
 def _havcap_squadrons(state, base) -> list:
@@ -164,7 +164,13 @@ def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
         spans = [(max(s, t0), min(e, t1)) for s, e in (wins.get(key) or []) if e > t0 and s < t1]
         if a is None or not spans or a["base_id"] not in state.bases:
             continue
-        hv = _havcap_squadrons(state, state.bases[a["base_id"]])           # Phase 9b: the HAVCAP squadron guards first, within reach
+        # Phase 9b: the HAVCAP squadron guards first, within reach. S182 (XO 2026-11-24: "Batumi is special awacs guard, tankers take from normal
+        # squadrons"): it guards the land-based AWACS only. Its 8 jets (Batumi parks 10) then fly four one turn and the other four the next,
+        # while the first four refit. A tanker's guard and the carrier AWACS's guard (it sits under the fleet's SM-2s and BARCAP) come from the
+        # ordinary squadrons
+        hv = []
+        if tag == "HAVCAP" and state.bases[a["base_id"]].kind != BaseKind.CARRIER:
+            hv = _havcap_squadrons(state, state.bases[a["base_id"]])
         sqs = _guard_squadrons(state, state.bases[a["base_id"]])
         if not sqs and not hv:
             continue
@@ -181,8 +187,8 @@ def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
             lo = max(lo, t0 + wave_open(w))
         if sq is None or lo >= hi:
             continue
-        # S182: the AWACS guard is a four-ship when the HAVCAP squadron has the jets in this wave; a pair otherwise (and always a pair from an
-        # ordinary squadron, whose jets the packages need, and for the tanker)
+        # S182: the land AWACS's guard is a four-ship when the HAVCAP squadron has the jets in this wave; a pair otherwise (and always a pair from an
+        # ordinary squadron, whose jets the packages need: the tankers' and the carrier AWACS's guards)
         guard_jets = 2
         if tag == "HAVCAP" and hav and ledger.hroom(sq.id, w) >= AWACS_GUARD_JETS:
             guard_jets = AWACS_GUARD_JETS
