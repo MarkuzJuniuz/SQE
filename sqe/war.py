@@ -186,8 +186,10 @@ class ObjectivePlanner:
                 best = bl
         return best or []
 
-    def plan(self, state: CampaignState, rng: random.Random, limit: int = 6, bomber: bool = True, skip: frozenset | set = frozenset(), waves: bool = True) -> list:
-        """The jobs of ONE turn (v0.41.338, Phase 4; `limit` = how many). `bomber`: look at the carrier raid this turn (the day's raid turn only: `Session._begin_day` picks it, so the
+    def plan(self, state: CampaignState, rng: random.Random, limit: int = 6, bomber: bool = True, skip: frozenset | set = frozenset(), waves: bool = True, fit=None) -> list:
+        """`fit` (`jobfit.TurnFit`): what the turn can crew; a job it cannot is passed over and the slot goes to the next candidate (None: every candidate may be named).
+
+        The jobs of ONE turn (v0.41.338, Phase 4; `limit` = how many). `bomber`: look at the carrier raid this turn (the day's raid turn only: `Session._begin_day` picks it, so the
         raid is offered once a day and not every turn). `skip`: target ids not to plan this turn (the re-tasking rule, `Session._retask_skip`). `waves` (v0.41.367): take the SAM / EWR / runway wave of SAM_WAVE for the level (not for the player's extra-jobs call)."""
         cand = []                                  # (priority, objective, blockers); v0.41.371: no depth gate, the belt rule and covering_sams are the only blockers
         def alive(aid):
@@ -342,15 +344,26 @@ class ObjectivePlanner:
         picked, seen, taken = [], set(), set()
         used = set()                                           # v0.41.345 (scaled tasking, Phase B): ground sectors that already have a job: a second job in one comes only when no unused sector has a candidate
         sec = {id(o): job_sector(state, o) for _, o in scored}
-        def take(k: int) -> None:
+        def take(k: int) -> bool:
+            # Name the candidate, unless the turn has no jets left for it.
+            objective = scored[k][1]
+            if fit is not None:
+                if not fit.fits(objective):
+                    return False
+                fit.spend(objective)
             taken.add(k); picked.append(scored[k])
             if sec[id(scored[k][1])] is not None:
                 used.add(sec[id(scored[k][1])])
+            return True
         def best(ok):                                          # the best-scored candidate of an unused sector, else of any
             c = [k for k in range(len(scored)) if k not in taken and ok(scored[k][1])]
             def used_sector_then_rank(k):
                 return (sec[id(scored[k][1])] in used, k)
-            return min(c, key=used_sector_then_rank, default=None)      # scored is sorted best first, so the index is the score rank
+            c.sort(key=used_sector_then_rank)                          # scored is sorted best first, so the index is the score rank
+            for k in c:
+                if fit is None or fit.fits(scored[k][1]):
+                    return k
+            return None
         if waves and self.d is not None:
             rwy_belt = {x.id for _, o_, bl_ in cand if o_.type == ObjectiveType.STRIKE and o_.aim == "RUNWAY"
                         and axis_of(state.assets[o_.target_id]) == "MOUNTAIN" for x in bl_}      # v0.41.375: the sites that stand in front of a northern runway job
@@ -415,9 +428,13 @@ class ObjectivePlanner:
             lists[ax].append((-key, k))
         n = 0
         for ax, q in (("SEA", q_sea), ("MOUNTAIN", q_mtn), ("RUNWAY", q_rwy)):
-            for _, k in sorted(lists[ax])[:q]:
-                take(k)
-                n += 1
+            taken_here = 0
+            for _, k in sorted(lists[ax]):
+                if taken_here >= q:
+                    break
+                if take(k):                                        # (False: no jets left for it; the next of the same kind is tried)
+                    taken_here += 1
+                    n += 1
         return n
 
     def _add_followers(self, state, picked: list, follows: list, limit: int, cap: int) -> list:

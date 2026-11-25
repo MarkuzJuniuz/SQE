@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.664, stand-off jobs are named only while their jets are free
+The planner used to list several stand-off jobs (SLAM-ER strikes, Standoff DEAD, stand-off radar strikes) for the same few jets, and most were then dropped. It now counts the jets that carry each weapon and gives the other slots to other targets. A stand-off job still waits for its jets; it is never flown as a plain strike instead.
+
 ## v0.41.663, the smoke test no longer stops itself on the waypoint-lock check
 The waypoint-lock check can take more than two minutes, so it now has a five-minute limit of its own. Before, the full smoke test could stop partway on a busy PC.
 
