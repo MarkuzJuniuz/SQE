@@ -204,10 +204,11 @@ class SettingsDialog(QDialog):
                 "natural pace (afterburner time). AI flights adjust automatically.")
         self.fuel = QCheckBox("AI Fuel Management (Unlimited Until the Push, Real Fuel in the Fight, Unlimited Again From Egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); v.addWidget(self.fuel)
-        self.splash = QCheckBox("Splash Damage: Blast Damage Around Bomb and Missile Impacts (On by Default)")
+        self.splash = QCheckBox("Blast Wave: Blast Damage Around Bomb and Missile Impacts (On by Default)")
         self.splash.setChecked(bool(getattr(settings, "splash_damage", True))); v.addWidget(self.splash)
         hint(v, "DCS often leaves a vehicle a few metres from a bomb untouched. On: ground units near an air-to-ground weapon's impact take a blast "
-                "of their own, scaled to the warhead and weaker with distance. Kills it causes count for the shooter.")
+                "of their own, scaled to the warhead and weaker with distance. Kills it causes count for the shooter. The idea comes from the community Splash Damage scripts for DCS; "
+                "SQE's version is its own code.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -342,9 +343,9 @@ class SettingsDialog(QDialog):
         hint(v, "Results need io/lfs enabled in MissionScripting.lua. A backup is saved next to the file. "
                 "If SQE is closed before the mission ends, DCS can no longer write the results file.")
         v.addSpacing(10)
-        self.ecm = QCheckBox("ECM Script (SQE's Own Jamming)")
+        self.ecm = QCheckBox("Jammer Model (SQE's Own Jamming)")
         self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
-        self.ecm_msg = QCheckBox("Show ECM Status")                      # v0.41.213 (XO): a sub-option of the ECM script; v0.41.647: right under its parent
+        self.ecm_msg = QCheckBox("Show Jammer Status")                      # v0.41.213 (XO): a sub-option of the ECM script; v0.41.647: right under its parent
         self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
         self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")
         self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and \"Cockpit: ECM On\" / \"Cockpit: ECM Off\" for the F10 SQE ECM Switch / SQE ECM OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
@@ -355,14 +356,14 @@ class SettingsDialog(QDialog):
                 "A jammer cannot really destroy a missile; this is the closest a mission script can get. Both sides, your own jet included.")
         v.addSpacing(10)
         self.ecm_state = QLabel(); v.addWidget(self.ecm_state)
-        self.ecm_inst = QPushButton("Install ECM Script"); self.ecm_rem = QPushButton("Remove")
-        # Fixed width: the label changes between "Install ECM Script" and "Update ECM Script", and the button must not resize and push Remove sideways.
+        self.ecm_inst = QPushButton("Install Jammer Script"); self.ecm_rem = QPushButton("Remove")
+        # Fixed width: the label changes between "Install Jammer Script" and "Update Jammer Script", and the button must not resize and push Remove sideways.
         self.ecm_inst.ensurePolished()                       # so the sizes below include the app stylesheet (padding, font)
         widest_label = 0
-        for label_text in ("Install ECM Script", "Update ECM Script"):
+        for label_text in ("Install Jammer Script", "Update Jammer Script"):
             self.ecm_inst.setText(label_text)
             widest_label = max(widest_label, self.ecm_inst.sizeHint().width())
-        self.ecm_inst.setText("Install ECM Script")
+        self.ecm_inst.setText("Install Jammer Script")
         self.ecm_inst.setFixedWidth(widest_label)
         def install_ecm():
             self._ecm_do(S.install_ecm_script)
@@ -392,13 +393,13 @@ class SettingsDialog(QDialog):
     def _refresh(self):
         self.ms.setText("MissionScripting.lua: " + S.mission_scripting_status(self.inst.text()))
         st = S.ecm_script_state(self.saves.text())
-        self.ecm_state.setText("ECM script: " + S.ecm_script_status(self.saves.text()))
+        self.ecm_state.setText("Jammer script: " + S.ecm_script_status(self.saves.text()))
         self.ecm_inst.setEnabled(st not in ("nofolder", "ok")); self.ecm_rem.setEnabled(st not in ("nofolder", "none"))
-        self.ecm_inst.setText("Update ECM Script" if st == "old" else "Install ECM Script")
+        self.ecm_inst.setText("Update Jammer Script" if st == "old" else "Install Jammer Script")
 
     def _ecm_do(self, fn):
         ok, msg = fn(S.native(self.saves.text()))
-        (QMessageBox.information if ok else QMessageBox.warning)(self, "ECM script", msg)
+        (QMessageBox.information if ok else QMessageBox.warning)(self, "Jammer script", msg)
         self._refresh()
 
     def _save(self):
