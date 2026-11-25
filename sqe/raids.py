@@ -364,42 +364,61 @@ def _weighted(rng: random.Random, ws: list):
     return ws[-1]
 
 
-def pick_aim(state, d, rng: random.Random):
-    """-> (base, aim) for one raid: the airfield, or (with the level's raid_mix chances) a supply site, a field's garrison or friendly troops in a contested sector."""
-    mix = tuple(getattr(d, "raid_mix", (0.0, 0.0, 0.0)))
-    r = rng.random()
-    order = ["supply", "garrison", "sector"]
-    kind, acc = "field", 0.0
-    for k, p in zip(order, mix):
-        acc += p
-        if r < acc:
-            kind = k
-            break
-    def can_(ws_):                                  # v0.41.125: red does not start a raid on a covered target (S36b: bombers wait until the SAMs over it are down)
-        out_ = []
-        for b_, aim_, w_ in ws_:
-            x_, y_ = aim_xy(state, aim_, b_)
-            r_ = reach_for(state, aim_kind(aim_), x_, y_, d=d)
-            if r_ is not None and sead_plan(state, d, b_, aim_, r_[1], r_[2])[0] and _sead_fieldable(state, d, b_, aim_, r_[1], r_[2]):
-                out_.append((b_, aim_, w_))
-        return out_
-    ws = can_(candidates(state, kind)) or (can_(candidates(state, "field")) if kind != "field" else [])
-    if not ws:
-        # S207c: before giving up, every other kind is looked at: the ground fight first (troops in contact, garrisons), then supply (judgment call, S206 report).
-        for other in ("sector", "garrison", "supply"):
-            if other == kind:
-                continue
-            ws = can_(candidates(state, other))
-            if ws:
-                break
-    if ws:
-        ws = shy(state, d, ws)
+# S207d (XO 2026-11-25: "No more dice for decisions. Both sides makes tasks to win the war, not entertain the player."): the kind of raid follows the war's phase,
+# not odds. Soviet writing puts air supremacy first: massed strikes on air defences and airfields open the air operation, and only "after defeating enemy
+# aviation and winning air supremacy can the efforts of our air forces ... be directed to combined combat actions with ground forces" (Military Thought,
+# CIA translation 1973, https://www.cia.gov/readingroom/docs/1973-10-12-A.pdf; CIA assessment 1972, .../1972-10-01d.pdf). Cold War sources; the order of the
+# ground-support kinds (troops in contact, garrisons, supply) is a judgment call. Level 1 has no SEAD doctrine (insurgents): ground support first, airfields
+# last (judgment call).
+KINDS_WHILE_COVERED = ("sam", "field", "sector", "garrison", "supply")     # blue's Patriot / HAWK stands over something red would raid: win the air first
+KINDS_AFTER_COVER = ("sector", "garrison", "supply", "field")              # the air defences are down over red's targets: support the ground fight
+
+
+def cover_stands(state, d) -> bool:
+    """Does a live blue Patriot / HAWK (or the fleet) cover any target red would raid? Level 1's insurgents run no air-superiority campaign: False."""
+    if getattr(d, "raid_arm", 0) <= 0:
+        return False
+    for kind in ("field", "sector", "garrison", "supply"):
+        for base, aim, _weight in candidates(state, kind):
+            x, y = aim_xy(state, aim, base)
+            if cover_field(state, x, y) is not None:
+                return True
+    return False
+
+
+def _raidable(state, d, kind: str, taken) -> list:
+    """The candidates of one kind red could actually book now: not already booked this turn, a wing in reach with the jets, not under cover (S36b: bombers wait
+    until the SAMs over a target are down; red's SEAD goes at the SAM itself, kind "sam")."""
+    if kind == "sam":
+        found = candidates(state, "sam", d_=d)
     else:
-        ws = can_(candidates(state, "sam", d_=d))                   # S36b (XO 2026-11-11): nothing else can be raided: red goes for the blue SAMs that cover it with a SEAD package
-    if not ws:
-        return None
-    base, aim, _ = _weighted(rng, ws)
-    return base, aim
+        found = candidates(state, kind)
+    out = []
+    for base, aim, weight in found:
+        if (base.id, aim) in taken:
+            continue
+        x, y = aim_xy(state, aim, base)
+        reach = reach_for(state, aim_kind(aim), x, y, d=d)
+        if reach is not None and sead_plan(state, d, base, aim, reach[1], reach[2])[0] and _sead_fieldable(state, d, base, aim, reach[1], reach[2]):
+            out.append((base, aim, weight))
+    return out
+
+
+def pick_aim(state, d, rng: random.Random, taken=frozenset()):
+    """-> (base, aim) for one raid, or None. The kinds are tried in the order of the war's phase (see above); the first kind with a target red can raid gives it.
+    `taken`: (base id, aim) already booked this turn."""
+    order = KINDS_AFTER_COVER
+    if cover_stands(state, d):
+        order = KINDS_WHILE_COVERED
+    for kind in order:
+        found = _raidable(state, d, kind, taken)
+        if not found:
+            continue
+        if kind != "sam":
+            found = shy(state, d, found)
+        base, aim, _weight = _weighted(rng, found)
+        return base, aim
+    return None
 
 
 PATRIOT_NM = 40          # v0.41.20: a full-strength field's Patriot covers its own field and what lies this close to it
@@ -1093,6 +1112,7 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
             warned.append(tu_[0])
     mean_jets = max(2.0, sum(d.raid_size) / 2.0)
     n_made, misses = 0, 0
+    refused = set()                                       # targets no wing could field this turn
     while credit > 0 and n_made < RAID_MAX_PER_TURN and misses < 3:
         unwarned = rng.random() < d.raid_surprise
         if not planned:
@@ -1100,12 +1120,12 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
             n_made += 1
             credit -= mean_jets
             continue
-        pa = pick_aim(state, d, rng)
+        booked_aims = set()
+        for objective_ in warned:
+            booked_aims.add((objective_.target_id, objective_.aim))
+        pa = pick_aim(state, d, rng, booked_aims | refused)
         if pa is None:
             break                                            # nothing red can raid: no raid, nothing to settle overnight
-        if any((o.target_id, o.aim) == (pa[0].id, pa[1]) for o in warned):
-            misses += 1                                      # the same aim again: try another
-            continue
         base, aim = pa
         o = raid_objective(base, aim, describe(state, base, aim))
         # v0.41.304 (XO 2026-11-05: "no more hidden ones"): an unwarned raid is listed like the others (id ...-s<n>, the package reads "no warning"); it used to be only a count settled overnight
@@ -1114,7 +1134,9 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
         if bk is None:
             if unwarned:
                 surprise += 1                                # no wing can field it: it still happens, settled overnight as before
-            break
+            refused.add((base.id, aim))                       # S207d: the next target in line, not the same one again (three tries)
+            misses += 1
+            continue
         booked[o.id] = bk
         warned.append(o)
         n_made += 1
@@ -1202,11 +1224,13 @@ def overnight(state, d, rng: random.Random) -> list:
     """Surprise raids nobody flew: our alert aircraft and the field's defences against the bombers. Returns the log lines."""
     n = int((state.raids or {}).get("surprise", 0))
     lines = []
+    struck = set()                                         # S207d: one overnight raid a target
     for _ in range(n):
-        pa = pick_aim(state, d, rng)
+        pa = pick_aim(state, d, rng, struck)
         if pa is None:
             continue
         b, aim = pa
+        struck.add((b.id, aim))
         x, y = aim_xy(state, aim, b)
         r = reach_for(state, aim_kind(aim), x, y, d=d)
         if r is None:

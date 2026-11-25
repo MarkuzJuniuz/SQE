@@ -213,6 +213,10 @@ two or three jets of everything. The Forces screen lists them with in-universe n
 
 At Level 2 red raids your SAM sites most days of a war's first week (a few a day at the start) and its bombers follow as your cover thins.
 
+**What red goes for** follows the war, not chance. While one of your Patriots, HAWKs or the fleet's missiles covers something it would raid, red's main effort is its SEAD raids
+on those sites, then any uncovered airfield. Once that cover is down it supports its ground forces: troops in a contested sector, garrisons, then supply sites, and your
+airfields when nothing else is open. Level 1's insurgents have no SEAD: they go for troops and garrisons first and airfields last.
+
 A **raid** is a package that red actually plans: a Su-24M strike on a field, a supply site, a garrison or a
 troop column, with escorts. Whether a raid goes in depends on whether red has the jets: nothing is rolled once you click
 Fly. Some raids are **unwarned** (25%, 35% and 45% at Levels 1, 2, 3) and come with no warning. Blue sees a raid when an AWACS
