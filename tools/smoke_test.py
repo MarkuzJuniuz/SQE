@@ -534,6 +534,52 @@ def check_hook_lua():
     print(f"[hook] {n} real hooks compile and run under the stub DCS")
 
 
+def _mission_scripts(node, found):
+    """Every script text in a mission table: a trigger's "do script" action and a waypoint's "Script" command."""
+    if isinstance(node, dict):
+        if node.get("predicate") == "a_do_script":
+            found.append(str(node.get("text", "")))
+        if node.get("id") == "Script":
+            command = (node.get("params") or {}).get("command")
+            if command:
+                found.append(str(command))
+        for value in node.values():
+            _mission_scripts(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _mission_scripts(value, found)
+    return found
+
+
+def check_mission_lua():
+    """Every script in every built mission compiles in Lua 5.1, the version DCS runs: a syntax error is an error popup in the game. Compile only,
+    nothing is run. Needs lupa (dev only)."""
+    try:
+        from lupa import lua51
+    except ImportError:
+        print("[mission lua] SKIPPED: lupa (with Lua 5.1) is not installed")
+        LUA_SKIPPED.append(True)
+        return
+    runtime = lua51.LuaRuntime()
+    compile_error = runtime.eval("function(code) local chunk, problem = loadstring(code) if chunk then return '' end return problem end")
+    total = 0
+    for ac, _s, _p, miz in builds():
+        if not miz:
+            continue
+        z, M = _mission(miz)
+        dictionary_text = z.read("l10n/DEFAULT/dictionary").decode("utf-8")
+        dictionary = lua.loads(dictionary_text)["dictionary"]
+        scripts = _mission_scripts(M, [])
+        assert scripts, (ac, "no scripts found in the mission")
+        for script in scripts:
+            if script.startswith("DictKey_"):                          # the text is kept in the dictionary
+                script = dictionary[script]
+            problem = compile_error(script)
+            assert not problem, (ac, problem, script[:300])
+            total += 1
+    print(f"[mission lua] {total} mission scripts compile")
+
+
 # ---- 6. soak (in the default run; `--only soak` alone) ------------------------------------------------------------------------------------------------------------
 SOAK_CASES = [("caucasus", 1, 5), ("caucasus", 2, 3), ("caucasus", 3, 7), ("syria", 1, 2), ("syria", 2, 4), ("syria", 3, 6)]      # (theatre, level, seed); S126: Syria has paths the Caucasus never runs (works rebuild, grace week, opening strike, carrier evade)
 SOAK_MAX_SKIPS = 300                                          # a loop bound, not a game rule
@@ -592,6 +638,7 @@ CHECKS = [
     check_miz_parses,
     check_waypoint_locks,
     check_hook_lua,
+    check_mission_lua,
     check_soak,
 ]
 
@@ -599,7 +646,7 @@ CHECKS = [
 # ---- parallel run (S124) ----------------------------------------------------------------------------------------------------------------------------
 # Checks that share the five-jet build (`builds()`) stay together in one process (it is built once there); the rest run on their own, and the soak is one task per campaign.
 GROUPS = [["check_saves_round_trip"], ["check_incompatible_saves"], ["check_syria_theatre"], ["check_ecm_install"], ["check_dialogs", "check_main_window"],
-          ["check_fly_debrief_advance", "check_missions_build", "check_required_flights", "check_miz_parses", "check_hook_lua"]]
+          ["check_fly_debrief_advance", "check_missions_build", "check_required_flights", "check_miz_parses", "check_hook_lua", "check_mission_lua"]]
 LOCK_PARTS = [None] + list(range(len(LOCK_CASES)))              # check_waypoint_locks: one task per part
 
 
