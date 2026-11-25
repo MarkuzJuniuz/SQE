@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.665, the planner names only targets a squadron can reach
+The planner now asks the same range question the mission builder asks (the route round the SAM rings), so jobs nobody could fly are no longer listed and then dropped. More of each turn's jobs are flown.
+
 ## v0.41.664, stand-off jobs are named only while their jets are free
 The planner used to list several stand-off jobs (SLAM-ER strikes, Standoff DEAD, stand-off radar strikes) for the same few jets, and most were then dropped. It now counts the jets that carry each weapon and gives the other slots to other targets. A stand-off job still waits for its jets; it is never flown as a plain strike instead.
 

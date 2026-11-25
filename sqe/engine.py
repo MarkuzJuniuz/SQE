@@ -385,8 +385,9 @@ class Session(Merging, SeadTiming):
         rr = self._rng(2)
         n = int(rate) + (1 if rr.random() < rate - int(rate) else 0)
         is_bomber = st.raids.get("bomber_turn") == turn
+        pb = PackageBuilder(st, self.d)
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=n + (1 if is_bomber else 0), bomber=is_bomber, skip=self._retask_skip(),
-                                             fit=TurnFit(st, base_L)) if (n > 0 or is_bomber) else []      # S204: only as many stand-off jobs as their jets can fly
+                                             fit=TurnFit(st, base_L, pb)) if (n > 0 or is_bomber) else []      # S204: only jobs a squadron can reach, and no more stand-off jobs than their jets can fly
         redair.assign_guards(st, self.d, objs)          # v0.41.10: red's patrols take stations over the SAM sites it expects to be attacked
         carry = self._carried(objs)
         job_ids = {o.id for o in carry} | {o.id for o in objs}       # S16a: the jobs the turn aims at (yesterday's postponed ones and the planner's list); raids, supply fillers and prep packages are not counted
@@ -396,7 +397,6 @@ class Session(Merging, SeadTiming):
         _late = [o for o in objs if (o.type == ObjectiveType.STRIKE and getattr(st.assets.get(o.target_id), "kind", None) in ground.SUPPLY_KINDS)
                  or (o.type == ObjectiveType.CAS and o.target_id.startswith("rgar_sup_"))]          # ...and the CAS jobs on a road site's battalion
         objs = carry + [o for o in objs if o not in _late] + warned + _late        # postponed from yesterday first, then the turn's job list, then the announced raids, then the supply strikes and road battalions
-        pb = PackageBuilder(st, self.d)
         prep_ids = self._raid_prep_objectives(pb, objs)          # v0.41.305: the carrier raid's blocking SAM sites get their own SEAD / Standoff DEAD packages, appended AFTER the turn's jobs (the raid keeps its index, so its bearing is the one planned here)
         objs = objs + prep_ids[0]
         prep_obj_ids = {o.id for o in prep_ids[0]}                # built right after the raid itself, before the turn's other jobs take the squadrons' jets
