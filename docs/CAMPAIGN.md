@@ -185,6 +185,8 @@ or an airfield runway with no patrol station or ready alert pair within 40 nm. I
 safe over a covered target: each jet is lost with a small chance that grows with the SAM sites that cover it. At most 2 jobs a night turn, one runway
 strike a night, and the same target is not offered again for 7 days. It is the highest-maintenance airframe: 16 hours of refit after a sortie and one
 replacement airframe per 96 hours. Because red keeps fighters at almost every field, it flies rarely.
+In a mission, red can still scramble against the strike, but red's early-warning radars and AWACS do not point its fighters at an F-117A: a red
+fighter goes after one only once its own radar has picked it up.
 
 ### Runways
 

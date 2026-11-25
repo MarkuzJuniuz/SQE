@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.661, campaign guide: how red fighters find an F-117A
+`docs/CAMPAIGN.md` now says that red fighters need their own radar contact before they go after an F-117A. No change in the game.
+
 ## v0.41.660, red fighters need their own radar to go after an F-117A
 Red's patrols and alert pairs were ordered onto any blue jet in reach as long as red had an early-warning radar or an AWACS alive, the F-117A included. Against an F-117A they now need to pick it up on their own radar first.
 
