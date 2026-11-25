@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.656, red's escorts and sweep can come from further away
+When a red raid's escort or sweep wing is short of fighters, the wings that top it up may now lie up to 300 nm away (it was 200) and there can be two of them, so the far wings, which hold most of red's Su-27s, help staff the raids on the front fields. The raiders themselves are drawn as before.
+
 ## v0.41.655, two settings get new names
 In Settings, "Splash Damage" is now "Blast Wave" and the "ECM Script" group is now "Jammer Model" (its Install button reads Install Jammer Script, and the status line Jammer script). Nothing else changes: your saved choices, the installed script and the F10 menu calls (SQE ECM Switch, SQE ECM OFF) are as they were. Both are still SQE's own code; the guide and the Settings text credit the community scripts the ideas come from.
 

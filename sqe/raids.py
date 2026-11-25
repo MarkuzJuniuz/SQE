@@ -66,8 +66,9 @@ POOL_RAIDS = True             # S46 (XO 2026-11-12, "pool two nearby wings, even
 POOL_NM = 150                 # ...the partner wing lies within this many nm of the lead wing (and in reach of the target); judgment call, measured (`.private/probes/s43`, L3 seeds 1 to 10, days 1 to 10, supply raids red >= blue: 60 nm 37%, 100 nm 39%, 150 nm 48%; the wings lie in a west cluster Gudauta / Sochi / Maykop / Krymsk and an east one Nalchik / Beslan / Minvody)
 POOL_KINDS = ("supply", "garrison", "field", "sector")   # ...for these kinds of aim (SEAD raids are not pooled)
 POOL_ESCORTS = True           # ...and the escorts are pooled the same way
-ESC_POOL_NM = 200             # ...the partner escort wing lies within this many nm of the lead escort wing (judgment call, measured: the escort pool is what lifts supply raids from 24% to 40 to 50% red >= blue; 100 nm leaves most raids short of escorts because the Mozdok escort squadron is a lone wing)
+ESC_POOL_NM = 300             # ...the partner escort wing lies within this many nm of the lead escort wing (judgment call, measured: the escort pool is what lifts supply raids from 24% to 40 to 50% red >= blue; 100 nm leaves most raids short of escorts because the Mozdok escort squadron is a lone wing) S195 PR 2 (XO 2026-11-25, "frag BCD"): 300 (was 200): a Su-27's reach is 400 nm x 0.85 = 340 nm (`loadouts.ENEMY_RADIUS_NM`), a MiG-29S 270 x 0.85 = 230 nm still limits by type; so the far Su-27 wings can top up the escorts and the sweep of a raid on a front field
 POOL_PARTNERS = 1             # ...one partner wing for the raiders, one for the escorts (judgment call; the plan's `pool` / `esc_pool` lists leave room for more)
+ESC_POOL_PARTNERS = 2         # S195 PR 2: the escorts and the sweep may take up to two partner wings (the raiders keep POOL_PARTNERS = 1: more raiders per raid than the S59b rules intend)
 POOL_MAX_RAIDERS = 16         # ...a raid never flies more raiders than this (the mission builder's mass cap; DCS AI count)
 TEMPO_STOP_SHARE = 0.5        # v0.41.171 (XO 2026-10-28): half of the AIR tempo is added to the chance a surprise raider is stopped (+20 points at the +40 cap; judgment call)
 SEAD_JETS = {1: 4, 2: 4, 3: 8}   # B2 (XO 2026-11-21): Level 3 is 8, was 6 (JUDGMENT CALL: it restores part of the salvo the Su-34 carried before S106 removed it, 2 Kh-58U / Kh-31P a jet instead of 4; B4's balance sim checks it; the mass cap POOL_MAX_RAIDERS 16 still limits a whole raid). S36b (XO 2026-11-11): the SEAD package red sends at a blue SAM site: this many Su-24M with Kh-31P or Kh-58U (by level, B2: Syria's Su-17M4 with Kh-58U too), escorted by SEAD_ESCORT_RATIO fighters a jet; the only way red opens a covered target. S43 (XO 2026-11-11, "red is almost always outnumbered"): Level 3 only, 4 to 6 jets, judgment call (measured: SEAD raids were 58 to 74% of all raids and 19% of them had red at least equal to blue's jets; with 6 jets and 1:1 escorts 58%)
@@ -601,7 +602,7 @@ def _pool_partners(state, kind: str, lead, ax: float, ay: float, need: int, take
 
 def _pool_escorts(state, taken, lead_wing, ax: float, ay: float, need: int) -> list:
     """S46: partner escort wings for a raid whose lead escort wing (`lead_wing`) is `need` fighters short: other wings within `ESC_POOL_NM` of it, not one of the `taken` (raider and lead escort) wings, with a fighter type that
-    has a pair free and the reach (radius x 0.85); the most jets free first, up to `POOL_PARTNERS`; any type (an Su-27 wing with a MiG-29 wing). -> [{"wing": base asset id, "type": type, "n": fighters}]."""
+    has a pair free and the reach (radius x 0.85); the most jets free first, up to `ESC_POOL_PARTNERS`; any type (an Su-27 wing with a MiG-29 wing). -> [{"wing": base asset id, "type": type, "n": fighters}]."""
     from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM
     from . import bombers
     held_ = bombers.escorts_held(state)
@@ -617,7 +618,7 @@ def _pool_escorts(state, taken, lead_wing, ax: float, ay: float, need: int) -> l
                 cands.append((-redair.ready_of(state, w, (t,)), w.base_asset_id, t, w))
     out, seen = [], set()
     for _neg, _id, t, w in sorted(cands, key=_first_three):
-        if len(out) >= POOL_PARTNERS or need < 2:
+        if len(out) >= ESC_POOL_PARTNERS or need < 2:
             break
         if _id in seen:
             continue
