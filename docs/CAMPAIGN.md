@@ -81,8 +81,9 @@ At the start of each (day) turn the planner builds the turn's tasking list, in t
    A stand-off job is picked only while jets that carry its weapon are still free (a Standoff DEAD counts its two HARM flights too, as the same
    Vipers and Hornets fly them); otherwise the slot goes to the next target and the stand-off job waits for a later turn.
 4. **Packages are built from the jets that are free.** A package is crewed from what the ledger shows (section 7). A job
-   that cannot be crewed (no stand-off jets free, a target out of reach, no SEAD seat) waits for the next turn, and the turn tries the planner's next
-   candidates in its place (up to 12 tries), so it builds about as many packages as it aims at.
+   that cannot be crewed (no stand-off jets free, a target out of reach, no SEAD seat) waits for the next turn, and the turn tries other targets
+   in its place (up to 12 tries): ones the jets left over can still reach, a strike behind a SEAD package already built among them. A turn can still end
+   short when nothing else can be flown, mostly on Syria at Level 3 where nearly every open target needs a stand-off weapon, or when the SEAD jets run out.
 5. **Start times are set in four waves, an hour apart.** The waves open with the turn and 60, 120 and 180 minutes later;
    packages start within about 25 minutes of their wave's opening. The jobs are spread over the four waves as evenly as they
    go, the earlier waves first; packages listed together (targets inside the Target Area Radius) stay together in one wave, and a carrier raid and its prep

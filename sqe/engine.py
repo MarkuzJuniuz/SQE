@@ -15,7 +15,7 @@ from .difficulty import get as get_difficulty
 from .jobfit import TurnFit
 from .loadouts import LoadoutLibrary
 from .merging import Merging
-from .models import AssetKind, BaseKind, Objective, ObjectiveType, Role
+from .models import SEAD_AIMS, AssetKind, BaseKind, Objective, ObjectiveType, Role
 from . import airwings, barcap as barcap_, clock, detection, raids, redair, refit, sams, ground, support_assets, tempo
 from . import timeofday as _tod
 from .mission_builder import MissionBuilder, MissionOptions
@@ -27,7 +27,7 @@ from .scenario import new_campaign
 from . import theatres
 from .settings import AppSettings
 from .state import CampaignState, SaveIncompatible
-from .war import ObjectivePlanner, SUPPRESS_TURNS, WarSimulator, update_status
+from .war import ObjectivePlanner, SUPPRESS_TURNS, WarSimulator, after_sites, update_status
 
 
 
@@ -344,6 +344,24 @@ class Session(Merging, SeadTiming):
         pkg.extra["wave"] = w
         return pkg, w
 
+    def _follow_wave(self, objective, built: list) -> int:
+        """The earliest wave the refill may build this job in. A follow job (a strike or CAS behind the SEAD of long-reach sites) needs the SEAD or
+        standoff package of every site it waits on, as `_drop_orphan_followers` does: it may start in the latest of their waves; 0 = one is
+        missing. Any other job: 1."""
+        wave = 1
+        for site in after_sites(objective):
+            asset = self.state.assets.get(site)
+            if asset is None or asset.destroyed:
+                continue
+            site_wave = 0
+            for package in built:
+                if package.objective.type == ObjectiveType.DEAD and package.objective.aim in SEAD_AIMS and package.objective.target_id == site:
+                    site_wave = package.extra.get("wave", 1)
+            if site_wave == 0:
+                return 0
+            wave = max(wave, site_wave)
+        return wave
+
     def plan_turn(self) -> list:
         """The tasking order of THIS TURN (v0.41.338, Phase 4; the second half of the old `plan_day`): a few jobs from `ObjectivePlanner` (PACKAGES_PER_TURN), the day's raids that
         belong to this turn, crewed from the squadrons' ready jets in four launch waves, an hour apart (`Ledger`, `turn_times`; S110). `state.plan` holds only this turn's packages. -> the packages."""
@@ -469,7 +487,12 @@ class Session(Merging, SeadTiming):
             if built_jobs < wanted and n > 0:
                 if not refill_pool:
                     pool_limit = n + REFILL_EXTRA
-                    refill_pool.extend(ObjectivePlanner(self.d).plan(st, self._rng(), limit=pool_limit, bomber=False, skip=self._retask_skip(), waves=False))
+                    # S204: REFILL_EXTRA NEW candidates (not the turn's own jobs again), only ones the jets left over can still crew and reach.
+                    named = set()
+                    for o in objs:
+                        named.add((o.type, o.target_id))
+                    refill_pool.extend(ObjectivePlanner(self.d).plan(st, self._rng(), limit=pool_limit, bomber=False, skip=self._retask_skip(), waves=False,
+                                                                     fit=TurnFit(st, ledger, pb), exclude=named))
                 tried_keys = {(o.type, o.target_id, o.aim) for o in objs}
                 refused_kits = set()
                 tries = 0
@@ -482,15 +505,18 @@ class Session(Merging, SeadTiming):
                     key = (cand.type, cand.target_id, cand.aim)
                     if cand.type in (ObjectiveType.FLEET_DEFENSE, ObjectiveType.BARCAP):
                         continue                                # (raid intercepts and fleet patrols are the raids' own packages, not the turn's strike-class jobs)
-                    if key in tried_keys or cand.after or cand.aim == "DEAD" or ai_only(st, cand) or (cand.type, cand.aim) in refused_kits:
-                        continue                                # (a Close DEAD or a follow job needs its partner package in the same list; a kit job whose kit just ran out fails the same way)
+                    if key in tried_keys or cand.aim == "DEAD" or ai_only(st, cand) or (cand.type, cand.aim) in refused_kits:
+                        continue                                # (a Close DEAD needs its partner package in the same list; a kit job whose kit just ran out fails the same way)
+                    sead_wave = self._follow_wave(cand, out)
+                    if sead_wave == 0:
+                        continue                                # (a follow job whose SEAD / standoff package is not built)
                     tried_keys.add(key)
                     tries += 1
                     cand_copy = copy.copy(cand)
                     cand_copy.id = f"obj-t{turn}-refill{tries}"
                     def least_crowded_then_wave(w):
                         return (wave_count[w], w)
-                    start_wave = min(wave_count, key=least_crowded_then_wave)        # the least crowded wave first, later waves after it
+                    start_wave = max(sead_wave, min(wave_count, key=least_crowded_then_wave))        # the least crowded wave first (a follow job: not before its SEAD), later waves after it
                     refill_pkg, refill_wave = self._build_wave(pb, cand_copy, len(objs) + 50 + tries, ledger, (False,), names, waves=tuple(range(start_wave, _tod.NWAVES + 1)))
                     if refill_pkg is None:
                         if cand.aim == "STANDOFF":

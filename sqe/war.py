@@ -186,8 +186,10 @@ class ObjectivePlanner:
                 best = bl
         return best or []
 
-    def plan(self, state: CampaignState, rng: random.Random, limit: int = 6, bomber: bool = True, skip: frozenset | set = frozenset(), waves: bool = True, fit=None) -> list:
-        """`fit` (`jobfit.TurnFit`): what the turn can crew; a job it cannot is passed over and the slot goes to the next candidate (None: every candidate may be named).
+    def plan(self, state: CampaignState, rng: random.Random, limit: int = 6, bomber: bool = True, skip: frozenset | set = frozenset(), waves: bool = True, fit=None, exclude: frozenset | set = frozenset()) -> list:
+        """`exclude`: (objective type, target id) of jobs already named this turn: not offered again, and a follow job may wait on an excluded DEAD job's site.
+
+        `fit` (`jobfit.TurnFit`): what the turn can crew; a job it cannot is passed over and the slot goes to the next candidate (None: every candidate may be named).
 
         The jobs of ONE turn (v0.41.338, Phase 4; `limit` = how many). `bomber`: look at the carrier raid this turn (the day's raid turn only: `Session._begin_day` picks it, so the
         raid is offered once a day and not every turn). `skip`: target ids not to plan this turn (the re-tasking rule, `Session._retask_skip`). `waves` (v0.41.367): take the SAM / EWR / runway wave of SAM_WAVE for the level (not for the player's extra-jobs call)."""
@@ -310,7 +312,7 @@ class ObjectivePlanner:
         pool, follows = [], []
         fsites = {sid for c in cand if not c[2] for sid in after_sites(c[1])}
         for pr, o, bl in cand:
-            if bl:
+            if bl or (o.type, o.target_id) in exclude:
                 continue
             if o.type == ObjectiveType.DEAD and o.target_id in blocking:
                 pr *= 1.8                                              # clear the belt first
@@ -387,7 +389,11 @@ class ObjectivePlanner:
                 break
             take(k); per[scored[k][1].type] = per.get(scored[k][1].type, 0) + 1
         picked.sort(key=_first_item, reverse=True)
-        picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=_first_item, reverse=True), limit, cap, fit)
+        named_dead = set()
+        for kind, target_id in exclude:
+            if kind == ObjectiveType.DEAD:
+                named_dead.add(target_id)
+        picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=_first_item, reverse=True), limit, cap, fit, named_dead)
         picked = self._stage_dead(state, picked, limit)
         out = []
         for i, (_, o) in enumerate(picked, 1):
@@ -437,13 +443,14 @@ class ObjectivePlanner:
                     n += 1
         return n
 
-    def _add_followers(self, state, picked: list, follows: list, limit: int, cap: int, fit=None) -> list:
+    def _add_followers(self, state, picked: list, follows: list, limit: int, cap: int, fit=None, named_dead: set | None = None) -> list:
         """v0.41.158: a STRIKE / CAS under one or two SA-11 / SA-10 sites goes in behind their SEAD: it is offered only when today's list already has
         the DEAD job of every one of those sites (which _stage_dead turns into a SEAD / standoff package), so those sites have their radars busy
         (or blind) when it arrives. It takes a free slot, or the place of a lower-ranked job of a type that has another one. Judgment call: the
         public SEAD sources describe suppression as temporary and partial, so the job is held (turned back) when the SEAD verdict fails."""
         valve = int(getattr(self.d, 'sead_valve', SEAD_FAIL_VALVE))
         dead_sites = {o.target_id for _, o in picked if o.type == ObjectiveType.DEAD and not o.aim}
+        dead_sites |= named_dead or set()                          # (sites whose DEAD job the turn named earlier: the refill's call)
         for s, o in follows:
             sites = after_sites(o)
             if not sites or any(sid not in dead_sites or sid not in state.assets
