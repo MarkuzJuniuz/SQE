@@ -12,6 +12,7 @@ from . import CAMPAIGN_EXT, narrative
 from .aircraft import AIRCRAFT, STRIKE_CONDITIONAL
 from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
+from .jobfit import TurnFit
 from .loadouts import LoadoutLibrary
 from .merging import Merging
 from .models import AssetKind, BaseKind, Objective, ObjectiveType, Role
@@ -42,7 +43,7 @@ DAY1_EXTRA = 2               # S25: was 1 (Day 1 has half the turns now) # every
 
 # v0.41.345 (scaled tasking, Phase B): the day turn's package count follows the free strike pairs (`Session._turn_rate`); PACKAGES_PER_TURN stays the fallback for a caller with no ledger. Source for all four: Phase A probe 2026-11-10, judgment calls
 PAIRS_PER_PACKAGE = 5.7      # pairs a strike / DEAD / CAS package uses, escorts, TARCAP and SEAD included (Phase A: STRIKE 4.5 to 6.0, DEAD 6.4 to 7.0, CAS 5.3 to 5.8)
-TASK_SHARE = {1: 0.6, 2: 0.6, 3: 0.9}      # S25: doubled for 4-hour turns (was {1: 0.3, 2: 0.3, 3: 0.45}); L3 0.9 is far above the old Phase A guard of .5, watch the short slots # the share of the free strike pairs a turn commits (the rest waits for refit); L3 stays at or under .5 (Phase A: above it short slots rise)
+TASK_SHARE = {1: 0.6, 2: 0.6, 3: 0.9}      # the share of the free strike pairs a turn commits (the rest waits for refit). S25 doubled it for 4-hour turns (was {1: 0.3, 2: 0.3, 3: 0.45}); L3 0.9 is far above Phase A's guard of 0.5 (above it short slots rose): watch the short slots
 N_MIN = 1                    # a day turn plans at least one package, so the player always has something to fly
 N_MAX = {1: 4, 2: 8, 3: 8}   # S25: doubled for 4-hour turns (was {1: 2, 2: 4, 3: 4}) # safety cap (Phase A: at 5 folded packages one mission reached 44 to 50 jets); L1 is pool-limited anyway
 NIGHT_FACTOR = {1: 0.25, 2: 0.33, 3: 0.33}      # a night turn (night ops on) plans this share of a day turn's count: the old night_r / day_r of PACKAGES_PER_TURN (not measured in Phase A, probed in B+C)
@@ -384,7 +385,8 @@ class Session(Merging, SeadTiming):
         rr = self._rng(2)
         n = int(rate) + (1 if rr.random() < rate - int(rate) else 0)
         is_bomber = st.raids.get("bomber_turn") == turn
-        objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=n + (1 if is_bomber else 0), bomber=is_bomber, skip=self._retask_skip()) if (n > 0 or is_bomber) else []
+        objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=n + (1 if is_bomber else 0), bomber=is_bomber, skip=self._retask_skip(),
+                                             fit=TurnFit(st, base_L)) if (n > 0 or is_bomber) else []      # S204: only as many stand-off jobs as their jets can fly
         redair.assign_guards(st, self.d, objs)          # v0.41.10: red's patrols take stations over the SAM sites it expects to be attacked
         carry = self._carried(objs)
         job_ids = {o.id for o in carry} | {o.id for o in objs}       # S16a: the jobs the turn aims at (yesterday's postponed ones and the planner's list); raids, supply fillers and prep packages are not counted

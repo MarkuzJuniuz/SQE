@@ -78,6 +78,8 @@ At the start of each (day) turn the planner builds the turn's tasking list, in t
    day turn of Day 1 ("day 1 is brutal"; `engine.py`: `TASK_SHARE`, `PAIRS_PER_PACKAGE`, `N_MAX`, `DAY1_EXTRA`). A night turn plans a quarter (Level 1)
    or a third (Levels 2 and 3) of that. It takes the best-scoring job of each kind first, and no one kind may take more than 40% of the
    list, with the SAM wave (section 5) taken out first. The F-117A's night jobs (section 5) come on top of that list.
+   A stand-off job is picked only while jets that carry its weapon are still free (a Standoff DEAD counts its two HARM flights too, as the same
+   Vipers and Hornets fly them); otherwise the slot goes to the next target and the stand-off job waits for a later turn.
 4. **Packages are built from the jets that are free.** A package is crewed from what the ledger shows (section 7). A job
    that cannot be crewed (no stand-off jets free, a target out of reach, no SEAD seat) waits for the next turn, and the turn tries the planner's next
    candidates in its place (up to 12 tries), so it builds about as many packages as it aims at.
