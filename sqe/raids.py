@@ -384,6 +384,14 @@ def pick_aim(state, d, rng: random.Random):
                 out_.append((b_, aim_, w_))
         return out_
     ws = can_(candidates(state, kind)) or (can_(candidates(state, "field")) if kind != "field" else [])
+    if not ws:
+        # S207c: before giving up, every other kind is looked at: the ground fight first (troops in contact, garrisons), then supply (judgment call, S206 report).
+        for other in ("sector", "garrison", "supply"):
+            if other == kind:
+                continue
+            ws = can_(candidates(state, other))
+            if ws:
+                break
     if ws:
         ws = shy(state, d, ws)
     else:

@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.671, red looks at every kind of target before giving up
+When the kind of target red picked has nothing open, it now tries the other kinds before turning to your SAM sites, so an open target is not missed.
+
 ## v0.41.670, at Level 2 red raids far more often
 At Level 2 red could barely afford a raid. It now raids your SAM sites most days of the first week, and its bombers follow once your cover thins. Levels 1 and 3 are unchanged.
 
