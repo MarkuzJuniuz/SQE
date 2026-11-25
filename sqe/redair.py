@@ -22,7 +22,7 @@ Pure planning, no pydcs.
 from __future__ import annotations
 import math
 import random
-from . import barcap, clock, refit, reserve, runways
+from . import barcap, clock, fraction, refit, reserve, runways
 from .loadouts import ENEMY_FIGHTERS
 from .models import AssetKind, BaseKind
 from .routes import NM, bearing, dist, offset
@@ -182,7 +182,7 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
         if sqs:
             cands += [(w, ar, sqs) for ar in bc["red"] if ar["asset"] == w.base_asset_id]
     want = RED_CAP_SHARE[lvl][1 if night else 0] * len(cands)
-    want = int(want) + (1 if rng.random() < want - int(want) else 0)        # a share of the areas that can be up, a fraction is a seeded chance of one more
+    want = fraction.whole_units(state, "red_cap", turn, want)               # S207e: a share of the areas that can be up; the fraction is carried, not rolled
     order = list(range(len(cands)))
     rng.shuffle(order)
     up = 0
@@ -217,14 +217,18 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
     g = state.ground or {}
     contested = [i for i, (r, b) in enumerate(zip(g.get("red", []), g.get("blue", []))) if r >= 15 and b >= 15]
     sw_p = 0.0 if night else SWEEPS_PER_DAY[lvl] / max(1, DAY_TURNS)         # the day's sweeps spread over its day turns by a seeded chance (judgment call)
-    if contested and rng.random() < sw_p:
+    if contested and sw_p > 0 and fraction.whole_units(state, "red_sweep", turn, sw_p) >= 1:      # S207e: the day's sweeps come round by the carried fraction
         owner = {q.id: (w, q) for w in state.enemy_air for q in w.sqns}
         spare = [owner[sid] for sid in sorted(led.free) if led.room(sid, NWAVES) >= 2]
         if spare:
-            w, sq = spare[rng.randrange(len(spare))]
+            def most_free_jets(pair):
+                return (led.room(pair[1].id, NWAVES), rng.random())
+            w, sq = max(spare, key=most_free_jets)                    # S207e: the squadron with the most jets free
             wave = next(k for k in range(1, NWAVES + 1) if led.room(sq.id, k) >= 2)         # the first wave with a free pair
             led.take(sq.id, 2, wave)
-            c = g["centers"][rng.choice(contested)]
+            def size_of_fight(index):
+                return (min(g["red"][index], g["blue"][index]), rng.random())
+            c = g["centers"][max(contested, key=size_of_fight)]       # S207e: the sector where the most is being fought over
             lo = t0 + wave_open(wave) + rng.randrange(0, SWEEP_START_SPREAD_MIN + 1, 10)
             flights.append({"id": f"rf{turn}-{w.base_asset_id}-s", "kind": "SWEEP", "wing": w.base_asset_id, "type": sq.aircraft, "size": 2, "start": lo, "end": min(t1, lo + SWEEP_MIN),
                             "x": float(c[0]), "y": float(c[1]), "turn": turn, "wave": wave, "squadron": sq.id})

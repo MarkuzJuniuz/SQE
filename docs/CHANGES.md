@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.673, fewer dice in what each side tasks
+Which targets get the turn's jobs, red's raid targets, sizes, escorts and strategic-bomber strikes, and how many patrols and sweeps go up no longer come from chance: the best target is taken and fractions are carried to the next turn. Combat results, weather and what a side fails to spot are still uncertain.
+
 ## v0.41.672, red picks its raids by the state of the war, not by chance
 While your Patriots and HAWKs cover what red would hit, it goes after the air defences first (SEAD), then airfields. Once they are down it supports its ground forces: troops at the front, garrisons, then supply. At Level 1 the insurgents go for troops and garrisons first. At Levels 2 and 3 red raids more where it had been holding back.
 

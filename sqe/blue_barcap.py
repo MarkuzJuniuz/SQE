@@ -12,7 +12,7 @@ Judgment calls (no public source): CAP_SHARE (the part of the areas up in a turn
 from __future__ import annotations
 import math
 
-from . import barcap, clock
+from . import barcap, clock, fraction
 from .aircraft import AIRCRAFT
 from .words import cover_word
 from .models import BaseKind, ObjectiveType, Role
@@ -122,7 +122,7 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
         if sqs:
             cands += [(b, ar, sqs) for ar in bc["blue"] if ar["asset"] == b.id]
     want = share * len(cands)
-    want = int(want) + (1 if rng.random() < want - int(want) else 0)        # a share of the areas that can be up, a fraction is a seeded chance of one more
+    want = fraction.whole_units(state, "blue_cap", turn, want)              # S207e: a share of the areas that can be up; the fraction is carried, not rolled
     order = list(range(len(cands)))
     rng.shuffle(order)
     up = 0

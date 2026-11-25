@@ -16,7 +16,7 @@ from .jobfit import TurnFit
 from .loadouts import LoadoutLibrary
 from .merging import Merging
 from .models import SEAD_AIMS, AssetKind, BaseKind, Objective, ObjectiveType, Role
-from . import airwings, barcap as barcap_, clock, detection, raids, redair, refit, sams, ground, support_assets, tempo
+from . import airwings, barcap as barcap_, clock, fraction, detection, raids, redair, refit, sams, ground, support_assets, tempo
 from . import timeofday as _tod
 from .mission_builder import MissionBuilder, MissionOptions
 from .options import options_from_settings
@@ -264,7 +264,7 @@ class Session(Merging, SeadTiming):
                 stg_t = ((st.raids or {}).get("bomber_stage") or {})
                 stg_t = stg_t.get("turn") if stg_t.get("launch") == st.day else None      # v0.41.356 (Phase 10b part 1): the launch turn was drawn when the raid was staged (the turn before it plans the prep); an older stage has none: drawn now
                 bomber_turn = stg_t if stg_t in turns else (pick.choice(turns) if turns else st.turn)
-        keep = {k: v for k, v in (st.raids or {}).items() if k in ("carry", "sead_fail", "bomber_days", "bomber_stage", "bomber_off", "deck_out_to", "retask", "credit", "credit_in", "f117_last", "opening_strike")}      # S104c: + the F-117A cooldown clock (`f117.cooling`); S104d: + the opening strike's record (`f117.returning`)
+        keep = {k: v for k, v in (st.raids or {}).items() if k in ("carry", "sead_fail", "bomber_days", "bomber_stage", "bomber_off", "deck_out_to", "retask", "credit", "credit_in", "f117_last", "opening_strike", "carry_frac")}      # S104c: + the F-117A cooldown clock (`f117.cooling`); S104d: + the opening strike's record (`f117.returning`)
         st.raids = {**keep, "day": st.day, "surprise": 0, "surprise_by": {}, "carry": [], "bomber_turn": bomber_turn, "booked": {}}      # v0.41.341 (Phase 5b): the day's raids are drawn turn by turn in `plan_turn` (`raids.turn_raids`); "surprise" adds up the unwarned ones nobody flew, settled overnight
         bc = barcap_.ensure(st)                          # the day's BARCAP areas (made once a day); the standing patrols, guards and the AWACS / tanker windows are planned turn by turn (`plan_turn`, Phase 4b)
         bc["blue_flights"], bc["blue_cover"], bc["support_flights"], bc["blue_committed"] = [], {}, {}, []
@@ -400,8 +400,7 @@ class Session(Merging, SeadTiming):
         blue_barcap.plan_turn(st, self.d, turn, t0, base_L, self._rng(81), wins)
         # v0.41.345 (scaled tasking, Phase B): the packages of the turn follow the free strike pairs the ledger has left AFTER the hold, the support windows and the standing patrols, so the job list is planned last
         rate = self._turn_rate(turn, base_L)
-        rr = self._rng(2)
-        n = int(rate) + (1 if rr.random() < rate - int(rate) else 0)
+        n = fraction.whole_units(st, "blue_jobs", turn, rate)          # S207e: the fraction of the rate is carried to the next turn, not rolled
         is_bomber = st.raids.get("bomber_turn") == turn
         pb = PackageBuilder(st, self.d)
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=n + (1 if is_bomber else 0), bomber=is_bomber, skip=self._retask_skip(),
