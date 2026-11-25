@@ -25,6 +25,7 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 
 # S90 J5 (the theatre hooks): OPTIONAL pack keys. Each is read in ONE place and a pack without it gets today's Caucasus constant, so the Caucasus is byte-identical:
 #   red_roster {level: {type: jets}}      -> redroster.allocate(roster=...)           (default redroster.ROSTERS[level])
+#   wing_weight_level {level: {field: w}} -> scenario.py, the allocation weights of that level (S195; default `wing_weight`; the random draws keep `wing_weight`)
 #   level_overrides {level: {field: v}}   -> difficulty.get(level) for this theatre   (default: the level as it is)
 #   front.air_fields [field key, ...]     -> war.mountain_fields()                    (default war.MOUNTAIN_FIELDS)
 #   front.defeat_bases N                  -> ground.defeat_bases()                    (default ground.DEFEAT_BASES)
@@ -109,6 +110,14 @@ def _check_hooks(d: dict, src) -> None:
             for t, n in roster.items():
                 if not isinstance(t, str) or isinstance(n, bool) or not isinstance(n, int) or n < 0:
                     bad(f"red_roster level {lv}: {t!r}: {n!r} must be an aircraft type and a whole number of jets, 0 or more")
+    if "wing_weight_level" in d:
+        levels_of("wing_weight_level", d["wing_weight_level"])
+        for lv, weights in d["wing_weight_level"].items():
+            if not isinstance(weights, dict) or not weights:
+                bad(f"wing_weight_level level {lv} must be a non-empty {{field id: weight}} object")
+            for field_id, w in weights.items():
+                if field_id not in d["wing_weight"] or isinstance(w, bool) or not isinstance(w, (int, float)) or w <= 0:
+                    bad(f"wing_weight_level level {lv}: {field_id!r}: {w!r} must be a field of wing_weight and a weight above 0")
     if "level_overrides" in d:
         levels_of("level_overrides", d["level_overrides"])
         import dataclasses

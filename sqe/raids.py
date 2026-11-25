@@ -71,9 +71,11 @@ POOL_PARTNERS = 1             # ...one partner wing for the raiders, one for the
 POOL_MAX_RAIDERS = 16         # ...a raid never flies more raiders than this (the mission builder's mass cap; DCS AI count)
 TEMPO_STOP_SHARE = 0.5        # v0.41.171 (XO 2026-10-28): half of the AIR tempo is added to the chance a surprise raider is stopped (+20 points at the +40 cap; judgment call)
 SEAD_JETS = {1: 4, 2: 4, 3: 8}   # B2 (XO 2026-11-21): Level 3 is 8, was 6 (JUDGMENT CALL: it restores part of the salvo the Su-34 carried before S106 removed it, 2 Kh-58U / Kh-31P a jet instead of 4; B4's balance sim checks it; the mass cap POOL_MAX_RAIDERS 16 still limits a whole raid). S36b (XO 2026-11-11): the SEAD package red sends at a blue SAM site: this many Su-24M with Kh-31P or Kh-58U (by level, B2: Syria's Su-17M4 with Kh-58U too), escorted by SEAD_ESCORT_RATIO fighters a jet; the only way red opens a covered target. S43 (XO 2026-11-11, "red is almost always outnumbered"): Level 3 only, 4 to 6 jets, judgment call (measured: SEAD raids were 58 to 74% of all raids and 19% of them had red at least equal to blue's jets; with 6 jets and 1:1 escorts 58%)
-SEAD_ESCORT_RATIO = {1: 0.5, 2: 1.0, 3: 1.0}   # S43: escorts per SEAD jet (S36b: half as many, so a 4-jet HAWK package was 6 jets against blue's 10 to 12); Level 3 a fighter for every Kh-31P jet (judgment call). S66 (XO 2026-11-13): Level 2 the same 1:1 (it was 0.5)
-SEAD_SWEEP_MAX = {1: 0, 2: 8, 3: 8}   # S66 (XO 2026-11-13): the fighter sweep that flies ahead of a SEAD raid: two 4-ships when red has the jets, one 4-ship when it has four, none below that; Level 1 none. Its only job is to take the attention of blue's intercepts so the escorts are not swamped; blue's response is not changed. JUDGMENT CALL (no source says a red-style force sweeps ahead of its SEAD by name): Western COMAO practice puts the fighter sweep first, then SEAD / jammers, then the strikers (secondary source migflug.com, firmness MEDIUM; the primary USAF texts AFDD 3-01 / AFTTP 3-3 not reached), and the Soviet first wave cleared corridors with fighters ahead of the bombers (the 1972 CIA paper cia.gov/readingroom/docs/1972-10-01d.pdf could NOT be read on 2026-11-13, firmness unverified, not quoted as a source)
+SEAD_ESCORT_RATIO = {1: 0.5, 2: 0.5, 3: 0.5}   # S43: escorts per SEAD jet (S36b: half as many, so a 4-jet HAWK package was 6 jets against blue's 10 to 12); Level 3 a fighter for every Kh-31P jet (judgment call). S66 (XO 2026-11-13): Level 2 the same 1:1 (it was 0.5) S195 (XO 2026-11-25): Levels 2 and 3 are 0.5 too: the doctrine figure for red's mass raids, one escort per two strikers (archive/red-mass-doctrine-plan.md item 2; the carrier raid flies it, bombers.ESCORT_PER_BOMBER); the fighter sweep makes up the difference (SEAD_SWEEP_*, `sweep_target`)
+SEAD_SWEEP_MAX = {1: 0, 2: 16, 3: 16}   # S66 (XO 2026-11-13): the fighter sweep that flies ahead of a SEAD raid: two 4-ships when red has the jets, one 4-ship when it has four, none below that; Level 1 none. Its only job is to take the attention of blue's intercepts so the escorts are not swamped; blue's response is not changed. JUDGMENT CALL (no source says a red-style force sweeps ahead of its SEAD by name): Western COMAO practice puts the fighter sweep first, then SEAD / jammers, then the strikers (secondary source migflug.com, firmness MEDIUM; the primary USAF texts AFDD 3-01 / AFTTP 3-3 not reached), and the Soviet first wave cleared corridors with fighters ahead of the bombers (the 1972 CIA paper cia.gov/readingroom/docs/1972-10-01d.pdf could NOT be read on 2026-11-13, firmness unverified, not quoted as a source) S195: up to 16 at Levels 2 and 3 (four 4-ships): with the escorts halved the sweep takes the fighters up to what the raid flew before (`sweep_target`)
 SEAD_SWEEP_MIN = 4            # ...fewer spare fighters than this and there is no sweep (the raid still flies: the sweep is never a reason not to plan one; it takes only the jets left after the escorts are booked)
+SEAD_SWEEP_BASE = 8           # S195: the sweep a SEAD raid always had (two 4-ships) ...
+SEAD_FIGHTERS_PER_JET = 1.0   # ... and the escorts it had before S195, one per SEAD jet; the sweep now makes up what the escorts lost: jets x (this - the level's SEAD_ESCORT_RATIO) + SEAD_SWEEP_BASE (judgment call, XO 2026-11-25: "evened out by fighter sweepers")
 SEAD_RAID_AC_MAX = 40         # ...a SEAD raid (SEAD jets + escorts + sweep) never flies more aircraft than this: the sweep is cut first (judgment call: a full Patriot raid at Level 3 is 16 + 16 + 8)
 SEAD_PATRIOT_PACKAGES = 3     # ...a full-strength Patriot gets three such packages in one raid, anything else one. S59b (XO 2026-11-12), judgment call: a Patriot site has 8 launchers x 4 missiles and fires about two at each ARM, so one coordinated salvo of three packages is meant to exhaust it; the HAWK fell to two packages in run 14-45-46, the Patriot did not. B2 (XO 2026-11-21): the comment was tuned for 64 Kh-31P at Level 3 from Su-34s with 4 a jet; S106 removed the Su-34, and a Su-24M or Su-17M4 carries 2 a jet (`loadouts.ARM_PER_JET`, `ARM58_PER_JET`), so three packages of 8 jets (SEAD_JETS, Level 3) are 24 jets and 48 missiles on paper, but a raid never flies more than POOL_MAX_RAIDERS 16 jets: a full Patriot is 16 jets in two packages and 32 missiles (half Kh-58U, half Kh-31P), Level 2 three packages of 4 are 12 jets and 24 missiles (Level 1 has no SEAD, `raid_arm` 0)
 SEAD_PATRIOT_MIN_PACKAGES = 2  # S59b (XO 2026-11-12, "at least 2 but ideally 3 per patriot"): a full-strength Patriot raid that cannot field this many packages (after pooling a second wing) is not planned that turn, red keeps the jets (judgment call: one package, 8 Kh-31P at L2, is shot down and wastes a third of what red could send)
@@ -660,22 +662,29 @@ def sweep_members(ex: dict) -> list:
     return [m for m in out if m[2] > 0]
 
 
-def _book_sweep(state, bw, ax: float, ay: float, key: str, level: int, room: int):
-    """S66: the fighters for the sweep ahead of a SEAD raid on (ax, ay), looked for AFTER the escorts are booked (it sees only the jets they left): 8 (two 4-ships) if the jets are there, else 4, else None. The lead wing is
-    `_escort_for`'s (the nearest with that many of one type free, else the nearest with a pair) and one partner wing tops it up (`_pool_escorts`, as the escorts do: red's free fighters lie in lots of one to three a type).
-    `room` = the aircraft the raid may still add (`SEAD_RAID_AC_MAX`). Own random stream, so the escort draw is what it was. Nothing is booked here.
-    -> (lead wing, lead type, lead n, [{"wing", "type", "n"} partners], total) | None."""
-    cap = min(SEAD_SWEEP_MAX.get(level, 0), room)
-    for n in (8, 4):
-        if n > cap or n < SEAD_SWEEP_MIN:
-            continue
+def sweep_target(sead_jets: int, level: int) -> int:
+    """S195 (XO 2026-11-25): the fighters the sweep ahead of a SEAD raid should hold. The escorts are one per two jets now (doctrine), so the sweep makes up the fighters the one-per-jet escorts used to
+    add: `SEAD_SWEEP_BASE` + jets x (`SEAD_FIGHTERS_PER_JET` - the level's escort ratio), cut down to whole 4-ships. 16 jets -> 16, 12 -> 12, 8 -> 12 (Level 2's package of 4 -> 8)."""
+    ratio = SEAD_ESCORT_RATIO[max(1, min(3, int(level)))]
+    target = SEAD_SWEEP_BASE + int(round(sead_jets * (SEAD_FIGHTERS_PER_JET - ratio)))
+    return target - target % 4
+
+
+def _book_sweep(state, bw, ax: float, ay: float, key: str, level: int, room: int, target: int = 8):
+    """S66: the fighters for the sweep ahead of a SEAD raid on (ax, ay), looked for AFTER the escorts are booked (it sees only the jets they left): `target` (S195: `sweep_target`, up to `SEAD_SWEEP_MAX`) if the jets
+    are there, then each smaller 4-ship size down to `SEAD_SWEEP_MIN`, else None. The lead wing is `_escort_for`'s (the nearest with that many of one type free, else the nearest with a pair) and one partner wing tops
+    it up (`_pool_escorts`, as the escorts do: red's free fighters lie in lots of one to three a type). `room` = the aircraft the raid may still add (`SEAD_RAID_AC_MAX`). Own random stream, so the escort draw is
+    what it was. Nothing is booked here. -> (lead wing, lead type, lead n, [{"wing", "type", "n"} partners], total) | None."""
+    cap = min(SEAD_SWEEP_MAX.get(level, 0), room, target)
+    n = cap - cap % 4
+    while n >= SEAD_SWEEP_MIN:
         sw, avail = _escort_for(state, bw, ax, ay, random.Random(key), want=n)
-        if sw is None:
-            continue
-        n0 = min(n, avail - avail % 2)
-        part = _pool_escorts(state, {bw.base_asset_id, sw[0].base_asset_id}, sw[0], ax, ay, n - n0) if n0 < n else []
-        if n0 + sum(p["n"] for p in part) >= n:
-            return sw[0], sw[1], n0, part, n
+        if sw is not None:
+            n0 = min(n, avail - avail % 2)
+            part = _pool_escorts(state, {bw.base_asset_id, sw[0].base_asset_id}, sw[0], ax, ay, n - n0) if n0 < n else []
+            if n0 + sum(p["n"] for p in part) >= n:
+                return sw[0], sw[1], n0, part, n
+        n -= 4
     return None
 
 
@@ -767,7 +776,7 @@ def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
         redair.spend(state, p["wing"], p["n"])
     escorts += sum(p["n"] for p in esc_pool)
     lvl_ = max(1, min(3, int(getattr(d, "level", 3))))
-    swp = _book_sweep(state, bw, ax, ay, f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:sweep", lvl_, SEAD_RAID_AC_MAX - nb - escorts)          # S66: what is left after the escorts
+    swp = _book_sweep(state, bw, ax, ay, f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:sweep", lvl_, SEAD_RAID_AC_MAX - nb - escorts, sweep_target(nb, lvl_))          # S66: what is left after the escorts
     if swp is not None:
         sw_w, sw_t, sw_n0, sw_pool, sw_n = swp
         jets += [[sid, n, "swp"] for sid, n in redair.take_ready(state, sw_w, (sw_t,), sw_n0)]

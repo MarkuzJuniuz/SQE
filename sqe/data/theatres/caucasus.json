@@ -170,12 +170,15 @@
     },
     "red_roster": {
         "2": {"MiG_31": 6, "MiG_29S": 28, "MiG_29A": 44, "MiG_23MLD": 26, "Su_25": 70, "Su_24M": 66},
-        "3": {"MiG_31": 12, "Su_27": 76, "MiG_29S": 40, "MiG_29A": 24, "Su_25": 28, "Su_24M": 104}
+        "3": {"Su_27": 88, "MiG_29S": 64, "Su_25": 28, "Su_24M": 104}
     },
     "red_fill": {
         "1": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_gelen": 8},
         "2": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_krymsk": 40, "ab_maykop": 40, "ab_nalchik": 13, "ab_beslan": 11, "ab_gelen": 9, "ab_minvody": 20, "ab_anapa": 64, "ab_krasnodar": 39},
         "3": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_krymsk": 40, "ab_maykop": 40, "ab_nalchik": 13, "ab_beslan": 11, "ab_gelen": 9, "ab_minvody": 20, "ab_anapa": 64, "ab_krasnodar": 39}
+    },
+    "wing_weight_level": {
+        "3": {"ab_sukhumi": 64, "ab_gudauta": 88, "ab_nalchik": 52, "ab_sochi": 192, "ab_beslan": 44, "ab_minvody": 80}
     },
     "wing_weight": {
         "ab_sukhumi": 16,

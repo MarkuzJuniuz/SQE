@@ -280,6 +280,8 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         p = ap(apt)
         add(aid, nm, AssetKind.AIRFIELD, p.x, p.y, val, apt, tier=FIELD_TIER.get(aid, 3))
     ww = {k: v for k, v in th["wing_weight"].items() if k in live}
+    level_weights = (th.get("wing_weight_level") or {}).get(str(d.level))                           # S195: this level's own allocation weights (Caucasus Level 3: the fields near the front first); `ww` stays the one the random draws below use
+    ww_alloc = {k: level_weights.get(k, v) for k, v in ww.items()} if level_weights else ww
     # v0.41.142 (Campaign Revamp Stage A3): red's jets come from the level's roster (redroster.py), not a total and random types. The old random draw per
     # field is made and dropped so the campaign's other random draws (SAM layouts and so on) stay as they were.
     for aid in ww:
@@ -290,7 +292,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         if aid in cap_all:
             cap_all[aid] = n_ if not cap_all[aid] else min(cap_all[aid], n_)
     cap_hv = {aid: _slots(t, apt_of[aid], ["Su_24M", "Su_27", "MiG_31"]) for aid in ww}
-    plan_r = redroster.allocate(d.level, list(ww), ww, FIELD_TIER, cap_all, cap_hv, roster=(th.get("red_roster") or {}).get(str(d.level)))          # S90 J5: the pack's roster, else redroster.ROSTERS[level]
+    plan_r = redroster.allocate(d.level, list(ww), ww_alloc, FIELD_TIER, cap_all, cap_hv, roster=(th.get("red_roster") or {}).get(str(d.level)))          # S90 J5: the pack's roster, else redroster.ROSTERS[level]
     for aid, types in plan_r.items():
         sqns = [RedSquadron(i_, n_, t_, c_) for i_, n_, t_, c_ in redroster.cut(aid, st.assets[aid].name, types, d.red_squadron_max)]
         st.enemy_air.append(EnemyAirWing(aid, list(dict.fromkeys(q.aircraft for q in sqns)), len(sqns), sqns))
