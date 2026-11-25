@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.654, red's SEAD raids: doctrine escorts, a bigger sweep, and Caucasus fighters near the front
+At Levels 2 and 3 red's SEAD raids fly one escort fighter for every two jets (the doctrine figure), and the fighter sweep ahead of them grows (up to 16) so the raid keeps its fighter strength. On the Caucasus at Level 3 red's fighters are MiG-29S and Su-27 only, and most of them now sit on the fields near the front, so red can staff the raids on Senaki (before, its raids there were often short of fighters and sometimes did not come at all). Level 1 is unchanged.
+
 ## v0.41.653, red raid groups no longer start on top of each other
 In a big merged mission with a red raid already under way at the start, several of its groups could spawn at exactly the same point and collide in the first seconds (11 of 20 raid aircraft in a test). A group that would start where another raid group starts now flies about 1,000 ft lower than the one before it.
 

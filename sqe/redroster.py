@@ -166,7 +166,10 @@ def allocate(level: int, fields: list, weight: dict, tier: dict, cap_all: dict, 
         if t == "MiG_31":
             desire = {f: weight[f] * MIG31_SHARE.get(tier.get(f, 3), 0.5) for f in fields}
         elif t == "Su_27":
-            desire = {f: weight[f] * (1.0 - MIG31_SHARE.get(tier.get(f, 3), 0.5)) for f in fields}
+            if roster.get("MiG_31", 0) > 0:
+                desire = {f: weight[f] * (1.0 - MIG31_SHARE.get(tier.get(f, 3), 0.5)) for f in fields}
+            else:                                                       # S195: a roster with no MiG-31 (Caucasus Level 3: only MiG-29S and Su-27): the Su-27 follows the field weights alone
+                desire = {f: float(weight[f]) for f in fields}
         elif t == "Su_24M":                                             # the SEAD / DEAD / strike supply sits deeper, away from blue's reach: weight x (tier - 1)
             desire = {f: weight[f] * max(1, tier.get(f, 3) - 1) for f in fields}
         else:

@@ -33,7 +33,7 @@ You pick the level when you start a campaign. It sets how strong red is and how 
 | | Level 1, Insurgent | Level 2, Regional power | Level 3, Near-peer |
 |---|---|---|---|
 | Red airfields | 4: Sukhumi, Gudauta, Sochi, Gelendzhik | 10, the whole red coast and the north | 10, the whole red coast and the north |
-| Red aircraft at the start | 94, old types kept supplied by a sponsor (MiG-21, MiG-23, Su-25, Su-24M) | 240, mixed (MiG-31, MiG-29, MiG-23, Su-24M, Su-25), plus the Mozdok bombers and escorts | 284, modern (MiG-31, MiG-29S, Su-27, Su-24M, Su-25), plus the Mozdok bombers and escorts |
+| Red aircraft at the start | 94, old types kept supplied by a sponsor (MiG-21, MiG-23, Su-25, Su-24M) | 240, mixed (MiG-31, MiG-29, MiG-23, Su-24M, Su-25), plus the Mozdok bombers and escorts | 284, modern (MiG-29S, Su-27, Su-24M, Su-25; on the Caucasus no MiG-31 or MiG-29A), plus the Mozdok bombers and escorts |
 | Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA | SA-10, SA-11, SA-6, SA-15, SA-19 |
 | Air defence integration (`iads`) | 0.15 | 0.55 | 0.90 |
 | Red AI skill | Average | Good | High |
@@ -221,8 +221,9 @@ strike: DCS's Kh-22 is an anti-ship missile and the AI does not fire it at land)
 Kh-31P (50 nm), as described below; red's Tu-22M3 fields (Mozdok, Damascus, Bassel Al-Assad) are repaired in two
 turns after a runway hit, see Runways.
 Red's **SEAD raids** go after blue's Patriot and HAWK sites with anti-radiation missiles: a full Patriot is attacked
-by three packages (two at Level 3, where a raid never flies more than 16 jets), a HAWK by two, escorted and preceded (at
-Levels 2 and 3) by a fighter sweep that tries to draw blue's fighters away. A package is 4 jets (8 at Level 3) with two
+by three packages (two at Level 3, where a raid never flies more than 16 jets), a HAWK by two, escorted by one fighter for
+every two jets (the figure from red's mass-raid doctrine) and preceded (at Levels 2 and 3) by a fighter sweep that makes up the rest,
+up to 16 aircraft (16 jets: 8 escorts and 16 sweep; 12: 6 and 12; 8: 4 and 12), and tries to draw blue's fighters away. A package is 4 jets (8 at Level 3) with two
 missiles a jet. Every package fires the **Kh-31P** from about 50 nm out, and the launch times are set so that every package's
 missiles reach the site together. Red works from the **outside in**: a SEAD raid goes only for the sites it can attack
 without another live Patriot reaching its attack point (the outermost ones); a site behind them is raided once the ones
