@@ -211,6 +211,8 @@ share of the jets, sized to its parking, and the fields have room left for squad
 Level 1, and 14 at Levels 2 and 3 (about 10 to 12 is the Soviet and Russian norm, so these are big squadrons), so a field flies one or two types in full squadrons, not
 two or three jets of everything. The Forces screen lists them with in-universe names such as "Sochi-Adler MiG-21Bis Sqn #2"; a squadron that withdraws keeps its name.
 
+At Level 2 red raids your SAM sites most days of a war's first week (a few a day at the start) and its bombers follow as your cover thins.
+
 A **raid** is a package that red actually plans: a Su-24M strike on a field, a supply site, a garrison or a
 troop column, with escorts. Whether a raid goes in depends on whether red has the jets: nothing is rolled once you click
 Fly. Some raids are **unwarned** (25%, 35% and 45% at Levels 1, 2, 3) and come with no warning. Blue sees a raid when an AWACS
