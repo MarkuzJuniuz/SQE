@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.670, at Level 2 red raids far more often
+At Level 2 red could barely afford a raid. It now raids your SAM sites most days of the first week, and its bombers follow once your cover thins. Levels 1 and 3 are unchanged.
+
 ## v0.41.669, blue tasks by doctrine, not for variety
 The planner no longer holds any job type to 40% of the list or saves a place for one of each. After the SAM wave and close air support for troops in contact (up to two a turn), it takes jobs in order of how much they matter: air defences first, then radars, supply and the rest. Mid-war you will see more strikes; rear garrisons get close air support less often.
 

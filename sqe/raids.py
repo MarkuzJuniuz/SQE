@@ -107,7 +107,10 @@ SECTOR_HIT = 4.0              # friendly sector strength lost per aircraft that 
 GARRISON_SHIELD = 0.25        # a field's garrison takes this share off the damage its defences would suffer
 RED_RAID_NIGHT = 0.5          # v0.41.341 (plan Phase 5b): a night turn draws half the raid chance of a day turn (judgment call: red's bombers and their escorts fly less at night; XO tunes it in Phase 13)
 # v0.41.345 (scaled tasking, Phase C): the raid chance follows red's free attack pairs. Source: Phase A probe 2026-11-10 (free attack pairs per turn in red_air["free"]), judgment calls
-RAID_SHARE = {1: 0.0045, 2: 0.0045, 3: 0.12}   # S42 (v0.41.401): L3 0.06 to 0.12 because red has 18 Su-25 now, not 130 (the free attack jets fell from about 90 to 31 a turn); cadence 3.6 to 4.6 a day, 0.17 gives no more (the wings, not the credit, limit it); S37: the share of red's free ATTACK jets (`free_attack_jets`) a turn adds to its raid credit (judgment calls, tuned with the probe `.private/probes/s37`: L1 0.1 raids a day as before, L2 about 0.5, L3 about 4: past 0.06 the L3 raids do not rise, no aim or no wing is left)
+# S37: the share of red's free ATTACK jets (`free_attack_jets`) a turn adds to its raid credit. L1 and L3 as tuned then and in S42 (L3: cadence follows the wings, not the credit).
+# S207b: L2 0.0045 -> 0.018. S206 measured L2 red in debt 80 to 100 % of turns (0.1 to 0.8 raids a day): its only target is a blue SAM site (every other one is under cover) and the share was set for 2-jet raids.
+# Judgment calls, tuned with `probes/s206/red_l2_sweep.py` (about 3 to 5 raids a day early, under 1 late; blue still wins every skip-only war).
+RAID_SHARE = {1: 0.0045, 2: 0.018, 3: 0.12}
 RAID_CREDIT_TURNS = 2.0                        # S37: unspent credit is kept for the next turns but never beyond this many turns' income
 RAID_MAX_PER_TURN = 4                          # S37: the most raids red builds in one turn
 TURNS_PER_DAY = clock.DAY_MIN // clock.TURN_MIN      # 12: the level's raid_rate (raids a day) is spread over the day's turns
@@ -1051,6 +1054,15 @@ def tu_strike(state, d, rng: random.Random, turn: int):
     return o, bk
 
 
+def raid_cost(plan: dict, d) -> int:
+    """What a booked raid takes off red's raid credit: its bombers; at Level 2 a SEAD raid only ONE package of jets (S207b: a SEAD raid books 8 to 12 jets and
+    left red in debt for days, so it never got blue's SAMs down and its bombers never flew). Level 3 pays in full: its raids moved by up to a third per phase
+    when it did not (measured), and its limit is blue's SAM cover, not credit."""
+    if plan.get("sead") and int(getattr(d, "level", 2)) == 2:
+        return min(plan["bombers"], sead_n(d))
+    return plan["bombers"]
+
+
 def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) -> tuple:
     """-> (objectives of the raids red plans THIS turn; number of unwarned raids that could not be built, settled overnight). S37: by JET BUDGET, not by dice: the turn earns raid credit (`raid_income`,
     `RAID_SHARE` of red's free attack jets) and red builds raids (`pick_aim`, `plan_raid`) while the credit is above zero, at most `RAID_MAX_PER_TURN`; each raid costs the jets it books (the raiders, or the SEAD jets of a SAM raid)
@@ -1098,7 +1110,7 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
         booked[o.id] = bk
         warned.append(o)
         n_made += 1
-        credit -= bk["bombers"]
+        credit -= raid_cost(bk, d)
         if bk.get("sead") and not unwarned and state.raids is not None:
             # S183 rule 2: at Level 3 the raid strips a second layer: wave 2 is its own booked raid, planned from the jets wave 1 left (it does not count against RAID_MAX_PER_TURN)
             second_oid = f"obj-t{turn}-r{len(warned) + 1}"
