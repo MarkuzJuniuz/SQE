@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.660, red fighters need their own radar to go after an F-117A
+Red's patrols and alert pairs were ordered onto any blue jet in reach as long as red had an early-warning radar or an AWACS alive, the F-117A included. Against an F-117A they now need to pick it up on their own radar first.
+
 ## v0.41.659, the Turnpoints menu entries are "Turnpoint 1", "Turnpoint 2", ...
 The entries under F10 > Other > Turnpoints now carry the same words in every mission, so you can bind voice commands to them. Which leg the point is on shows in the message after you pick it.
 
