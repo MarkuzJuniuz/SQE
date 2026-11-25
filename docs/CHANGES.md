@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.667, the release build is hardened
+The workflow that builds the release now runs pinned versions of its tools, asks for write access only where it publishes, and no longer pastes a tag name into a script. Nothing changes in the program.
+
 ## v0.41.666, a dropped job is replaced by a new one
 When a listed job cannot be crewed, the turn now tries other targets (not the same list again), only ones the jets left over can fly, and may add a strike behind a SEAD package that has been built. You see more jobs, mostly early in a war; at Level 3 blue also loses more jets flying them.
 
