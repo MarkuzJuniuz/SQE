@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.655, two settings get new names
+In Settings, "Splash Damage" is now "Blast Wave" and the "ECM Script" group is now "Jammer Model" (its Install button reads Install Jammer Script, and the status line Jammer script). Nothing else changes: your saved choices, the installed script and the F10 menu calls (SQE ECM Switch, SQE ECM OFF) are as they were. Both are still SQE's own code; the guide and the Settings text credit the community scripts the ideas come from.
+
 ## v0.41.654, red's SEAD raids: doctrine escorts, a bigger sweep, and Caucasus fighters near the front
 At Levels 2 and 3 red's SEAD raids fly one escort fighter for every two jets (the doctrine figure), and the fighter sweep ahead of them grows (up to 16) so the raid keeps its fighter strength. On the Caucasus at Level 3 red's fighters are MiG-29S and Su-27 only, and most of them now sit on the fields near the front, so red can staff the raids on Senaki (before, its raids there were often short of fighters and sometimes did not come at all). Level 1 is unchanged.
 
