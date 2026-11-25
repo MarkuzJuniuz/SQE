@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .radio import RadioLayout
+from .settings import f14_turnpoints_installed
 
 
 @dataclass
@@ -40,6 +41,7 @@ class MissionOptions:
     damage_calls: bool = True           # v0.41.215: damage / mayday calls from the other aircraft
     ecm_status: bool = True             # v0.41.213: the on-screen ECM messages (F-16C lamp, FC3 F10 calls); only with ecm_script
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
+    f14_turnpoints: bool = False        # the F-14B Turnpoints export script is installed: the player's F-14B gets the F10 Turnpoints menu
     dormant_sites: bool = False         # S89: red SAM sites on the route start late-activated and wake by detector (see `_wire_dormant`)
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
     wreck_static_weight: float = 0.25   # how much of a live unit one wreck or one live static building counts toward the unit limit (v0.41.221: the buildings too; renamed in S88 R2)
@@ -98,6 +100,8 @@ def options_from_settings(options: MissionOptions, settings, *, ai_test: bool, f
         setattr(options, field_name, cast(value))
     options.hot_runway_own_field = options.hot_runway_starts and bool(getattr(settings, "hot_runway_own_field", False))
     options.wreck_static_weight = max(5, int(getattr(settings, "wreck_static_weight_pct", 25))) / 100.0
+    # not a saved setting: installed or not, on this PC, when the mission is built
+    options.f14_turnpoints = f14_turnpoints_installed(getattr(settings, "dcs_saves", ""))
     options.player_is_ai = bool(ai_test)
     options.full_map = bool(full_map)
     if full_map:

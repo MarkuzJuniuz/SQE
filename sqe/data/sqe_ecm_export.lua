@@ -2,10 +2,11 @@
 --
 -- WHAT IT DOES: four times a second (v0.41.219) it reads your jet's ECM lamp (a cockpit argument) and writes  Saved Games\DCS\Logs\SQE_ecm.flag  as
 --     <0 or 1> <model time>
+-- and the same line into the sibling  Saved Games\DCS_Server\Logs  when that folder exists: a mission on the dedicated server on this PC reads that one.
 -- The SQE results hook (the mission-side script) reads that file when a radar missile is fired at you. A missing file, a stale one (older than 5 s) or a
 -- jet this script does not know means SQE's old rule: your jammer counts as on over the attack leg only. So without this script you lose nothing.
 -- The file is written when the lamp CHANGES, plus a heartbeat once a second so the hook's 5 s freshness check stays satisfied (about one small write a second).
--- It changes nothing in DCS, it reads no keys, and it writes only that one file.
+-- It changes nothing in DCS, it reads no keys, and it writes only that flag.
 --
 -- JETS: the F-16C is live (argument 102, "ECM Light (green)", confirmed in XO's 2026-10-28 log with a pod hung). The F/A-18C, F-14B and A-10C arguments below are
 -- from DCS-BIOS and NOT flown: they stay OFF (enabled = false) until XO has flown them with and without a pod. FC3 jets (F-15C) have no readable lamp: use
@@ -31,11 +32,28 @@ local SQE_ECM = { file = nil, name = nil, next_t = 0, last = nil, last_w = -10 }
 local POLL_S, BEAT_S = 0.25, 1.0
 local prev_start, prev_stop, prev_next = LuaExportStart, LuaExportStop, LuaExportActivityNextEvent
 
-local function path() return lfs.writedir() .. [[Logs\SQE_ecm.flag]] end
+-- "C:\Users\You\Saved Games\DCS\" -> "C:\Users\You\Saved Games\"
+local function parent_folder(path)
+  return (string.gsub(path, "[^\\/]+[\\/]*$", ""))
+end
+
+-- Single player reads the flag in your own folder; a mission on the dedicated server on this PC reads the one in the server's folder.
+local function paths()
+  local own = lfs.writedir()
+  return { own .. [[Logs\SQE_ecm.flag]], parent_folder(own) .. [[DCS_Server\Logs\SQE_ecm.flag]] }
+end
+
+local function remove_flags()                           -- a flag left from an earlier flight must never be read as this one's
+  for _, flag_path in ipairs(paths()) do
+    pcall(os.remove, flag_path)
+  end
+end
 
 local function write_flag(on, t)
-  local ok, f = pcall(io.open, path(), "w")
-  if ok and f then f:write(string.format("%d %.2f\n", on and 1 or 0, t)); f:close() end
+  for _, flag_path in ipairs(paths()) do
+    local ok, f = pcall(io.open, flag_path, "w")       -- no server folder: the open gives nothing and that copy is skipped
+    if ok and f then f:write(string.format("%d %.2f\n", on and 1 or 0, t)); f:close() end
+  end
 end
 
 function LuaExportStart()
@@ -43,11 +61,11 @@ function LuaExportStart()
   local ok, n = pcall(function() return LoGetSelfData().Name end)
   SQE_ECM.name = ok and n or nil
   SQE_ECM.next_t = 0; SQE_ECM.last = nil; SQE_ECM.last_w = -10
-  pcall(os.remove, path())                              -- a flag left from an earlier flight must never be read as this one's
+  remove_flags()
 end
 
 function LuaExportStop()
-  pcall(os.remove, path())
+  remove_flags()
   if prev_stop then pcall(prev_stop) end
 end
 

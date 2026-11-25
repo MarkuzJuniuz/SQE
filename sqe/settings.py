@@ -201,56 +201,66 @@ class AppSettings:
         (config_dir() / "settings.json").write_text(json.dumps(d, indent=2))
 
 
-# ---- ECM export script: copied to Saved Games\DCS\Scripts and hooked into Export.lua (v0.41.219, XO 2026-10-31) -------------
-ECM_MARK = "--[[SQE ECM EXPORT]]"
-ECM_LINE = ECM_MARK + "dofile(lfs.writedir() .. [[Scripts\\sqe_ecm_export.lua]])"
-_ECM_ACTIVE = re.compile(r"^[ \t]*(?:--\[\[SQE ECM EXPORT\]\])?[ \t]*dofile\(.*sqe_ecm_export\.lua", re.M)
-_ECM_BUNDLED = Path(__file__).resolve().parent / "data" / "sqe_ecm_export.lua"
+# ---- export scripts: copied to Saved Games\DCS\Scripts and hooked into Export.lua (v0.41.219, XO 2026-10-31) ------------------
+class _ExportScript:
+    """One script SQE installs: its file in `data/`, the mark of our line in Export.lua, and the flag or request file it uses in Logs."""
+
+    def __init__(self, mark: str, file_name: str, log_file: str):
+        self.line = mark + "dofile(lfs.writedir() .. [[Scripts\\" + file_name + "]])"
+        self.active = re.compile(r"^[ \t]*(?:" + re.escape(mark) + r")?[ \t]*dofile\(.*" + re.escape(file_name), re.M)
+        self.bundled = Path(__file__).resolve().parent / "data" / file_name
+        self.file_name = file_name
+        self.log_file = log_file
 
 
-def _ecm_paths(saves: str):
+_ECM = _ExportScript("--[[SQE ECM EXPORT]]", "sqe_ecm_export.lua", "SQE_ecm.flag")
+_F14_TURNPOINTS = _ExportScript("--[[SQE F14 TURNPOINTS EXPORT]]", "sqe_f14_turnpoints_export.lua", "SQE_turnpoints.req")
+ECM_LINE = _ECM.line
+
+
+def _export_paths(script: _ExportScript, saves: str):
     d = Path(saves) / "Scripts"
-    return d, d / "sqe_ecm_export.lua", d / "Export.lua"
+    return d, d / script.file_name, d / "Export.lua"
 
 
 def _read_export(p: Path) -> str:
     return p.read_bytes().decode("utf-8", errors="surrogateescape") if p.exists() else ""
 
 
-def ecm_script_state(saves: str) -> str:
+def _script_state(script: _ExportScript, saves: str) -> str:
     """'nofolder' | 'none' | 'partial' (line or file missing) | 'old' (script differs from the bundled one) | 'ok'."""
     if not saves or not Path(saves).is_dir():
         return "nofolder"
-    _, sc, ex = _ecm_paths(saves)
-    has_line = bool(_ECM_ACTIVE.search(_read_export(ex)))
+    _, sc, ex = _export_paths(script, saves)
+    has_line = bool(script.active.search(_read_export(ex)))
     has_file = sc.exists()
     if not has_line and not has_file:
         return "none"
     if not (has_line and has_file):
         return "partial"
     try:
-        return "ok" if sc.read_bytes() == _ECM_BUNDLED.read_bytes() else "old"
+        return "ok" if sc.read_bytes() == script.bundled.read_bytes() else "old"
     except OSError:
         return "old"
 
 
-def ecm_script_status(saves: str) -> str:
+def _script_status(state: str) -> str:
     return {"nofolder": "Set the DCS Saves folder first.", "none": "Not installed",
             "partial": "Half installed (click Install to finish)", "old": "Installed, an older copy (click Install to update)",
-            "ok": "Installed"}[ecm_script_state(saves)]
+            "ok": "Installed"}[state]
 
 
-def install_ecm_script(saves: str) -> tuple[bool, str]:
+def _install_script(script: _ExportScript, saves: str) -> tuple[bool, str]:
     """Copy the script to Saved Games\\DCS\\Scripts and add ONE marked line to the END of Export.lua (created if missing). Export.lua is saved once to
     Export.lua.sqe.bak first. Safe to call again: a line already there (ours or a hand-made one) is not added twice."""
     if not saves or not Path(saves).is_dir():
         return False, "Set the DCS Saves folder first."
-    d, sc, ex = _ecm_paths(saves)
+    d, sc, ex = _export_paths(script, saves)
     try:
         d.mkdir(parents=True, exist_ok=True)
-        sc.write_bytes(_ECM_BUNDLED.read_bytes())
+        sc.write_bytes(script.bundled.read_bytes())
         raw = ex.read_bytes() if ex.exists() else b""
-        if _ECM_ACTIVE.search(raw.decode("utf-8", errors="surrogateescape")):
+        if script.active.search(raw.decode("utf-8", errors="surrogateescape")):
             return True, "Installed (the Export.lua line was already there)."
         bak = ex.with_name("Export.lua.sqe.bak")
         if ex.exists() and not bak.exists():
@@ -258,29 +268,66 @@ def install_ecm_script(saves: str) -> tuple[bool, str]:
         nl = b"\r\n" if b"\r\n" in raw else b"\n"
         if raw and not raw.endswith((b"\n", b"\r")):
             raw += nl
-        ex.write_bytes(raw + ECM_LINE.encode("utf-8") + nl)
+        ex.write_bytes(raw + script.line.encode("utf-8") + nl)
     except OSError as e:
         return False, f"Could not write to {d}: {e}"
     return True, "Installed. Restart DCS (or start a new flight) to load it." + (" Export.lua backup: Export.lua.sqe.bak." if (ex.with_name("Export.lua.sqe.bak")).exists() else "")
 
 
-def remove_ecm_script(saves: str) -> tuple[bool, str]:
-    """Take our line out of Export.lua, delete the copied script and a leftover flag file. Other lines in Export.lua stay as they are."""
+def _remove_script(script: _ExportScript, saves: str) -> tuple[bool, str]:
+    """Take our line out of Export.lua, delete the copied script and a leftover flag or request file. Other lines in Export.lua stay as they are."""
     if not saves or not Path(saves).is_dir():
         return False, "Set the DCS Saves folder first."
-    d, sc, ex = _ecm_paths(saves)
+    d, sc, ex = _export_paths(script, saves)
     try:
         if ex.exists():
             raw = ex.read_bytes().decode("utf-8", errors="surrogateescape")
-            keep = [ln for ln in raw.splitlines(True) if not _ECM_ACTIVE.match(ln)]
+            keep = [ln for ln in raw.splitlines(True) if not script.active.match(ln)]
             if len(keep) != len(raw.splitlines(True)):
                 ex.write_bytes("".join(keep).encode("utf-8", errors="surrogateescape"))
-        for f in (sc, Path(saves) / "Logs" / "SQE_ecm.flag"):
+        for f in (sc, Path(saves) / "Logs" / script.log_file):
             if f.exists():
                 f.unlink()
     except OSError as e:
         return False, f"Could not remove it: {e}"
     return True, "Removed."
+
+
+def ecm_script_state(saves: str) -> str:
+    return _script_state(_ECM, saves)
+
+
+def ecm_script_status(saves: str) -> str:
+    return _script_status(ecm_script_state(saves))
+
+
+def install_ecm_script(saves: str) -> tuple[bool, str]:
+    return _install_script(_ECM, saves)
+
+
+def remove_ecm_script(saves: str) -> tuple[bool, str]:
+    return _remove_script(_ECM, saves)
+
+
+def f14_turnpoints_state(saves: str) -> str:
+    return _script_state(_F14_TURNPOINTS, saves)
+
+
+def f14_turnpoints_status(saves: str) -> str:
+    return _script_status(f14_turnpoints_state(saves))
+
+
+def f14_turnpoints_installed(saves: str) -> bool:
+    """An older copy still counts: the mission only has to know that something on this PC will read its request."""
+    return f14_turnpoints_state(saves) in ("ok", "old")
+
+
+def install_f14_turnpoints(saves: str) -> tuple[bool, str]:
+    return _install_script(_F14_TURNPOINTS, saves)
+
+
+def remove_f14_turnpoints(saves: str) -> tuple[bool, str]:
+    return _remove_script(_F14_TURNPOINTS, saves)
 
 
 # ---- MissionScripting.lua: patched while SQE is open, restored on exit -------------------------------------------------
