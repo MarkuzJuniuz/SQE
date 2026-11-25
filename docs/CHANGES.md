@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.668, missions build faster
+The kneeboard pages loaded their fonts again for every line of text. They are now loaded once, which takes about a quarter off the time to build a mission. The pages look the same.
+
 ## v0.41.667, the release build is hardened
 The workflow that builds the release now runs pinned versions of its tools, asks for write access only where it publishes, and no longer pastes a tag name into a script. Nothing changes in the program.
 
