@@ -72,7 +72,7 @@ At the start of each (day) turn the planner builds the turn's tasking list, in t
 2. **Blue's standing cover** is planned (section 8): BARCAP pairs over a share of the BARCAP areas and a guard pair for the
    AWACS and each tanker.
 3. **The planner picks the jobs.** It scores every target red has that can be hit (a SAM site, an EWR, a runway, a supply
-   site, a garrison, a troop column), skips ones that cannot be attacked yet, and takes a few. How many jobs a turn
+   site, a garrison, a troop column), skips ones that cannot be attacked yet or that no squadron can reach, and takes a few. How many jobs a turn
    gets follows the jets: the free strike pairs (the ones left after the standing patrols and the support) times a level share (0.6 at Levels 1 and 2,
    0.9 at Level 3), divided by the 5.7 pairs one package uses, at least 1 and at most 4, 8 and 8 on a day turn (Levels 1, 2, 3), plus two on every
    day turn of Day 1 ("day 1 is brutal"; `engine.py`: `TASK_SHARE`, `PAIRS_PER_PACKAGE`, `N_MAX`, `DAY1_EXTRA`). A night turn plans a quarter (Level 1)

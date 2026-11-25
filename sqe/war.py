@@ -387,7 +387,7 @@ class ObjectivePlanner:
                 break
             take(k); per[scored[k][1].type] = per.get(scored[k][1].type, 0) + 1
         picked.sort(key=_first_item, reverse=True)
-        picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=_first_item, reverse=True), limit, cap)
+        picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=_first_item, reverse=True), limit, cap, fit)
         picked = self._stage_dead(state, picked, limit)
         out = []
         for i, (_, o) in enumerate(picked, 1):
@@ -437,7 +437,7 @@ class ObjectivePlanner:
                     n += 1
         return n
 
-    def _add_followers(self, state, picked: list, follows: list, limit: int, cap: int) -> list:
+    def _add_followers(self, state, picked: list, follows: list, limit: int, cap: int, fit=None) -> list:
         """v0.41.158: a STRIKE / CAS under one or two SA-11 / SA-10 sites goes in behind their SEAD: it is offered only when today's list already has
         the DEAD job of every one of those sites (which _stage_dead turns into a SEAD / standoff package), so those sites have their radars busy
         (or blind) when it arrives. It takes a free slot, or the place of a lower-ranked job of a type that has another one. Judgment call: the
@@ -451,6 +451,8 @@ class ObjectivePlanner:
                 continue
             if sum(1 for _, p in picked if p.type == o.type) >= cap:
                 continue
+            if fit is not None and not fit.fits(o):
+                continue                                   # nobody can get there (or no jets left for it)
             if len(picked) >= limit:
                 per = {}
                 for _, p in picked:
