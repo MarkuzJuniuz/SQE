@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.662, the smoke test compiles every mission script
+The smoke test now checks that each script built into a mission compiles in Lua 5.1, the version DCS runs, so a syntax error is caught before it becomes an error popup in the game.
+
 ## v0.41.661, campaign guide: how red fighters find an F-117A
 `docs/CAMPAIGN.md` now says that red fighters need their own radar contact before they go after an F-117A. No change in the game.
 
