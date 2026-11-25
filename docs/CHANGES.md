@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.658, your F-16C jammer lamp is read on the dedicated server too
+With the Jammer script installed, SQE now sees your F-16C's ECM lamp when the sortie runs on the dedicated server on this PC; before, it only did in single player. Open Settings > DCS Integration and click Update Jammer Script to get the new copy.
+
 ## v0.41.657, turnpoints (TP), and an F10 menu to load them in the F-14B (experimental)
 The turn points that take your route round SAM sites are now TP1, TP2, ... on the kneeboard (they were all called AVD). The F-14B cannot hold them, so there is a new optional script (Settings > DCS Integration > F-14B Turnpoints Script): with it installed, F10 > Other > Turnpoints has Jester type the one you pick into the fix point and turn the destination knob to it. Jester types slowly, so pick the next one early. It works in single player and with the dedicated server on your own PC, not on another computer's server.
 
