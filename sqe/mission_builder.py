@@ -31,6 +31,7 @@ from . import pydcs_patch
 from . import threatmap as tm
 from . import samtier
 from . import f14_scheme
+from . import turnpoints
 from .aircraft import AIRCRAFT, F14_KEYS, JDAM_HOGS
 from .words import strength_word
 
@@ -775,6 +776,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             rows.append((w.name, w.x, w.y, w.eta_s, "AGL 0" if w.agl else (f"{w.alt_ft}AGL" if w.rad else f"{w.alt_ft // 1000}K"), w.speed_kts, w.note))
         rows.append(("RTB", pbase.x, pbase.y, rtb_s, "-", 300, self._rtb_note(pspec, pbase)))
         n_route = len(rows)
+        # the points round SAM rings are TP1, TP2, ... on the card (the route itself keeps the planner's name, "AVD")
+        tp_points = turnpoints.numbered([row[0] for row in rows])
+        tp_labels = {point["index"]: point["label"] for point in tp_points}
         rows.append(("DIVERT", div.x, div.y, 0, "-", "", div.name))
         if tanker_xy:
             rows.append(("TKR", tanker_xy[0], tanker_xy[1], 0, f"{pspec.profile.aar_alt_ft // 1000}K", pspec.profile.aar_kts, "Top off. See COMMS for TACAN"))
@@ -797,18 +801,24 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 win = f"hold to {clock(leave_s)}"
             elif r[0] == "CAP1" and self._exit_s is not None:
                 win = f"leave {clock(self._exit_s)}"                  # S141d: card text only
-            kn_rows.append({"wp": self._f14ab_label(i, r, n_route) if self._f14ab else pspec.wp_label(i), "name": r[0], "time": tstr, "alt": r[4], "kts": str(r[5]), "leg": leg, "win": win,
+            kn_rows.append({"wp": self._f14ab_label(i, r, n_route) if self._f14ab else pspec.wp_label(i), "name": tp_labels.get(i - 1, r[0]), "time": tstr, "alt": r[4], "kts": str(r[5]), "leg": leg, "win": win,
                             "note": r[6] if (r[0] in ("TGT", "TKR", "RTB", "DIVERT", "TAKEOFF") or (r[0] == "CAP1" and any(w_.orbit for w_ in pw))) else ""})
             if r[0] not in ("TAKEOFF", "DIVERT", "TKR", "BULLS"):
                 hook_wps.append((pspec.wp_label(i), r[0], r[1], r[2]))
             # S175: a route point the plain F-14B cannot hold (its WP column is "-") goes on the by-hand page with its position, in route order
             if self._f14ab and i < n_route and kn_rows[-1]["wp"] == "-":
                 hand_row = self._hand_row(rows, i, n_route)
+                hand_row["name"] = tp_labels.get(i - 1, hand_row["name"])
                 hand_rows.append(hand_row)
                 kn_rows[-1]["pos"] = hand_row["pos"]
         for code, x_, y_ in (self._f14ab or {}).get("extra", []):             # S103e: the nav target points the planner has no row for (the hostile area), right after HB so the card reads in flight order
             kn_rows.insert(n_route, {"wp": code, "name": "TARGET" if code == "ST" else "HOSTILE", "time": "", "alt": "", "kts": "", "leg": "", "win": "",
                                      "note": "Package ground target (navigation target point)" if code == "ST" else "Hostile area: nearest SAM site (navigation target point)"})
+
+        turnpoint_line = ""
+        if self.o.f14_turnpoints and tp_points and self._f14ab_player(pf):
+            self._add_turnpoints_menu(pf, rows, tp_points)
+            turnpoint_line = "F10 > Other > Turnpoints: Jester types a TP into the FP. He is slow: pick it early."
 
         # ---- codes, fuel, text, hook, kneeboard -----------------------------------------------------------------------------
         mode3 = self._mode3(package, pf)
@@ -879,6 +889,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                                "status": ("already struck, heading home; its target is in ruins" if m_.get("struck") else "airborne when you start" if m_.get("underway") else "")} for m_ in merged if not m_.get("unseen")],
                    "intel": [l_.replace(" are within reach of the target area and may be sent to reinforce.", " may reinforce.").replace(" are on cockpit alert and may launch to help.", " on alert, may launch.") for l_ in self._intel],
                    "zulu_note": self._zulu_note(), "msa": relief.msa_ft(polyline), "detour_line": self._detour_line(pw),
+                   "turnpoint_line": turnpoint_line,
                    "hand_table": hand_rows,
                    "nav": [ln_ for ln_ in (self._nav_row("HOME", pbase), self._nav_row("DIVERT", div)) if ln_]}
             for pg in render_pages(td, ctx):
@@ -3011,7 +3022,21 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return ""
         nm = (sum(dist(a.x, a.y, b.x, b.y) for a, b in zip(pw, pw[1:])) - sum(dist(a.x, a.y, b.x, b.y) for a, b in zip(straight, straight[1:]))) / NM
         s = sum(leg_seconds(a, b) for a, b in zip(pw, pw[1:])) - sum(leg_seconds(a, b) for a, b in zip(straight, straight[1:]))
-        return f"Round SAM rings: {n} AVD point{'s' if n > 1 else ''}, +{nm:.0f} nm, +{s / 60:.0f} min vs straight." if nm >= 1 else ""
+        return f"Round SAM rings: {n} turnpoint{'s' if n > 1 else ''} (TP), +{nm:.0f} nm, +{s / 60:.0f} min vs straight." if nm >= 1 else ""
+
+    def _add_turnpoints_menu(self, pf, rows, points) -> None:
+        """F10 > Other > Turnpoints for the player's plain F-14B: one trigger zone for each turnpoint (Jester reads the coordinates from `WaypointZoneNN`)
+        and the mission script that writes the request the export script on the player's PC acts on (`turnpoints`)."""
+        group = None
+        for flight, flight_group in self.flight_groups:
+            if flight is pf:
+                group = flight_group
+        for number, point in enumerate(points[:turnpoints.MAX_ZONES], 1):
+            row = rows[point["index"]]
+            self.m.triggers.add_triggerzone(self._pt(row[1], row[2]), radius=500, hidden=False, name=turnpoints.zone_name(number))
+        rule = triggers.TriggerStart(comment="SQE F-14B turnpoints menu")
+        rule.add_action(action.DoScript(String(turnpoints.menu_lua(group.id, points))))
+        self.m.triggerrules.triggers.append(rule)
 
     def _f14ab_player(self, f) -> bool:
         """Your own flight in the plain F-14B (not the all-AI test, not the B(U), whose X-name scheme stays): the jet has three numbered waypoints."""

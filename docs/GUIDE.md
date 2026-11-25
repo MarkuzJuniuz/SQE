@@ -96,9 +96,9 @@ apart, so the start times on the Missions tab are spread over the turn's four ho
    fired from 50 to 65 nm on a SAM site); the list is in CAMPAIGN.md, section 5.
 2. Start DCS, **Mission > Open > Missions > SQE_Sortie.miz**, fly it. The kneeboard carries comms and waypoints numbered the
    way your jet's cockpit numbers them, the timeline, bingo/joker, IFF, laser code, the package who's-who, threats and bullseye.
-   Where a leg of your route would cut a live SAM ring, SQE adds turn points named **AVD** (the notes line of page 1 says how many
+   Where a leg of your route would cut a live SAM ring, SQE adds turnpoints, **TP1**, **TP2** and so on in flying order (the notes line of page 1 says how many
    nm and minutes they add), moves your egress point out of the rings, and puts a strike or SEAD IP outside the rings that hold the
-   target. The plain F-14B holds only three waypoints, so every other point of its route (WP column "-", the AVD points too) has its
+   target. The plain F-14B holds only three waypoints, so every other point of its route (WP column "-", the turnpoints too) has its
    position on the line under its row on page 1, as degrees and decimal minutes (enter the minutes and tenths). When they do
    not fit, they are on an extra page after page 1, **ROUTE POINTS (enter by hand)**, in route order with altitude.
 3. The waiting window updates live (aircraft lost, ground units destroyed, landings). When DCS reports the mission ended it
@@ -123,6 +123,8 @@ limit** there (250 by default) lets you trade detail for performance: over it, t
 every sortie with everything on the map, as a stress test, not for play.
 
 **Blast Wave** (Settings > General, on by default; it was called Splash Damage before v0.41.655). DCS often leaves a vehicle a few metres from a bomb untouched. With Blast Wave on, when a bomb, rocket or air-to-ground missile (a HARM included) reaches the ground, every ground unit or ship inside a blast radius around the impact takes a blast of its own: the radius is 9 m times the cube root of the warhead's explosive mass in kilograms (capped at 120 m), and the blast is weaker the further the unit is from the impact. The direct hit is left to DCS, and a weapon that ends in the air (a JSOW opening its dispenser, a missile shot down) does nothing. The kills it causes count for the shooter. The numbers are SQE's own judgment. The idea of adding blast damage to DCS explosions is not SQE's: it comes from the community Splash Damage scripts (wheelyjoe's original, then Spencer Shepard's "GRIMM" Splash Damage 2.0 and Stevey666's 3.x). SQE uses no code from them; its script was written for SQE.
+
+**F-14B Turnpoints Script** (Settings > DCS Integration, experimental, not installed by default). For the F-14B (not the B(U)) you fly: **F10 > Other > Turnpoints** lists the route's turnpoints (TP1 (before IP), and so on); picking one has Jester type its coordinates into the fix point (FP) and turn the destination knob to it. He types slowly: wait until the range stops changing, and pick the next one early. The jet holds one such point at a time, and FP is no longer free for a position fix once you use it. The Install button copies a small script to your `Saved Games\DCS\Scripts` and adds one line to `Export.lua` (backed up first); Remove undoes both. Install it before you generate the mission: without it the mission has no Turnpoints menu. It works in single player and with the dedicated server on your own PC; it cannot work on another computer's server. With a human RIO there is no Jester to do the typing.
 
 **Jammer Model** (Settings, off by default; it was called ECM Script before v0.41.655). With the option off, jammers work as DCS models them. With it on, SQE adds an effect of its own: a radar-guided missile fired at a jet that
 has a jammer may be fooled: SQE rolls a chance and, when it comes up, removes the missile partway through its flight. The chance is 20% for a jet with an internal jammer, 45% for

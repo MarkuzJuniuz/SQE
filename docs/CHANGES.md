@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.657, turnpoints (TP), and an F10 menu to load them in the F-14B (experimental)
+The turn points that take your route round SAM sites are now TP1, TP2, ... on the kneeboard (they were all called AVD). The F-14B cannot hold them, so there is a new optional script (Settings > DCS Integration > F-14B Turnpoints Script): with it installed, F10 > Other > Turnpoints has Jester type the one you pick into the fix point and turn the destination knob to it. Jester types slowly, so pick the next one early. It works in single player and with the dedicated server on your own PC, not on another computer's server.
+
 ## v0.41.656, red's escorts and sweep can come from further away
 When a red raid's escort or sweep wing is short of fighters, the wings that top it up may now lie up to 300 nm away (it was 200) and there can be two of them, so the far wings, which hold most of red's Su-27s, help staff the raids on the front fields. The raiders themselves are drawn as before.
 
