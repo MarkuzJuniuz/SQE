@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.653, red raid groups no longer start on top of each other
+In a big merged mission with a red raid already under way at the start, several of its groups could spawn at exactly the same point and collide in the first seconds (11 of 20 raid aircraft in a test). A group that would start where another raid group starts now flies about 1,000 ft lower than the one before it.
+
 ## v0.41.652, a tanker with no safe station waits for the raid to end
 When no tanker spot is clear of the mission's red raids and sweeps, the tanker no longer sits out beyond the covered area: it waits on the ground and launches about ten minutes after the last raid's time over its target, once no red fighter is near its track, and its guard launches with it. The briefing's intelligence gives the time. A tanker that could only launch long after your planned recovery does not fly that mission.
 

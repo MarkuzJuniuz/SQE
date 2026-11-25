@@ -86,6 +86,8 @@ RAID_FIRST_TAKEOFF_S = 30     # the first batch takes off this long after the mi
 RAID_JOIN_S = 60              # the raid pushes this long after the last batch reaches the marshal
 RAID_CLIMB_S = 180            # allowance for the climb from the runway to the marshal
 RAID_STAGED_GAP_S = 15        # a staged raid's groups push this far apart (the salvo spread; the old raid used RAID_GROUP_GAP_S 60 s)
+RAID_SHARED_START_M = 1000    # S194 (found in the U708 server run: 11 raid aircraft died at t=0 to 2 s): two raid groups that would start in the air within this of each other...
+RAID_SHARED_START_STEP_M = 300  # ...get their own level, each this much lower than the one before (about 1,000 ft, the usual vertical separation; judgment call, the S26 marshal step of 150 m was for groups on one orbit)
 RAID_MSHL_STEP_M = 150        # each group orbits the marshal this much lower than the one before (no two share a level)
 RAID_ESCORT_ABOVE_M = 300     # S169: the lowest escort flies this far above the HIGHEST bomber lane (judgment call: about the 1,000 ft vertical separation, 305 m), the next escort groups RAID_MSHL_STEP_M higher each. The Escort task holds
                               # a point 300 m above its own bomber, which with the 150 m lane grading put the escort of group 4 exactly in group 2's lane (T3e, t=1145: a RAID-E MiG-23MLD and a RAID-B Su-24M collided at 8,994 m); the first fix
@@ -1290,6 +1292,18 @@ class RaidSpawns:
             nm_ = (["PUSH"] + ["ING"] * (len(rem) - 2) + [fin]) if hold is not None else (["ING"] * (len(rem) - 1) + [fin])
             sl = stg["plan"].get(name) if (stg and hold is not None) else None          # v0.41.261: a staged raid's group: on the marshal from the start, or off the runway
             m_alt = alt - (sl["mk"] * RAID_MSHL_STEP_M if sl else 0.0)
+            if sl is None and hold is None and act < 30 and not edge:
+                # S194: a group that starts in the air at mission start where another raid group of this mission already starts (a raid already under way: the groups' places on the route
+                # coincide when the route left is short or the start is clamped) flies its own level the whole way, so they do not collide at t=0
+                if not hasattr(self, "_raid_air_starts"):
+                    self._raid_air_starts = []
+                already_here = 0
+                for start_x, start_y in self._raid_air_starts:
+                    if dist(start_x, start_y, pos[0], pos[1]) < RAID_SHARED_START_M:
+                        already_here += 1
+                if already_here:
+                    m_alt = alt - already_here * RAID_SHARED_START_STEP_M
+                self._raid_air_starts.append((pos[0], pos[1]))
             if sl is None and hold is not None:                # S26 (run 12-38-58: three groups on one marshal point at one level collided at t=0): an unstaged group on the marshal gets its own level too
                 m_alt = alt - mshl_lvl[0] * RAID_MSHL_STEP_M
                 mshl_lvl[0] += 1
