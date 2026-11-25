@@ -19,10 +19,26 @@ _FB = ["DejaVuSansMono-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSansMo
        "C:/Windows/Fonts/consolab.ttf", "C:/Windows/Fonts/courbd.ttf"]
 
 
+# Fonts already loaded, by (size, bold). The card asks for the same three sizes hundreds of times per mission, and loading a font by name can
+# search the whole system font folder: that was more than a quarter of a mission build.
+_FONTS: dict = {}
+
+
 def _font(size, bold=False):
-    for c in (_FB if bold else []) + _F:
+    key = (size, bold)
+    if key not in _FONTS:
+        _FONTS[key] = _load_font(size, bold)
+    return _FONTS[key]
+
+
+def _load_font(size, bold):
+    """The first of the monospace fonts above that this computer has."""
+    names = _F
+    if bold:
+        names = _FB + _F
+    for name in names:
         try:
-            return ImageFont.truetype(c, size)
+            return ImageFont.truetype(name, size)
         except OSError:
             continue
     return ImageFont.load_default(size)
