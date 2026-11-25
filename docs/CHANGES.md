@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.666, a dropped job is replaced by a new one
+When a listed job cannot be crewed, the turn now tries other targets (not the same list again), only ones the jets left over can fly, and may add a strike behind a SEAD package that has been built. You see more jobs, mostly early in a war; at Level 3 blue also loses more jets flying them.
+
 ## v0.41.665, the planner names only targets a squadron can reach
 The planner now asks the same range question the mission builder asks (the route round the SAM rings), so jobs nobody could fly are no longer listed and then dropped. More of each turn's jobs are flown.
 
