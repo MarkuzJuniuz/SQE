@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.663, the smoke test no longer stops itself on the waypoint-lock check
+The waypoint-lock check can take more than two minutes, so it now has a five-minute limit of its own. Before, the full smoke test could stop partway on a busy PC.
+
 ## v0.41.662, the smoke test compiles every mission script
 The smoke test now checks that each script built into a mission compiles in Lua 5.1, the version DCS runs, so a syntax error is caught before it becomes an error popup in the game.
 
