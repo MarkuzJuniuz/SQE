@@ -17,7 +17,7 @@ import math
 import random
 from .models import Objective, ObjectiveType, BaseKind, Role, AssetKind
 from .words import strength_word
-from . import clock, redair, runways, theatres
+from . import clock, fraction, redair, runways, theatres
 from .loadouts import BOMBER_TYPES
 
 NM = 1852.0
@@ -354,14 +354,31 @@ def target_weights(state) -> list:
     return [(b, w) for b, _, w in candidates(state, "field")]
 
 
-def _weighted(rng: random.Random, ws: list):
-    tot = sum(w for *_, w in ws)
-    r = rng.random() * tot
+def _best(rng: random.Random, ws: list):
+    """S207e: the highest-weighted item (the last field of each row); equal weights are broken by the seeded draw. No weighted lottery."""
+    top = ws[0][-1]
     for item in ws:
-        r -= item[-1]
-        if r <= 0:
-            return item
-    return ws[-1]
+        if item[-1] > top:
+            top = item[-1]
+    tied = []
+    for item in ws:
+        if item[-1] >= top - 1e-9:
+            tied.append(item)
+    return tied[rng.randrange(len(tied))]
+
+
+def typical_size(d) -> float:
+    """S207e: the raid size red asks for: the middle of the level's `raid_size` (the same mean as the old draw)."""
+    low, high = d.raid_size
+    return (low + high) / 2.0
+
+
+def _most_ready(rng: random.Random, state, wing, types: list) -> str:
+    """S207e: the escort type with the most jets free (ties: the seeded draw)."""
+    rows = []
+    for aircraft in types:
+        rows.append((aircraft, redair.ready_of(state, wing, (aircraft,))))
+    return _best(rng, rows)[0]
 
 
 # S207d (XO 2026-11-25: "No more dice for decisions. Both sides makes tasks to win the war, not entertain the player."): the kind of raid follows the war's phase,
@@ -416,7 +433,7 @@ def pick_aim(state, d, rng: random.Random, taken=frozenset()):
             continue
         if kind != "sam":
             found = shy(state, d, found)
-        base, aim, _weight = _weighted(rng, found)
+        base, aim, _weight = _best(rng, found)
         return base, aim
     return None
 
@@ -593,12 +610,12 @@ def _escort_for(state, bw, ax: float, ay: float, rnd: random.Random, alone: bool
                 first = (w, types)
             big_ = [t for t in types if redair.ready_of(state, w, (t,)) >= want]
             if want > 2 and big_:
-                esc = (w, rnd.choice(big_))
+                esc = (w, _most_ready(rnd, state, w, big_))
                 return esc, redair.ready_of(state, w, (esc[1],))
             if want <= 2:
                 break
     if first is not None:
-        esc = (first[0], rnd.choice(first[1]))
+        esc = (first[0], _most_ready(rnd, state, first[0], first[1]))
         return esc, redair.ready_of(state, first[0], (esc[1],))
     return None, 0
 
@@ -837,8 +854,7 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool 
         return _plan_sead(state, d, base, aim, oid, turn)
     ax, ay = aim_xy(state, aim, base)
     rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:raid")
-    lo, hi = d.raid_size
-    want = int(round(rnd.randint(lo, hi) * wave_mult(state, d)))                           # v0.41.155: a massed-wave day
+    want = int(round(typical_size(d) * wave_mult(state, d)))                              # v0.41.155: a massed-wave day
     kh59 = False                                                                            # S48: a Kh-59M raid (fixed target, never covered: `reach_for` is None under cover; never Level 1's banzai raids)
     share_ = KH59_SHARE.get(max(1, min(3, int(getattr(d, "level", 3)))), 0.0)
     r = None
@@ -1058,19 +1074,19 @@ def plan_tu_strike(state, d, base, aim: str, oid: str, turn: int):
 
 def tu_strike(state, d, rng: random.Random, turn: int):
     """v0.41.355 (Phase 10a, cadence (c)): this turn's Tu-22M3 land strike, drawn BEFORE the ordinary raids so it takes its jets first. -> (objective, booking) or None. Never when the wing never raids
-    (`bomber_policy` "none"), when today's cap (`bombers.land_cap`) is reached, or when no supply site that no live battery covers lies within reach. The chance per turn is `TU_STRIKE_TEMPO` x the cap / 12
-    (half of it at night, `RED_RAID_NIGHT`), drawn from `rng` so a replan of the turn gives the same answer. The strike is counted in `raids["tu_land"]` (turn -> 1)."""
+    (`bomber_policy` "none"), when today's cap (`bombers.land_cap`) is reached, or when no supply site that no live battery covers lies within reach. Each turn accrues `TU_STRIKE_TEMPO` x the cap / 12
+    of a strike (half of it at night, `RED_RAID_NIGHT`, S207e: carried, not rolled). The strike is counted in `raids["tu_land"]` (turn -> 1)."""
     from . import bombers
     cap = bombers.land_cap(d)
     p = cap * TU_STRIKE_TEMPO / TURNS_PER_DAY * (RED_RAID_NIGHT if clock.is_night_turn(turn) else 1.0)
-    hit_ = rng.random() < p                                  # always drawn: the sequence does not depend on the state
+    hit_ = fraction.whole_units(state, "red_tu", turn, p) >= 1  # S207e: the strikes a day come round by the carried fraction, not by chance
     pick_ = random.Random(f"{state.campaign_id}:{turn}:tu-aim")
     if cap <= 0 or not hit_ or bombers.land_done(state, turn) >= cap:
         return None
     ws = candidates(state, "supply", tu=True)
     if not ws:
         return None
-    base, aim, _ = _weighted(pick_, ws)
+    base, aim, _ = _best(pick_, ws)
     o = raid_objective(base, aim, describe(state, base, aim))
     o.id = f"obj-t{turn}-t1"
     bk = plan_tu_strike(state, d, base, aim, o.id, turn)
@@ -1252,8 +1268,7 @@ def overnight(state, d, rng: random.Random) -> list:
             p_stop = min(0.95, p_stop + blue_barcap.PATROL_STOP)
         from . import tempo as _tp
         p_stop = min(0.95, p_stop + TEMPO_STOP_SHARE * _tp.get(state, "AIR"))      # v0.41.171: the player's air work taught the alert pairs (Tactical Edge off: 0)
-        lo_, hi_ = d.raid_size
-        n_ = sead_jets(state, aim, d) if aim_kind(aim) == "sam" else max(2, int(round(rng.randint(int(lo_), int(hi_)) * wave_mult(state, d))))
+        n_ = sead_jets(state, aim, d) if aim_kind(aim) == "sam" else max(2, int(round(typical_size(d) * wave_mult(state, d))))
         if n_ <= 4:                                              # a small raid is settled as one lump (all stopped or all through), as before v0.41.155
             if rng.random() < p_stop:
                 k = wing.lose(r[2], rng.randint(1, 3 + round(covering_ad(state, x, y))))

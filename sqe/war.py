@@ -352,7 +352,9 @@ class ObjectivePlanner:
             auth = sum(x.authorized for x in state.enemy_air) or 1
             pr = 3.0 + 4.0 * tot / auth
             pool.append((pr, Objective("", ObjectiveType.BARCAP, fleet.id, pr, f"Combat air patrol over {fleet.name}")))
-        scored = sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in pool), key=_first_item, reverse=True)
+        def score_then_tie(row):
+            return (row[0], rng.random())              # S207e: no jitter on the scores; equal scores are broken by the seeded draw
+        scored = sorted(pool, key=score_then_tie, reverse=True)
         picked, taken = [], set()
         used = set()                                           # v0.41.345 (scaled tasking, Phase B): ground sectors that already have a job: a second job in one comes only when no unused sector has a candidate
         sec = {id(o): job_sector(state, o) for _, o in scored}
@@ -391,7 +393,7 @@ class ObjectivePlanner:
         for kind, target_id in exclude:
             if kind == ObjectiveType.DEAD:
                 named_dead.add(target_id)
-        picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=_first_item, reverse=True), limit, fit, named_dead, floor)
+        picked = self._add_followers(state, picked, sorted(follows, key=score_then_tie, reverse=True), limit, fit, named_dead, floor)
         picked = self._stage_dead(state, picked, limit, floor)
         out = []
         for i, (_, o) in enumerate(picked, 1):
