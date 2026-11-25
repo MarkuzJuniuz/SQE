@@ -96,6 +96,9 @@ SUPPRESS_TURNS = 2      # S25: was 3 (6 hours); 2 four-hour turns = 8 hours, the
 # picked BEFORE the variety pass and on top of `limit`. Numbers: Phase 1 probe 2026-11-11 (`.claude/tier removal plan.md`): L2 (2, 2, 1) took 15 of 16 northern sites down by day 5, L3 (2, 1, 1) 9.5 of 16 (Q_mtn 2
 # buys no more there, the belts gate); a sea quota of 3 buys nothing over 2; without the runway quota the runway job is never planned. L1 (1, 0, 0) is a judgment call (not probed; XO: Insurgent is not the focus).
 SAM_WAVE = {1: (1, 0, 0), 2: (2, 2, 1), 3: (2, 1, 1)}
+# S207a (XO 2026-11-25: "letting go of variety"): troops in contact get their air support before the score order fills the list: the best CAS job of each engaged ground sector,
+# the hardest pressed first, at most this many a turn. Judgment call (no public figure; the share of CAS against interdiction is the commander's apportionment decision, JP 3-30).
+CAS_FLOOR_MAX = 2
 RUNWAY_BELT_FACTOR = 1.5   # v0.41.375 (S20 Phase 5, XO 2026-11-11): a mountain SAM-DEAD job whose site blocks a northern runway crater ranks x1.5 in the mountain quota, so the single L3 slot goes to the belt guarding a runway first (judgment call; only reorders, the quota numbers stay)
 WAVE_NEAR_NM = 150.0       # a wave target scores up to x3 when it sits next to blue's airfields or an already dead / blind site (Phase 1 probe 2026-11-11, S20 probe 1's "B" formula; judgment call)
 # XO's list of the northern (MOUNTAIN front) fields, 2026-11-11: NOT `field_tier` (that puts Sochi, tier 3, with the north; Krymsk, Gelendzhik and Maykop are on the Kuban side, kept as XO listed them: judgment call).
@@ -187,7 +190,14 @@ class ObjectivePlanner:
         return best or []
 
     def plan(self, state: CampaignState, rng: random.Random, limit: int = 6, bomber: bool = True, skip: frozenset | set = frozenset(), waves: bool = True, fit=None, exclude: frozenset | set = frozenset()) -> list:
-        """`exclude`: (objective type, target id) of jobs already named this turn: not offered again, and a follow job may wait on an excluded DEAD job's site.
+        """The order of what blue tasks (S207a), which is the order of its doctrine, not a variety rule:
+        1. the SAM wave (`_wave_pass`): control of the air comes first (AFDP 3-01 Counterair: air superiority "to enable ... strategic attack, interdiction" and close air support);
+        2. the CAS floor (`_cas_floor`): the ground fight's call on the air (how air is split between interdiction and CAS is the commander's apportionment decision, JP 3-30 / JP 3-56.1);
+        3. every other job in score order, which already puts the belt first (DEAD on a site in front of something x1.8), then radars, then supply and works, then the rest.
+        The order itself is a judgment call built on those sources. No job type is capped and none is given a place for variety's sake; the one spread rule is that a ground sector with a job
+        already waits behind a sector with none (concentration is per sector). A job the turn cannot crew or reach (`fit`) is passed over for the next.
+
+        `exclude`: (objective type, target id) of jobs already named this turn: not offered again, and a follow job may wait on an excluded DEAD job's site.
 
         `fit` (`jobfit.TurnFit`): what the turn can crew; a job it cannot is passed over and the slot goes to the next candidate (None: every candidate may be named).
 
@@ -343,7 +353,7 @@ class ObjectivePlanner:
             pr = 3.0 + 4.0 * tot / auth
             pool.append((pr, Objective("", ObjectiveType.BARCAP, fleet.id, pr, f"Combat air patrol over {fleet.name}")))
         scored = sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in pool), key=_first_item, reverse=True)
-        picked, seen, taken = [], set(), set()
+        picked, taken = [], set()
         used = set()                                           # v0.41.345 (scaled tasking, Phase B): ground sectors that already have a job: a second job in one comes only when no unused sector has a candidate
         sec = {id(o): job_sector(state, o) for _, o in scored}
         def take(k: int) -> bool:
@@ -357,8 +367,8 @@ class ObjectivePlanner:
             if sec[id(scored[k][1])] is not None:
                 used.add(sec[id(scored[k][1])])
             return True
-        def best(ok):                                          # the best-scored candidate of an unused sector, else of any
-            c = [k for k in range(len(scored)) if k not in taken and ok(scored[k][1])]
+        def best():                                            # the best-scored candidate of an unused sector, else of any
+            c = [k for k in range(len(scored)) if k not in taken]
             def used_sector_then_rank(k):
                 return (sec[id(scored[k][1])] in used, k)
             c.sort(key=used_sector_then_rank)                          # scored is sorted best first, so the index is the score rank
@@ -370,31 +380,19 @@ class ObjectivePlanner:
             rwy_belt = {x.id for _, o_, bl_ in cand if o_.type == ObjectiveType.STRIKE and o_.aim == "RUNWAY"
                         and axis_of(state.assets[o_.target_id]) == "MOUNTAIN" for x in bl_}      # v0.41.375: the sites that stand in front of a northern runway job
             limit += self._wave_pass(state, scored, take, rwy_belt)
-        while len(picked) < limit:                             # one of each objective type first, for variety
-            def type_not_seen(o):
-                return o.type not in seen
-            k = best(type_not_seen)
+        floor = self._cas_floor(state, scored, take, picked, limit)       # S207a: the engaged sectors' CAS first
+        while len(picked) < limit:                             # then the score order, which is the doctrine order
+            k = best()
             if k is None:
                 break
-            take(k); seen.add(scored[k][1].type)
-        cap = max(2, math.ceil(0.4 * limit))                   # no single job type may swamp the day (DEAD packages are big)
-        per = {}
-        for _, o in picked:
-            per[o.type] = per.get(o.type, 0) + 1
-        while len(picked) < limit:
-            def type_under_cap(o):
-                return per.get(o.type, 0) < cap
-            k = best(type_under_cap)
-            if k is None:
-                break
-            take(k); per[scored[k][1].type] = per.get(scored[k][1].type, 0) + 1
+            take(k)
         picked.sort(key=_first_item, reverse=True)
         named_dead = set()
         for kind, target_id in exclude:
             if kind == ObjectiveType.DEAD:
                 named_dead.add(target_id)
-        picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=_first_item, reverse=True), limit, cap, fit, named_dead)
-        picked = self._stage_dead(state, picked, limit)
+        picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=_first_item, reverse=True), limit, fit, named_dead, floor)
+        picked = self._stage_dead(state, picked, limit, floor)
         out = []
         for i, (_, o) in enumerate(picked, 1):
             o.id = f"obj-t{state.turn}-{i}"                              # v0.41.338: by the turn (a day has 12 plans now)
@@ -406,8 +404,36 @@ class ObjectivePlanner:
                 out.append(o)
         return out
 
+    def _cas_floor(self, state, scored: list, take, picked: list, limit: int) -> set:
+        """S207a: the best CAS job of each engaged ground sector (`ground.info`: troops in contact), the sector red presses hardest first, at most
+        `CAS_FLOOR_MAX`, inside `limit`. -> the objects (by id()) taken here, which the later passes must not push out of the list."""
+        taken_here: set = set()
+        if not ground.active(state):
+            return taken_here
+        sectors = []
+        for index in range(ground.n_zones(state.ground)):
+            info = ground.info(state, index)
+            if info["engaged"]:
+                sectors.append((-info["pressure"], index))
+        for _pressure, sector in sorted(sectors):
+            if len(taken_here) >= CAS_FLOOR_MAX or len(picked) >= limit:
+                break
+            for k, (_score, objective) in enumerate(scored):
+                if objective.type != ObjectiveType.CAS or cas_sector(state, objective) != sector:
+                    continue
+                already = False
+                for _s, other in picked:
+                    if other is objective:
+                        already = True
+                if already:
+                    break
+                if take(k):
+                    taken_here.add(id(objective))
+                    break
+        return taken_here
+
     def _wave_pass(self, state, scored: list, take, rwy_belt: frozenset | set = frozenset()) -> int:
-        """v0.41.367 (S20 Phase 2): take the turn's wave out of the pool BEFORE the variety pass, so the SAM work is not crowded out by it. Three quotas (SAM_WAVE): sea SAM-DEAD jobs, mountain SAM-DEAD and EWR
+        """v0.41.367 (S20 Phase 2): take the turn's wave out of the pool BEFORE the score order, so the SAM work is not crowded out by it. Three quotas (SAM_WAVE): sea SAM-DEAD jobs, mountain SAM-DEAD and EWR
         strikes, northern runway craters (a cratered field flies nothing; without a quota the runway job is never planned). Ordered by score x wave_factor (mountain: x the field's ready / authorized jets).
         -> how many were taken (the caller raises `limit` by that, so the wave is on top of the turn's jobs)."""
         q_sea, q_mtn, q_rwy = SAM_WAVE.get(int(getattr(self.d, "level", 2)), SAM_WAVE[2])
@@ -443,7 +469,7 @@ class ObjectivePlanner:
                     n += 1
         return n
 
-    def _add_followers(self, state, picked: list, follows: list, limit: int, cap: int, fit=None, named_dead: set | None = None) -> list:
+    def _add_followers(self, state, picked: list, follows: list, limit: int, fit=None, named_dead: set | None = None, floor: set | None = None) -> list:
         """v0.41.158: a STRIKE / CAS under one or two SA-11 / SA-10 sites goes in behind their SEAD: it is offered only when today's list already has
         the DEAD job of every one of those sites (which _stage_dead turns into a SEAD / standoff package), so those sites have their radars busy
         (or blind) when it arrives. It takes a free slot, or the place of a lower-ranked job of a type that has another one. Judgment call: the
@@ -456,15 +482,13 @@ class ObjectivePlanner:
             if not sites or any(sid not in dead_sites or sid not in state.assets
                                 or not (long_range_site(state, state.assets[sid]) or sead_fail(state, sid) < valve) for sid in sites):
                 continue
-            if sum(1 for _, p in picked if p.type == o.type) >= cap:
-                continue
             if fit is not None and not fit.fits(o):
                 continue                                   # nobody can get there (or no jets left for it)
             if len(picked) >= limit:
                 per = {}
                 for _, p in picked:
                     per[p.type] = per.get(p.type, 0) + 1
-                weak = [(t, p) for t, p in picked if p.type != ObjectiveType.DEAD and not p.after and per[p.type] > 1 and t < s]
+                weak = [(t, p) for t, p in picked if p.type != ObjectiveType.DEAD and not p.after and per[p.type] > 1 and t < s and id(p) not in (floor or set())]
                 if not weak:
                     continue
                 picked.remove(min(weak, key=_first_item))
@@ -472,7 +496,7 @@ class ObjectivePlanner:
         picked.sort(key=_first_item, reverse=True)
         return picked
 
-    def _stage_dead(self, state, picked: list, limit: int) -> list:
+    def _stage_dead(self, state, picked: list, limit: int, floor: set | None = None) -> list:
         """SEAD first. Each SEAD / DEAD job becomes two packages for the same site: a SEAD package that blinds the radars, and a DEAD package that
         goes in 25 minutes later and only if the radars are blind (see blinded_today). After SEAD_FAIL_VALVE failed days on the same site the
         combined package is offered again. The pair counts against the day's package limit: the lowest-priority other jobs make room."""
@@ -490,13 +514,21 @@ class ObjectivePlanner:
                 out.append((s_, o))
         while extra > 0 and len(out) > limit:
             for k in range(len(out) - 1, -1, -1):
-                if out[k][1].type != ObjectiveType.DEAD:
+                if out[k][1].type != ObjectiveType.DEAD and id(out[k][1]) not in (floor or set()):
                     del out[k]
                     break
             else:
                 break
             extra -= 1
         return out
+
+
+def cas_sector(state, o):
+    """The ground sector a CAS job supports: its front column's (`ground.zone_of`) or its forward garrison's (`ground.sector_of`); None for neither."""
+    sector = ground.zone_of(state, o.target_id)
+    if sector is None:
+        sector = ground.sector_of(state, o.target_id)
+    return sector
 
 
 def job_sector(state, o):

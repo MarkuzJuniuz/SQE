@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.669, blue tasks by doctrine, not for variety
+The planner no longer holds any job type to 40% of the list or saves a place for one of each. After the SAM wave and close air support for troops in contact (up to two a turn), it takes jobs in order of how much they matter: air defences first, then radars, supply and the rest. Mid-war you will see more strikes; rear garrisons get close air support less often.
+
 ## v0.41.668, missions build faster
 The kneeboard pages loaded their fonts again for every line of text. They are now loaded once, which takes about a quarter off the time to build a mission. The pages look the same.
 
