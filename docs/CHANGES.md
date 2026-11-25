@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.672, red picks its raids by the state of the war, not by chance
+While your Patriots and HAWKs cover what red would hit, it goes after the air defences first (SEAD), then airfields. Once they are down it supports its ground forces: troops at the front, garrisons, then supply. At Level 1 the insurgents go for troops and garrisons first. At Levels 2 and 3 red raids more where it had been holding back.
+
 ## v0.41.671, red looks at every kind of target before giving up
 When the kind of target red picked has nothing open, it now tries the other kinds before turning to your SAM sites, so an open target is not missed.
 

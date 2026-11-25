@@ -58,7 +58,7 @@ class Difficulty:
     red_supply_strikes: int = 1          # v0.41.155: background strikes red tries a skip day on our depots and fuel (ground.supply_round; judgment call)
     red_surge: float = 0.0               # v0.41.155: red's push, attacks and raids grow by this much for each day beyond SURGE_GRACE_DAYS since your squadron last flew (ground.surge; judgment call)
     red_rear_feed: float = 0.0           # v0.41.155: share of a rear sector's strength that moves one sector forward each night, scaled by red supply (ground.resolve_day; judgment call)
-    raid_mix: tuple = (0.0, 0.0, 0.0)    # share of the raids that go for (a supply site, a field's garrison, friendly troops in a contested sector) instead of the airfield itself
+    raid_mix: tuple = (0.0, 0.0, 0.0)    # NOT READ since S207d (red's kind of raid follows the war's phase, `raids.pick_aim`); was: share of the raids that go for (a supply site, a field's garrison, friendly troops in a contested sector) instead of the airfield itself
     blue_garrison_size: float = 1.0      # scales the vehicle count of a friendly airfield garrison
     sead_valve: int = 3                  # failed SEAD days on one site before the combined SEAD + DEAD package is offered again (war.py)
     sam_retreat: float = 1.0             # scales the nightly chance that a badly hurt long-range SAM site pulls back from the front to recover (sams.retreat)
