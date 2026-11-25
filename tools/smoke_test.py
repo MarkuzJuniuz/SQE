@@ -651,7 +651,14 @@ LOCK_PARTS = [None] + list(range(len(LOCK_CASES)))              # check_waypoint
 
 
 def _timeout_for(name, override):
-    return override if override is not None else (900 if name == "check_soak" else 120)
+    """The watchdog for one check, in seconds. The soak and the waypoint-lock sweep (58 package builds) need longer ones of their own."""
+    if override is not None:
+        return override
+    if name == "check_soak":
+        return 900
+    if name == "check_waypoint_locks":
+        return 300
+    return 120
 
 
 def _run_task(task):
@@ -763,7 +770,7 @@ def run_parallel(selected, jobs, timeout):
 
 def main(argv=None):
     """Run the checks in order. Options: `--list` (names only), `--only a,b` (the checks whose name contains a or b), `--timeout SECONDS` (a check that
-    runs longer dumps every thread's traceback and stops the run; default 120, 900 for the soak, 0 = off), `--seeds N` (soak: N seeds per level),
+    runs longer dumps every thread's traceback and stops the run; default 120, 300 for the waypoint locks, 900 for the soak, 0 = off), `--seeds N` (soak: N seeds per level),
     `--jobs N` (worker processes, default the cores minus two; 1 = everything in this process, the old serial run)."""
     import argparse
     import faulthandler
@@ -794,7 +801,7 @@ def main(argv=None):
         return
     times = []
     for fn in run:
-        timeout = args.timeout if args.timeout is not None else (900 if fn is check_soak else 120)      # the soak needs its own, longer watchdog
+        timeout = _timeout_for(fn.__name__, args.timeout)
         if timeout:
             faulthandler.dump_traceback_later(timeout, exit=True)
         t0 = time.time()
