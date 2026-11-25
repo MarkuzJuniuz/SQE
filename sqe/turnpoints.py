@@ -49,7 +49,7 @@ pcall(write_request, "")
 local function send(item)
   local ok = pcall(write_request, string.format("SQETP %%d %%.2f", item.zone, timer.getTime()))
   if ok then
-    trigger.action.outTextForGroup(GROUP, item.label .. ": Jester is typing it into the fix point (FP). He is slow: wait until the range stops changing.", 20)
+    trigger.action.outTextForGroup(GROUP, item.label .. " (" .. item.note .. "): Jester is typing it into the fix point (FP). He is slow: wait until the range stops changing.", 20)
   else
     trigger.action.outTextForGroup(GROUP, "Turnpoints need DCS scripting access (SQE Settings, DCS Integration).", 15)
   end
@@ -74,5 +74,6 @@ def menu_lua(group_id: int, points: list) -> str:
     """The mission script that adds F10 > Other > Turnpoints for the player's group. `points` = `numbered()` rows; the nth one is zone n."""
     lines = []
     for number, point in enumerate(points[:MAX_ZONES], 1):
-        lines.append('  { zone = %d, label = "%s (%s)" },' % (number, point["label"], point["leg"]))
+        # the entry is the same words in every mission ("Turnpoint 1"), so a voice command can be bound to it; the leg changes and goes in the message
+        lines.append('  { zone = %d, label = "Turnpoint %d", note = "%s, %s" },' % (number, number, point["label"], point["leg"]))
     return _MENU_LUA % (group_id, MENU_PAGE, REQUEST_FILE, "\n".join(lines), MENU_TITLE)

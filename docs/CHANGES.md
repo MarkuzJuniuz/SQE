@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.659, the Turnpoints menu entries are "Turnpoint 1", "Turnpoint 2", ...
+The entries under F10 > Other > Turnpoints now carry the same words in every mission, so you can bind voice commands to them. Which leg the point is on shows in the message after you pick it.
+
 ## v0.41.658, your F-16C jammer lamp is read on the dedicated server too
 With the Jammer script installed, SQE now sees your F-16C's ECM lamp when the sortie runs on the dedicated server on this PC; before, it only did in single player. Open Settings > DCS Integration and click Update Jammer Script to get the new copy.
 
