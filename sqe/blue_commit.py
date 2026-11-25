@@ -14,7 +14,7 @@ S160 (same script, both sides):
   alert pairs, reliefs, standbys, raid-defence reinforcements). Red's raid escorts and sweeps are NOT registered (they fly Escort / FighterSweep with the bombers).
 
 Every COMMIT_STEP_S seconds, for each flight in its window whose lead is in the air: the nearest enemy airplane in the air within reach (and within leash +
-reach of the anchor, if leashed), seen by the side (an own AWACS, for red also an own EWR, else the flight's own radar), whose group has fewer than
+reach of the anchor, if leashed), seen by the side (an own AWACS, for red also an own EWR, else the flight's own radar; an F-117A only by the flight's own radar), whose group has fewer than
 COMMIT_MAX_PER_TARGET flights on it, gets an AttackGroup pushed on top of the flight's route. Break off: target group gone ("dead": cleared, no pop), the lead
 within SAM_BREAK_BUFFER_NM of an enemy SAM circle ("sam"), the flight lost a jet ("hurt"), the target beyond COMMIT_BREAK_FACTOR x reach ("far"), the lead beyond the leash ("leash"), the window over ("window"):
 popTask (only while the target lives, when the attack should be on top). Every commit / break-off goes to dcs.log as "SQECOMMIT <side> ...".
@@ -145,6 +145,8 @@ C.count = {}
 for _, f0 in ipairs(C.flights) do f0.cool = {} end
 local OWN = coalition.side[C.own]
 local ENEMY = coalition.side[C.enemy]
+-- Stealth: an EWR or AWACS that is merely alive does not count for these types; the flight's own radar must see the jet.
+local OWN_RADAR_ONLY = { ["F-117A"] = true }
 local function inSam(p, buffer)
   for _, s in ipairs(C.sams) do
     local dx = p.x - s[1]
@@ -226,6 +228,7 @@ local function nearestEnemy(f, group, lead, seenBySide)
           if leashed(f) and anchorDist(f, p) > f.leash + f.reach then inLeash = false end
           if d <= f.reach and inLeash then
             local seen = seenBySide
+            if OWN_RADAR_ONLY[u:getTypeName()] then seen = false end
             if not seen then
               local ok, res = pcall(function() return group:getController():isTargetDetected(u, Controller.Detection.RADAR) end)
               seen = ok and res and true or false
