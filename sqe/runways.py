@@ -134,6 +134,7 @@ CRATER_BLASTS_MAX = 6         # ... and at most this many (judgment call: a few 
 CRATER_POWER = 450.0          # trigger.action.explosion power of one blast, about one Mk-84 (judgment call; whether DCS leaves a runway crater from a scripted blast is untested)
 CRATER_REACH = 0.75           # the blasts lie within this share of the runway half length either side of the reference point (judgment call: inside the strip even if the reference point is off centre)
 CRATER_MIN_GAP_M = 120.0      # blasts at least this far apart along the runway (judgment call)
+KH59_AIM_REACH = 0.6          # S209: red's Kh-59M aim points lie within this share of the runway half length either side of the reference point (judgment call: nearer the middle than the craters, so a small error in the heading still leaves the point on the strip)
 
 # Blue fields with an ILS: pydcs airport name -> the runway end the ILS belongs to. From the DCS airfield panels as XO copied them into kneeboard.NAV (v0.41.177, v0.41.252);
 # the other end of each runway has no ILS. Phase 9a (XO data, 2026-11-10; not checked against DCS here): Vaziani and Tbilisi-Lochini have an ILS on both ends; one runway per field is kept, 13
@@ -162,6 +163,21 @@ def _end_number(name: str) -> int:
 def _along(x: float, y: float, hdg_deg: float, d: float):
     h = math.radians(hdg_deg)
     return x + d * math.cos(h), y + d * math.sin(h)           # DCS x north, y east
+
+
+def aim_points(ap, count: int) -> list:
+    """S209: `count` aim points spread along the first runway of `ap` (x north, y east), for a Kh-59M runway raid: one for each bomber flight (the geometry of `crater_points`, on the centreline, no jitter).
+    Empty when the field has no runway data."""
+    if not ap.runways or count <= 0:
+        return []
+    heading = ap.runways[0].main.heading + mag_var_deg()
+    span = RUNWAY_HALF_LENGTH_M * KH59_AIM_REACH
+    cell = 2.0 * span / count
+    out = []
+    for index in range(count):
+        distance = -span + cell * (index + 0.5)
+        out.append(_along(ap.position.x, ap.position.y, heading, distance))
+    return out
 
 
 def crater_points(state, field_id: str, ap, rng) -> list:

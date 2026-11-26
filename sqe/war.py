@@ -751,7 +751,7 @@ class WarSimulator:
             lines += raids.tu_hit(state, pkg.objective.target_id, bw, rng, pkg.objective.aim, nb_)
         elif bw is not None and ok:
             k = raids.lose_raiders(state, pkg.extra, (rng.randint(2, 4) if nb_ <= 4 else max(2, round(nb_ * rng.uniform(0.4, 0.7)))) if pkg.extra.get("land") else max(1, round(pkg.extra.get("bombers", 4) * rng.uniform(0.4, 0.8))), rng)          # S46: a pooled raid loses them over its wings
-            lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
+            lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") and not kh59_ else "launching their missiles"))
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
         elif bw is not None and (pkg.extra.get("sead") or kh59_):                  # S36b: a SEAD package that was not stopped fires its Kh-31P (B2: or Kh-58U) from standoff: most of its jets launch (judgment call: 60 to 100 %), and the site takes SEAD_SITE_HIT for each. S48: a Kh-59M raid the same: the jets go home, the hit is `raids.KH59_HIT_EQUIV` per jet
