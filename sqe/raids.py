@@ -100,11 +100,15 @@ SEAD_HAWK_PACKAGES = 2          # S44 (XO 2026-11-12): a HAWK gets two packages 
 SEAD_SITE_HIT = 0.15          # ...and a blue SAM site loses this much health per SEAD jet that gets through (a launch of 3 jets takes 0.45 off a HAWK, 6 take 0.9 off a Patriot; judgment call, tuned with the probe `.private/probes/s36`: 0.08 never opened a field, 0.25 wiped the SAMs by day 10, 0.15 sags them and reopens fields)
 KH59_RAIDS = True             # S48 (XO musing 2026-11-12, probe flown 2026-11-12): red's raids fire the Kh-59M from standoff and turn for home (`plan_raid` books it, `raid_spawns` builds it, `war._resolve_raid` resolves it). False = every raid as S46 left it. Both the plan and the spawner read this module attribute at call time
 KH59_BY_LEVEL = {1: True, 2: True, 3: True}   # S209 (XO 2026-11-25: "Let them use it however it can be used", "Let level 1 have it too, for fun"): every level. Level 1 is a rule XO chose for fun, not doctrine (an insurgent force would have no crews for a TV-guided missile). A raid is a Kh-59M raid whenever a wing that carries it can field it (S208: no dice)
-KH59_KINDS = ("supply", "garrison", "field", "sam", "sector")   # the kinds of aim a Kh-59M raid flies at (S209: under blue's Patriot / HAWK cover too; "field" = the missiles are aimed along the runway). Never the carrier: the AI fires this land missile only at a fixed point, and a ship moves
-KH59_FLY_S = 340              # launch to impact (probe 2026-11-12: 335 to 355 s from 55 to 58 nm; S208 server test 334 s): a mission left earlier than this after the launch has not seen the hits
-KH59_LAUNCH_NM = 50           # the Kh-59M raid's launch point, this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M with margin for a low launch (judgment call; probe 2026-11-12 and the S208 server test: the Su-24M fires several nm before the point, about 57 nm)
+KH59_KINDS = ("supply", "garrison", "field", "sam")   # the kinds of aim a Kh-59M raid flies at (S209: under blue's Patriot / HAWK cover too; "field" = the missiles are aimed along the runway). Not troops in contact (S211: 12 missiles arrived in the S209 server tests and did no damage; a TV-guided missile for fixed targets) and never the carrier (the AI fires this land missile only at a fixed point, and a ship moves)
+KH59_FLY_S = 370              # launch to impact, with margin (probe 2026-11-12 and S208 server test: 334 to 355 s from 55 to 58 nm; S211 launches from 58 nm and some fire at 62): a mission left earlier than this after the launch has not seen the hits
+KH59_LAUNCH_NM = 58           # the Kh-59M raid's launch point, this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M (low firmness; S209 server tests: fired from 61 to 62 nm and hit within 29 m). S211 (was 50): outside a Patriot's 54 nm ring against a 20,000 ft jet (`samtier`, S171); at 50 one group was engaged at its launch point
 KH59_ALT_FT = 20000           # the altitude a Kh-59M raid flies (`raid_spawns`: a land raid without attack types), for the Patriot ring its way in is measured against
 KH59_BEARING_MAX_DEG = 90     # the way in may swing this far from the wing's own bearing to avoid blue's batteries (judgment call: farther is flying round the back of the target)
+# S211: the war sim's Kh-59M figures, measured in the S209 server tests (2026-11-25, 14 raids, 79 missiles; `test-runs/S209-kh59/REPORT.md`). Small sample: low firmness.
+KH59_PRELAUNCH_SHARE = 0.5    # of the raids the sim's own roll would stop, only this share are stopped before they launch (DCS: 4 of 14 raids, the roll alone stops about 55 % at Level 3)
+KH59_SALVO_STOP = 0.7         # a salvo that was launched is shot down whole by blue's fighters (DCS: 7 of 10 salvos lost every missile; no Patriot or HAWK ever fired at one). One roll for the raid
+KH59_RUNWAY_HIT = 0.9         # each missile of a salvo that arrives hits the runway it was aimed along (DCS: 8 of 9)
 KH59_HIT_EQUIV = 1.0          # ...a Kh-59M jet that launches counts as this many free-fall-bomber jets in `hit()` on a supply site or garrison (judgment call: two 320 kg precision missiles are worth about one jet's load of unguided bombs; red's gain is the missing losses and the safe launch point, not a bigger hit)
 ASSET_HIT = 0.20              # health a supply site or garrison loses per aircraft that gets through
 SECTOR_HIT = 4.0              # friendly sector strength lost per aircraft that gets through
@@ -1313,7 +1317,7 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
     b = state.bases[base_id]
     k = through if through is not None else rng.randint(1, 3)
     if kh59 and aim_kind(aim) == "field":
-        return kh59_runway_hit(state, b, k, ac)
+        return kh59_runway_hit(state, b, k, ac, rng)
     ke = eff(k * KH59_HIT_EQUIV if (kh59 and aim_kind(aim) in KH59_KINDS) else k)
     from .sams import covering_ad
     ad = covering_ad(state, *aim_xy(state, aim, b))
@@ -1350,15 +1354,19 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
     return lines
 
 
-def kh59_runway_hit(state, b, jets: int, ac: str | None) -> list:
-    """S209: the war sim's Kh-59M runway raid (the missiles of the `jets` that launched are aimed along the runway of `b`): `runways.HITS_TO_CLOSE` or more close the field, fewer are repaired overnight. No damage to
-    the defences or parked jets, and the raiders lose nothing to the batteries (they fire from outside them). PLACEHOLDER until the S209 server tests: every missile launched is counted as reaching the runway.
+def kh59_runway_hit(state, b, jets: int, ac: str | None, rng: random.Random) -> list:
+    """S209: the war sim's Kh-59M runway raid, once its salvo has got through (the missiles of the `jets` that launched are aimed along the runway of `b`): each hits it with `KH59_RUNWAY_HIT` (S211);
+    `runways.HITS_TO_CLOSE` or more hits close the field, fewer are repaired overnight. No damage to the defences or parked jets, and the raiders lose nothing to the batteries (they fire from outside them).
     -> log lines."""
     from .loadouts import KH59_PER_JET
     missiles = int(jets) * KH59_PER_JET.get(ac or "Su_24M", 2)
-    lines = [f"   {missiles} Kh-59M missiles came down on the runway of {b.name}"]
-    if missiles >= runways.HITS_TO_CLOSE:
-        lines.append("   " + runways.crater(state, b.id, missiles))
+    hits = 0
+    for _ in range(missiles):
+        if rng.random() < KH59_RUNWAY_HIT:
+            hits += 1
+    lines = [f"   {hits} Kh-59M missiles came down on the runway of {b.name}"]
+    if hits >= runways.HITS_TO_CLOSE:
+        lines.append("   " + runways.crater(state, b.id, hits))
     else:
         lines.append("   too few to close it; the repair crews fixed it overnight")
     return lines
@@ -1423,12 +1431,14 @@ def overnight(state, d, rng: random.Random) -> list:
                 lines.append(f"Surprise raid on {what}: " + ("the base patrol and " if up_ else "") + f"alert aircraft got up in time; {k} attack aircraft shot down")
                 if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                     lines.append(ln_)
+            elif standoff is not None and rng.random() < KH59_SALVO_STOP:
+                lines.append(f"Surprise raid on {what}: the bombers launched unwarned, but our fighters shot the missiles down")
             else:
                 lines.append(f"Surprise raid on {what}: nobody was warned and the aircraft got through")
-                losing_wing = wing
                 if standoff is not None:
-                    losing_wing = None                            # a standoff raid loses nothing to the defences over the target
-                lines += [x_.strip() for x_ in hit(state, b.id, losing_wing, rng, None, aim, r[2], kh59=standoff is not None)]
+                    lines += [x_.strip() for x_ in hit(state, b.id, None, rng, n_, aim, r[2], kh59=True)]          # S211: every jet fires; a standoff raid loses nothing to the defences over the target
+                else:
+                    lines += [x_.strip() for x_ in hit(state, b.id, wing, rng, None, aim, r[2])]
         else:                                                    # v0.41.155 (red zerg): a mass raid is settled aircraft by aircraft
             stopped_ = sum(1 for _ in range(n_) if rng.random() < p_stop)
             through_ = n_ - stopped_
@@ -1436,7 +1446,9 @@ def overnight(state, d, rng: random.Random) -> list:
             lines.append(f"Surprise raid on {what}: {n_} attack aircraft; " + ("the base patrol and " if up_ else "") + f"alert aircraft stopped {stopped_}, {through_} got through")
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
-            if through_:
+            if through_ and standoff is not None and rng.random() < KH59_SALVO_STOP:
+                lines.append("   our fighters shot the missiles down")
+            elif through_:
                 lines += [x_.strip() for x_ in hit(state, b.id, None, rng, through_, aim, r[2], kh59=standoff is not None)]
     if state.raids is not None:
         state.raids["surprise"] = 0
