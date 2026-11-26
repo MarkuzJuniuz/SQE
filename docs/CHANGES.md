@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.689, the Caucasus can be lost on supply
+On the Caucasus the war is now also lost if the coalition's Force Index stays at 60% or less for three days: Washington calls the war off. The Overview warns you while it is that low. In practice only Level 3 gets there.
+
 ## v0.41.687, strikes behind a SEAD hit as they do in DCS
 In the war outside your missions, a strike or close air support mission that goes in behind a SEAD now usually damages its target, as it did in DCS tests. Before, most of them did nothing.
 

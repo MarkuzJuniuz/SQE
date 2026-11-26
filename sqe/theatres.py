@@ -33,6 +33,7 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   ils_runway {airport: runway number}   -> runways.ils_runways()                    (default runways.ILS_RUNWAY)
 #   mag_var_deg number                    -> runways.mag_var_deg()                    (default runways.MAG_VAR_DEG)
 #   win_supply {level: {below, days}}     -> ground.update_supply_win / war.update_status (default none: red's Force Index at or below `below` on `days` consecutive days wins the level)
+#   lose_supply {level: {below, days}}    -> ground.update_supply_loss / war.update_status (default none: the coalition's Force Index at or below `below` on `days` consecutive days loses the level)
 #   works {label, damage, levels {level: {push, rebuild_days, supply_total?, teams?, hold_days?}}, sites [{id wks_.., name, x, y}]} -> works.build / war / ground.push_factor (S111: Lutorin's works, special blue targets; the win when all are destroyed. Default none: the Caucasus)
 #   start_hour 0|4|8|12|16|20             -> CampaignState.start_hour, clock.use()    (default 8: Day 1 / turn 0 starts at 08:00; Syria 0)
 #   opening_strike {levels, kill, text?, fill?}  -> scenario._opening_strike          (default none: every red site of the variant `kill` starts the campaign destroyed, rebuilt by the normal rule; `fill`: what the F-117A pairs left over hit, S104d)
@@ -150,12 +151,15 @@ def _check_hooks(d: dict, src) -> None:
                     bad(f"{k}: {t!r} is not a pydcs aircraft")
     if set(d.get("raid_attack_types") or ()) & set(d.get("raid_bomber_types") or ()):
         bad("raid_attack_types and raid_bomber_types must not share a type (the bomber list alone flies the SEAD and Kh-59M raids)")
-    if "win_supply" in d:
-        levels_of("win_supply", d["win_supply"])
-        for lv, r in d["win_supply"].items():
+    # S90 / S213: the two Force Index rules have the same shape.
+    for rule_key in ("win_supply", "lose_supply"):
+        if rule_key not in d:
+            continue
+        levels_of(rule_key, d[rule_key])
+        for lv, r in d[rule_key].items():
             if (not isinstance(r, dict) or set(r) != {"below", "days"} or isinstance(r["below"], bool) or not isinstance(r["below"], (int, float)) or not 0.0 < r["below"] <= 1.0
                     or isinstance(r["days"], bool) or not isinstance(r["days"], int) or r["days"] < 1):
-                bad(f"win_supply level {lv} must be {{\"below\": a number above 0 and up to 1, \"days\": a whole number of days, 1 or more}}")
+                bad(f"{rule_key} level {lv} must be {{\"below\": a number above 0 and up to 1, \"days\": a whole number of days, 1 or more}}")
     if "works" in d:                                                  # S111: Lutorin's works (works.py)
         w = d["works"]
         # A real number (a bool is not one here).
