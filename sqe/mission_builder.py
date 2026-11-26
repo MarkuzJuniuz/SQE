@@ -3028,7 +3028,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         return f"Round SAM rings: {n} turnpoint{'s' if n > 1 else ''} (TP), +{nm:.0f} nm, +{s / 60:.0f} min vs straight." if nm >= 1 else ""
 
     def _add_rio_navigation(self, pf, rows, turnpoint_points, leave_s) -> str:
-        """S210: F-14 RIO Navigation for the player's F-14B / F-14B(U): F10 > Other > "RIO Navigation" ("Your Nav" / "My Nav"; Jester has the nav at the start) and "Turnpoints", and the mission script that runs them (`rio_nav`). Which slot or
+        """S210: F-14 RIO Navigation for the player's F-14B / F-14B(U): F10 > Other > "RIO Navigation" ("Your Nav" / "My Nav"; Jester has the nav at the start), on the plain F-14B also "Turnpoints", and the mission script that runs them (`rio_nav`). Which slot or
         waypoint number each point has is read from the jet's own points as they were built. -> the line for the kneeboard."""
         group = None
         for flight, flight_group in self.flight_groups:
@@ -3063,19 +3063,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if not legs:
             return ""
         items = []
-        number_by_row = {}
-        for leg in legs:
-            number_by_row[leg["row"]] = leg["num"]
-        for number, point in enumerate(turnpoint_points[:rio_nav.MAX_ZONES], 1):
-            # the entry is the same words in every mission ("Turnpoint 1"), so a voice command can be bound to it; the leg changes and goes in the message
-            item = {"label": "Turnpoint %d" % number, "note": "%s, %s" % (point["label"], point["leg"])}
-            if bu:
-                item["num"] = number_by_row.get(point["index"])
-                if item["num"] is None:
-                    continue
-            else:
-                item["zone"] = turnpoint_zones[point["index"]]
-            items.append(item)
+        if not bu:                      # the F-14B(U) picks any point on Jester's own wheel: only the plain F-14B gets the Turnpoints menu
+            for number, point in enumerate(turnpoint_points[:rio_nav.MAX_ZONES], 1):
+                # the entry is the same words in every mission ("Turnpoint 1"), so a voice command can be bound to it; the leg changes and goes in the message
+                items.append({"label": "Turnpoint %d" % number, "note": "%s, %s" % (point["label"], point["leg"]), "zone": turnpoint_zones[point["index"]]})
         for number, x, y in zones:
             self.m.triggers.add_triggerzone(self._pt(x, y), radius=500, hidden=False, name=rio_nav.zone_name(number))
         strike = pf.role == Role.STRIKE          # a DEAD package's bombers fly the STRIKE role too (XO: a DEAD run is a strike)

@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.694, F-14B(U): just Your Nav and My Nav
+The F-14B(U) no longer has the Turnpoints menu: every point is on Jester's own wheel. Your Nav now always orders the current point again, even when Jester already has the nav, and reloads the flight plan if the jet has lost it.
+
 ## v0.41.692, F-14B(U): Jester brings deleted waypoints back
 A direct to the tanker deletes home base and everything you have not flown from the F-14B(U). Now, when you hand Jester the nav back or pick a turnpoint and the jet no longer has the point, he reloads the mission's flight plan on the CDNU and takes you there. Click Update in Settings if you had installed the script.
 

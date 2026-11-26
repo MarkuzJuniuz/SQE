@@ -398,9 +398,9 @@ class SettingsDialog(QDialog):
 
         self.tp_inst.clicked.connect(install_turnpoints); self.tp_rem.clicked.connect(remove_turnpoints)
         r = QHBoxLayout(); r.addWidget(self.tp_inst); r.addWidget(self.tp_rem); r.addStretch(1); v.addLayout(r)
-        hint(v, "For the F-14B or F-14B(U) you fly: Jester works your steerpoints through the flight (F10 > Other > RIO Navigation: he has the nav from the start, My Nav takes it, Your Nav hands it back) and sets a turnpoint you pick from F10 > Other > Turnpoints. "
+        hint(v, "For the F-14B or F-14B(U) you fly: Jester works your steerpoints through the flight (F10 > Other > RIO Navigation: he has the nav from the start, My Nav takes it, Your Nav hands it back). On the F-14B he also sets a turnpoint you pick from F10 > Other > Turnpoints. "
                 "It copies sqe_f14_turnpoints_export.lua into Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there (a backup, "
-                "Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. Without it missions have neither menu: install it before you generate the mission. "
+                "Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. Without it missions have no such menus: install it before you generate the mission. "
                 "Works in single player and with the dedicated server on this PC, not on another computer's server. Takes effect when DCS starts.")
         # The server option lives on this tab with the other DCS settings (it was on Mission Build).
         v.addSpacing(10)

@@ -1,4 +1,4 @@
-"""F-14 RIO Navigation (experimental, S210): Jester works the player's steerpoints through the flight, and types or flies direct to a turnpoint on request.
+"""F-14 RIO Navigation (experimental, S210): Jester works the player's steerpoints through the flight, and on the plain F-14B types a turnpoint in on request.
 
 The mission script made here decides everything (which point is next, the "RIO: ..." messages, when to switch itself off); it writes the cockpit commands into a request file.
 The export script on the player's PC (`data/sqe_f14_turnpoints_export.lua`) presses them, and reports back through a second file when you take the navigation over (plain F-14B: the destination knob moves;
@@ -9,10 +9,11 @@ where the flight is. At a waiting point (the marshal until its leave time, a sta
 points' waypoint numbers, so the export script can switch to manual the moment the jet steps onto one.
 
 The player's calls are F10 > Other > RIO Navigation: "Your Nav" (Jester works the waypoints, as from the mission start) and "My Nav" (he stops). Home base (the RTB leg) ends his work: he goes
-direct to it, holds the F-14B(U) in manual and hands the nav back.
+direct to it, holds the F-14B(U) in manual and hands the nav back. "Your Nav" said while he already has it orders the current point again.
+The F-14B(U) has no Turnpoints menu: its points are all on Jester's own wheel.
 
 F-14B(U), a point that is gone (a direct to the tanker deletes home base): when the jet refuses a direct-to, he asks the export script to load the flight plan again (command 2, the CDNU's keys,
-probe 2026-11-26) and orders the same point once more. Only while he has the nav, or just after handing it back at TGT, home base or a turnpoint; once for each order.
+probe 2026-11-26) and orders the same point once more. Only while he has the nav, or just after handing it back at TGT or home base; once for each order.
 
 F-14B(U), probe flown 2026-11-26 and Heatblur's CDNU manual: direct-to a later waypoint DELETES the ones in between (the one you leave goes to history; the last 5 history points can be flown to again).
 Nothing here steers to a station's far end before its near end, so a point still needed is never jumped. In Destination steering the HUD ignores direct-to, so switching on first steps out of it
@@ -414,7 +415,7 @@ local function reported(reason)
     turn_off(off_reason(reason))
     last_order = nil
   elseif recent and (reason == "unable" or reason == "page") then
-    say(off_reason(reason))                    -- he had handed the nav back (TGT, home base, a turnpoint) and could not get you there
+    say(off_reason(reason))                    -- he had handed the nav back (TGT, home base) and could not get you there
     last_order = nil
   end
 end
@@ -440,11 +441,18 @@ local function tick()
   flush()
 end
 
--- "Your Nav": Jester takes the waypoints. Said while he has them, he only repeats the current steerpoint.
+-- "Your Nav": Jester takes the waypoints. Said while he has them, he orders the current point again (a point the jet no longer has is then reloaded).
 local function your_nav()
   if on and started then
     local leg = legs[current]
-    if leg then say("I have the nav. Current steerpoint: " .. leg.name) end
+    if timer.getTime() < restoring_until then
+      say("I have the nav. Still reloading.")
+    elseif leg then
+      say("I have the nav. Current steerpoint: " .. leg.name)
+      if BU then set_up_bu() end
+      steer_to(leg)
+      flush()
+    end
     return
   end
   if not can_write() then
@@ -465,7 +473,7 @@ local function my_nav()
   if on then
     turn_off("Your nav.")
   else
-    release = BU                               -- stops a reload he started for TGT, home base or a turnpoint
+    release = BU                               -- stops a reload he started for TGT or home base
     say("Your nav.")
   end
 end
@@ -476,16 +484,9 @@ local function turnpoint(item)
     return
   end
   if on then turn_off("Your nav. You picked a turnpoint.") end
-  if BU then
-    set_up_bu()
-    restoring_until = 0
-    send_order({ num = item.num, name = item.label, manual = true })
-    say(item.label .. " (" .. item.note .. "): direct to waypoint " .. item.num .. ". The F-14B(U) drops the waypoints you jump over.", 20)
-  else
-    press(0, 10017, 0.4)
-    type_into_fix_point(item.zone, 3)
-    say(item.label .. " (" .. item.note .. "): Jester is typing it into the fix point (FP). He is slow: wait until the range stops changing.", 20)
-  end
+  press(0, 10017, 0.4)                         -- the menu is only made for the plain F-14B
+  type_into_fix_point(item.zone, 3)
+  say(item.label .. " (" .. item.note .. "): Jester is typing it into the fix point (FP). He is slow: wait until the range stops changing.", 20)
   flush()
 end
 
@@ -517,7 +518,7 @@ end, nil, timer.getTime() + 1)
 
 
 def mission_script(group_id: int, unit_name: str, bu: bool, strike: bool, legs: list, turnpoint_items: list, leave_s, exit_s) -> str:
-    """The mission script for the player's F-14. `legs` from `plain_legs` / `bu_legs`; `turnpoint_items` = [{"label", "note", "zone" (plain) , "num" (B(U))}]; `leave_s` = when the flight leaves its marshal;
+    """The mission script for the player's F-14. `legs` from `plain_legs` / `bu_legs`; `turnpoint_items` = [{"label", "note", "zone"}], empty for the B(U); `leave_s` = when the flight leaves its marshal;
     `exit_s` = when it leaves its station (None when it has none). `strike`: switch off once TGT is selected (home base always ends the work)."""
     leg_lines = []
     for leg in legs:
@@ -525,7 +526,7 @@ def mission_script(group_id: int, unit_name: str, bu: bool, strike: bool, legs: 
                          % (_lua_value(leg["name"]), _lua_value(leg["kind"]), leg["x"], leg["y"], int(leg["t"] or 0), _lua_value(leg["knob"]), _lua_value(leg["zone"]), _lua_value(leg["num"])))
     turnpoint_lines = []
     for item in turnpoint_items:
-        turnpoint_lines.append("  { label = %s, note = %s, zone = %s, num = %s }," % (_lua_value(item["label"]), _lua_value(item["note"]), _lua_value(item.get("zone")), _lua_value(item.get("num"))))
+        turnpoint_lines.append("  { label = %s, note = %s, zone = %s }," % (_lua_value(item["label"]), _lua_value(item["note"]), _lua_value(item["zone"])))
     values = {"__LEGS__": "\n".join(leg_lines), "__TURNPOINTS__": "\n".join(turnpoint_lines), "__GROUP__": str(group_id), "__UNIT__": _lua_value(unit_name), "__BU__": _lua_value(bu),
               "__STRIKE__": _lua_value(strike), "__LEAVE__": _lua_value(None if leave_s is None else int(leave_s)), "__EXIT__": _lua_value(None if exit_s is None else int(exit_s)),
               "__REQUEST__": REQUEST_FILE, "__OVERRIDE__": OVERRIDE_FILE, "__MENU_TITLE__": MENU_TITLE, "__YOUR_NAV__": YOUR_NAV_TITLE, "__MY_NAV__": MY_NAV_TITLE, "__TURNPOINTS_TITLE__": TURNPOINTS_TITLE, "__PAGE__": str(MENU_PAGE)}

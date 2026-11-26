@@ -1,6 +1,6 @@
 """Turnpoints: the points that route a flight round SAM rings (the planner calls them "AVD").
 
-The kneeboard calls them TP1, TP2, ... in the order they are flown. The player's F-14 gets an F10 menu to steer to one (`rio_nav`).
+The kneeboard calls them TP1, TP2, ... in the order they are flown. The player's plain F-14B gets an F10 menu to steer to one (`rio_nav`).
 
 Pure functions, no pydcs."""
 from __future__ import annotations
