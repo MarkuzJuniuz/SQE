@@ -2954,7 +2954,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         plan = {}
         if "IP" in by:
             plan[id(by["IP"])] = "IPXIP"
-        if tgt is not None:
+        # a station keeps its own name (CAP1), as on the card: it is not a surface target
+        if tgt is not None and tgt.name != "CAP1":
             plan[id(tgt)] = "TGTXST"
         if "RTB" in by:
             plan[id(by["RTB"])] = "RTBXHB"
