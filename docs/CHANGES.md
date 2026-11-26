@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.695, F-14 RIO Navigation: PUSH waits for push time
+Jester now keeps you on PUSH until push time, so orbiting at the marshal no longer skips it. In the F-14B(U) it is held in manual sequencing like the marshal, and a waiting point the jet steps onto by itself is ordered again instead of ending his work.
+
 ## v0.41.694, F-14B(U): just Your Nav and My Nav
 The F-14B(U) no longer has the Turnpoints menu: every point is on Jester's own wheel. Your Nav now always orders the current point again, even when Jester already has the nav, and reloads the flight plan if the jet has lost it.
 

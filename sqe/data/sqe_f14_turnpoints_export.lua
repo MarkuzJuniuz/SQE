@@ -7,7 +7,7 @@
 --   F-14B(U): the waypoint or the steering mode on the display changes without one, or you press a TACAN or steering button. It also reports an order the jet did not take.
 --             In auto sequencing the jet moving on to the next waypoint is its own step, not a change of yours.
 -- On the F-14B(U) it first takes the jet out of Destination steering (the PTID's steering push button), sets EGI and manual sequencing.
--- HOLD lists the waypoints Jester waits at: when the jet steps onto one in auto sequencing, this script switches it to manual so it does not step past.
+-- HOLD lists the waypoints Jester waits at: when the jet steps onto one in auto sequencing, this script switches it to manual and goes direct to it again, so it does not step past.
 -- A direct-to deletes the waypoints it jumps over. When the mission asks, this script loads the mission's flight plan again with the CDNU's keys, reading the screen before each one
 -- and stopping if it is not the page it expects.
 -- What it sends and sees is logged in Logs\SQE_rio_navigation.log (started afresh each flight). It does nothing in any other aircraft.
@@ -191,8 +191,13 @@ local function judge_display(now, watch, mode, waypoint)
   end
   -- a waypoint Jester waits at: stop the jet stepping past it
   if mode == "AUTO" and state.sequencing == "AUTO" and state.holds[waypoint] then
-    log("waypoint " .. waypoint .. " is one to wait at: manual sequencing")
+    -- In the flight of 2026-11-26 the display showed the waypoint before this one again after manual was pressed: so go direct to it as well,
+    -- and judge nothing until that direct-to.
+    log("waypoint " .. waypoint .. " is one to wait at: manual sequencing and direct to it")
     add_step(0, STEERING_MODE, MANUAL_SEQUENCING)
+    add_step(1, SELECT_WAYPOINT, waypoint / 100)
+    add_step(2, DIRECT_TO, 1)
+    state.watch = nil
   end
   return nil
 end

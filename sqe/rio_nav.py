@@ -5,7 +5,7 @@ The export script on the player's PC (`data/sqe_f14_turnpoints_export.lua`) pres
 F-14B(U): the display's waypoint or steering mode changes, or a TACAN / steering button is pressed) or when the jet did not take an order.
 
 F-14B(U) sequencing (S210b): between the points where Jester waits, the jet is left in AUTO sequencing and steps on by itself; no order is sent for an ordinary leg, the mission script only follows
-where the flight is. At a waiting point (the marshal until its leave time, a station until its exit time, TGT on a strike) the jet is held in MANUAL. Each request ends with "HOLD:n/n/n", the waiting
+where the flight is. At a waiting point (the marshal until its leave time, PUSH until push time, a station until its exit time, TGT on a strike, home base) the jet is held in MANUAL. Each request ends with "HOLD:n/n/n", the waiting
 points' waypoint numbers, so the export script can switch to manual the moment the jet steps onto one.
 
 The player's calls are F10 > Other > RIO Navigation: "Your Nav" (Jester works the waypoints, as from the mission start) and "My Nav" (he stops). Home base (the RTB leg) ends his work: he goes
@@ -51,6 +51,8 @@ def zone_name(number: int) -> str:
 def leg_kind(name: str) -> str:
     if name == "MSHL":
         return "mshl"
+    if name == "PUSH":
+        return "push"
     if name == "CAP1":
         return "cap1"
     if name == "CAP2":
@@ -193,6 +195,7 @@ end
 local function is_waiting(leg)
   if not BU or not leg then return false end
   if leg.kind == "mshl" then return LEAVE ~= nil end
+  if leg.kind == "push" then return leg.t > 0 end
   if leg.kind == "cap1" or leg.kind == "cap2" then return true end
   if leg.kind == "tgt" then return STRIKE end
   if leg.kind == "home" then return true end
@@ -357,6 +360,10 @@ local function follow(unit)
   local passed = distance < 3 * NM or (closest < 10 * NM and distance > closest + NM)
   if leg.kind == "mshl" and LEAVE then
     if now >= LEAVE then advance() end
+    return
+  end
+  if leg.kind == "push" and leg.t > 0 then     -- left at push time only: the marshal is close to it, and an orbit would pass it early
+    if now >= leg.t then advance() end
     return
   end
   if leg.kind == "cap1" or leg.kind == "cap2" then   -- a station is left at its exit time only; with no exit time on the card, only you move him on
