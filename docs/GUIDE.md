@@ -133,7 +133,8 @@ straight line to nothing at 12 km, and inside 12 km the missile "burns through" 
 really destroy a missile: this is the closest a mission script can get to a missile that loses its target, and the numbers are SQE's own judgment, not measured figures. The idea
 of scripted jamming in DCS missions is not SQE's: it goes back to the "Complete Electronic War" jamming script that ESAc_matador published on the Eagle Dynamics forum in 2016,
 and the campaign tool DCS Retribution offers an electronic warfare script as a plugin. SQE uses no code from either; its script was written for SQE from a description of the
-effect.
+effect. For your own jet, SQE knows the jammer is on by reading the F-16C's ECM lamp or the A-10C II's countermeasure display (OPR) once the jammer script is installed (Settings > DCS Integration);
+in an FC3 jet you call it from F10 > Other > SQE ECM Switch. Otherwise your jammer counts as on over the attack leg.
 
 **Experimental: Fly on the local DCS dedicated server** (Settings > DCS Integration, off by default). The idea: the server runs the same mission with the AI at real time and without
 a screen, so it may carry bigger missions than the game on its own, and you join it as a client at 127.0.0.1:10308 (no password). It needs the MissionScripting patch, the

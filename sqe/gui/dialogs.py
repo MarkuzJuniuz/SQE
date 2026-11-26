@@ -348,7 +348,7 @@ class SettingsDialog(QDialog):
         self.ecm_msg = QCheckBox("Show Jammer Status")                      # v0.41.213 (XO): a sub-option of the ECM script; v0.41.647: right under its parent
         self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
         self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")
-        self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and \"Cockpit: ECM On\" / \"Cockpit: ECM Off\" for the F10 SQE ECM Switch / SQE ECM OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
+        self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's or A-10C II's jammer (\"ECM on\" / \"ECM off\") and \"Cockpit: ECM On\" / \"Cockpit: ECM Off\" for the F10 SQE ECM Switch / SQE ECM OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
         v.addWidget(self.ecm_msg)
         hint(v, "SQE's own jamming effect; off by default. Off: jammers use DCS's own ECM; AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
                 "and switch it on over the attack leg only when a radar locks them. On: they keep it on over the whole attack leg, and a radar-guided missile fired at a jet with a jammer may be fooled: "
@@ -373,7 +373,7 @@ class SettingsDialog(QDialog):
 
         self.ecm_inst.clicked.connect(install_ecm); self.ecm_rem.clicked.connect(remove_ecm)
         r = QHBoxLayout(); r.addWidget(self.ecm_inst); r.addWidget(self.ecm_rem); r.addStretch(1); v.addLayout(r)
-        hint(v, "Lets SQE read your F-16C's ECM lamp (about four times a second) so its jamming model knows when your jammer is on. It copies sqe_ecm_export.lua into "
+        hint(v, "Lets SQE read your jammer (the F-16C's ECM lamp, the A-10C II's jammer window; about four times a second) so its jamming model knows when it is on. It copies sqe_ecm_export.lua into "
                 "Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there (a backup, Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. "
                 "Without it SQE counts your jammer as on over the attack leg. Takes effect when DCS starts.")
         # F-14 RIO Navigation (S210; was the F-14B Turnpoints script): installed or not is the whole setting (no checkbox).

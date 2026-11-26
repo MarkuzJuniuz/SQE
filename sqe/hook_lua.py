@@ -400,7 +400,7 @@ local function logShot(ev, e, by)
   shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt, tx = tx, tz = tz, left = left }
 end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
--- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp, written four times a second by sqe/data/sqe_ecm_export.lua (Export.lua) to
+-- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp or the A-10C II's jammer window, written four times a second by sqe/data/sqe_ecm_export.lua (Export.lua) to
 -- Logs\SQE_ecm.flag as "<0|1> <model time>"; a missing or stale file falls back to the attack-leg window below. ECMP "f10": an FC3 jet (nothing readable in its
 -- cockpit): F10 > Other > SQE ECM Switch toggles the flag and SQE ECM OFF forces it off (re-sync) (starts off); engine shutdown / death clears the flag (v0.41.226: the item stays).
 local ECMP = "__ECMP__"
@@ -487,7 +487,7 @@ if ECMP == "live" and ECMMSG then                              -- v0.41.212 (XO)
     if v ~= nil and v ~= last then
       local g = Group.getByName(PGROUP)
       if g then
-        trigger.action.outTextForGroup(g:getID(), (last == nil and "SQE sees your ECM lamp: " or "ECM ") .. (v and "on" or "off"), 6)
+        trigger.action.outTextForGroup(g:getID(), (last == nil and "SQE sees your jammer: " or "ECM ") .. (v and "on" or "off"), 6)
       end
       last = v
     end

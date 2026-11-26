@@ -1,10 +1,10 @@
 # CHANGES.md
 
-## v0.41.684, RIO Navigation fixed for the F-14B(U)
-In the F-14B(U) it now takes you out of Destination steering, so your HUD follows it, switches itself off when you take the navigation over, and tells you when the jet would not take an order. The menu reads Work the Waypoints: On / Off. Update the script in Settings if you had installed it.
+## v0.41.686, F-14 RIO Navigation (experimental)
+With the script installed, Jester works your F-14B or F-14B(U) steerpoints through the flight (F10 > Other > Work the Waypoints: On / Off), switching off on TGT for a strike and when you take the navigation over; in the F-14B(U) it takes you out of Destination steering so your HUD follows it. The Turnpoints menu now serves the B(U) too. The Settings entry is now F-14 RIO Navigation: click Update if you had the Turnpoints script.
 
-## v0.41.683, F-14 RIO Navigation (experimental)
-With the script installed, Jester works your F-14B or F-14B(U) steerpoints through the flight, switching off on TGT for a strike, and the Turnpoints menu now serves the B(U) too. The Settings entry is now F-14 RIO Navigation: click Update if you had the Turnpoints script.
+## v0.41.685, the A-10C II's jammer is read
+With the jammer script installed, SQE's Jammer Model now knows when your A-10C II is jamming (the OPR on its countermeasure display), as it does for the F-16C. Install the script again in Settings to get it.
 
 ## v0.41.682, red's stand-off missiles are less sure
 In the war outside your missions, red's Kh-59M raids now work as they did in DCS tests: some are stopped before launch, most launched salvos are shot down by your fighters, and only some arrive. Red no longer uses them on your troops: they are bombed as before.
