@@ -68,7 +68,7 @@ or after a week.
 At the start of each (day) turn the planner builds the turn's tasking list, in this order:
 
 1. **Red moves first.** Red plans its standing patrols (CAP pairs over its fighter fields, a Fighter Sweep now and then
-   where the ground is contested) and draws its raids on you.
+   where the ground is contested) and picks its raids on you.
 2. **Blue's standing cover** is planned (section 8): BARCAP pairs over a share of the BARCAP areas and a guard pair for the
    AWACS and each tanker.
 3. **The planner picks the jobs.** It scores every target red has that can be hit (a SAM site, an EWR, a runway, a supply
@@ -362,7 +362,7 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
 
 ## 10. Syria 2001 (Operation LEVANT HORIZON)
 
-The second map. You choose the map in the New Campaign dialog; a Syria campaign needs the DCS Syria map. Everything in sections 1 to 9 works the same there (the same turns, packages, Force Index, refit and ledger); this section is what is different. The Caucasus pages above give the Caucasus numbers; the numbers here are the Syria pack's (`sqe/data/theatres/syria.json`), as of v0.41.518.
+The second map. You choose the map in the New Campaign dialog; a Syria campaign needs the DCS Syria map. Everything in sections 1 to 9 works the same there (the same turns, packages, Force Index, refit and ledger); this section is what is different. The Caucasus pages above give the Caucasus numbers; the numbers here are the Syria pack's (`sqe/data/theatres/syria.json`).
 
 ### The war
 
@@ -399,7 +399,7 @@ then on the squadron flies as described in section 5. You do not fly it; you wil
 
 ### Winning and losing in Syria
 
-* **Level 1:** victory is the ground war, as in section 6, a march through the cities in three stages: take **Bassel Al-Assad** (the Latakia coast), then **Rene Mouawad**, then **Shayrat** (the Homs gap). After a city falls the next push waits only one day (the takeover is 9 days at the other levels). A war with nobody flying lasts about two weeks at Level 1, about 18 days at Level 2 and about two months at Level 3; flying shortens it.
+* **Level 1:** victory is the ground war, as in section 6, a march through the cities in three stages: take **Bassel Al-Assad** (the Latakia coast), then **Rene Mouawad**, then **Shayrat** (the Homs gap). After a city falls the next push waits only one day (the takeover is 9 days at the other levels). With nobody flying (v0.41.696, 60 simulated wars a level) the war is won in about 11 days at Level 1 and 17 days at Level 2. At Level 3 it can go either way: a little over half are won, in about seven weeks, and most of the rest are lost, in about three. Your flying is what tips it.
 * **Levels 2 and 3:** no ground victory. The war is won in one of two ways, neither of them a conquest. **Lutorin Works** (below): all of them destroyed at the same time. Or **red's Force Index** (its supply, section 5) at or below 40% for **three nights in a row** (the Overview shows how close it is in a word: distant, approaching, close, under way); that is the depots, fuel farms and road sites, not the cities. The coalition's stated intent is to break Syria's supply and air defence. With red's air defence as strong as it is, the works are the more likely way.
 * **Defeat:** the coalition's air component below 15% of its strength (as in section 6), or **one** airfield of yours lost (the Caucasus allows three).
 

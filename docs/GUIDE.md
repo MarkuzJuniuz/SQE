@@ -12,7 +12,7 @@ For what changed in each version see `docs/CHANGES.md`; for how the campaign wor
 | **Python 3.13 or 3.14, 64-bit** | runs SQE | python.org/downloads. **Tick "Add python.exe to PATH"** in the installer. |
 | **Git** | the F-14B(U) lives in a pydcs *fork* that pip downloads from GitHub | git-scm.com/download/win (defaults are fine) |
 | **VS Code** + the **Python** extension (Microsoft) | editor/debugger | code.visualstudio.com, then Extensions (Ctrl+Shift+X) -> "Python" |
-| DCS World with the module of the jet you want to fly | to fly the missions | F-14B(U), F/A-18C, F-16C, F-15C or A-10C |
+| DCS World with the module of the jet you want to fly | to fly the missions | F-14B(U) or F-14B, F/A-18C, F-16C, F-15C, A-10C or A-10A |
 
 Close and reopen VS Code after installing Python/Git so they are on PATH.
 
@@ -78,14 +78,14 @@ First launch:
    to the file). This is required for results to come back from DCS. Keep SQE open until the mission is over.
    If your install is under *Program Files* and it says it cannot write, run VS Code (or SQE.exe) **as administrator** once,
    or edit the file by hand. **DCS updates revert it**: patch again after an update.
-3. **File > New Campaign**: name it, pick your jet, your squadron, a difficulty level (1 Insurgent, 2 Regional power,
-   3 Near-peer) and the start month/day (the year is 2006), then OK.
+3. **File > New Campaign**: name it, pick the map, your jet, your squadron, a difficulty level (1 Insurgent, 2 Regional power,
+   3 Near-peer) and the start month/day (the year goes with the map: Caucasus 2006, Syria 2001), then OK.
 
 ---------------------------------------------------------------------------------------------------
 
 ## 4. How a turn works
 
-The campaign runs in **4-hour turns**, six a day, starting at 08:00 on Day 1. Each turn the planner lays out that turn's
+The campaign runs in **4-hour turns**, six a day, starting on Day 1 at 08:00 (Caucasus) or 00:00 (Syria). Each turn the planner lays out that turn's
 packages for both sides; whatever you do not fly is settled by the war simulation. The packages launch in four waves, an hour
 apart, so the start times on the Missions tab are spread over the turn's four hours (about four clusters).
 
@@ -93,7 +93,7 @@ apart, so the start times on the Missions tab are spread over the turn's four ho
    `SQE_Sortie.miz` and opens the **waiting window**. Base, carrier, tanker and AWACS cover patrols are planned each turn and
    are AI-only. Red raids on your fields, supply sites and troops are listed as "Intercept" jobs with a red border.
    What a raid carries follows its target (runway-piercing bombs on a runway, cluster bombs on troops, anti-radiation missiles
-   fired from 50 to 65 nm on a SAM site); the list is in CAMPAIGN.md, section 5.
+   fired from about 50 nm on a SAM site); the list is in CAMPAIGN.md, section 5.
 2. Start DCS, **Mission > Open > Missions > SQE_Sortie.miz**, fly it. The kneeboard carries comms and waypoints numbered the
    way your jet's cockpit numbers them, the timeline, bingo/joker, IFF, laser code, the package who's-who, threats and bullseye.
    Where a leg of your route would cut a live SAM ring, SQE adds turnpoints, **TP1**, **TP2** and so on in flying order (the notes line of page 1 says how many
