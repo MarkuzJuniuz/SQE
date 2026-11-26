@@ -3027,7 +3027,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         return f"Round SAM rings: {n} turnpoint{'s' if n > 1 else ''} (TP), +{nm:.0f} nm, +{s / 60:.0f} min vs straight." if nm >= 1 else ""
 
     def _add_rio_navigation(self, pf, rows, turnpoint_points, leave_s) -> str:
-        """S210: F-14 RIO Navigation for the player's F-14B / F-14B(U): F10 > Other > "Work the waypoints" (on at the start) and "Turnpoints", and the mission script that runs them (`rio_nav`). Which slot or
+        """S210: F-14 RIO Navigation for the player's F-14B / F-14B(U): F10 > Other > "Work the Waypoints" (on at the start) and "Turnpoints", and the mission script that runs them (`rio_nav`). Which slot or
         waypoint number each point has is read from the jet's own points as they were built. -> the line for the kneeboard."""
         group = None
         for flight, flight_group in self.flight_groups:
@@ -3082,7 +3082,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         rule = triggers.TriggerStart(comment="SQE F-14 RIO navigation")
         rule.add_action(action.DoScript(String(script)))
         self.m.triggerrules.triggers.append(rule)
-        line = "F10 > Other > Work the waypoints: Jester sets your steerpoint through the flight (on at the start)."
+        line = "F10 > Other > Work the Waypoints: Jester sets your steerpoint through the flight (on at the start)."
         if items:
             line += " Turnpoints: pick a TP and he sets it."
         return line

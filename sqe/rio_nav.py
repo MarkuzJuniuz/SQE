@@ -1,16 +1,21 @@
 """F-14 RIO Navigation (experimental, S210): Jester works the player's steerpoints through the flight, and types or flies direct to a turnpoint on request.
 
 The mission script made here decides everything (which point is next, the "RIO: ..." messages, when to switch itself off); it writes the cockpit commands into a request file.
-The export script on the player's PC (`data/sqe_f14_turnpoints_export.lua`) only presses them, and reports back through a second file when the destination knob moves without it (plain F-14B).
+The export script on the player's PC (`data/sqe_f14_turnpoints_export.lua`) presses them, and reports back through a second file when you take the navigation over (plain F-14B: the destination knob moves;
+F-14B(U): the display's waypoint or steering mode changes, or a TACAN / steering button is pressed) or when the jet did not take an order.
 
-Heatblur's Jester commands: 10017 destination knob, 10018 pick the point to enter, 10019 enter from a trigger zone (F-14A/B); 10037 select a waypoint, 10042 direct-to (F-14B(U)).
+F-14B(U), probe flown 2026-11-26 and Heatblur's CDNU manual: direct-to a later waypoint DELETES the ones in between (the one you leave goes to history; the last 5 history points can be flown to again).
+Nothing here steers to a station's far end before its near end, so a point still needed is never jumped. In Destination steering the HUD ignores direct-to, so switching on first steps out of it
+(command 1, done by the export script).
+
+Heatblur's Jester commands: 10017 destination knob, 10018 pick the point to enter, 10019 enter from a trigger zone (F-14A/B); 10037 select a waypoint, 10042 direct-to, 10045 EGI or TACAN (F-14B(U)).
 
 Pure functions, no pydcs."""
 from __future__ import annotations
 
 REQUEST_FILE = "SQE_turnpoints.req"       # the same file as the Turnpoints feature before it: the installed script's Remove button deletes it
 OVERRIDE_FILE = "SQE_turnpoints.ovr"
-TOGGLE_TITLE = "Work the waypoints: on / off"
+TOGGLE_TITLE = "Work the Waypoints: On / Off"
 TURNPOINTS_TITLE = "Turnpoints"
 MENU_PAGE = 9                              # DCS shows ten entries in a menu; the tenth is the door to the next page
 MAX_ZONES = 99
@@ -167,6 +172,12 @@ local function flush()
   outbox = {}
 end
 
+-- F-14B(U), before steering: out of Destination steering and into manual sequencing (command 1, done by the export script; it must come first), then EGI
+local function set_up_bu()
+  press(0, 1, 0)
+  press(1, 10045, 0)
+end
+
 local function type_into_fix_point(zone, first_delay)
   press(first_delay, 10018, 0.4)
   press(2, 10019, zone / 100)
@@ -250,6 +261,7 @@ local function switch_on(now)
   end
   on = true
   catching = now > 180
+  if BU then set_up_bu() end
   select_leg(leg_by_clock(now))
 end
 
@@ -303,6 +315,18 @@ local function follow(unit)
   end
 end
 
+-- what the export script saw, in words
+local function off_reason(reason)
+  if reason == "button" then return "Waypoint work off: you changed the navigation source." end
+  if reason == "unable" then
+    local name = "the waypoint"
+    if legs[current] then name = legs[current].name end
+    return "Waypoint work off: the jet did not go direct to " .. name .. " (a waypoint you jump over is gone from the F-14B(U))."
+  end
+  if reason == "mode" then return "Waypoint work off: could not leave Destination steering." end
+  return "Waypoint work off: you took the steerpoint."
+end
+
 local function tick()
   local unit = Unit.getByName(UNIT)
   local now = timer.getTime()
@@ -311,11 +335,11 @@ local function tick()
       started = true
       if on then switch_on(now) end
     elseif started and on then
-      if not BU and can_write() then
+      if can_write() then
         local text = read_file("__OVERRIDE__")
         if text ~= "" and text ~= last_override then
           last_override = text
-          turn_off("Waypoint work off: you took the steerpoint.")
+          turn_off(off_reason(string.match(text, "(%a+)%s*$")))
         end
       end
       if on then follow(unit) end
@@ -342,9 +366,10 @@ local function turnpoint(item)
   end
   if on then turn_off("Waypoint work off: you took the steerpoint.") end
   if BU then
+    set_up_bu()
     press(0, 10037, item.num / 100)
     press(2, 10042, 1)
-    say(item.label .. " (" .. item.note .. "): direct to waypoint " .. item.num .. ".", 20)
+    say(item.label .. " (" .. item.note .. "): direct to waypoint " .. item.num .. ". The F-14B(U) drops the waypoints you jump over.", 20)
   else
     press(0, 10017, 0.4)
     type_into_fix_point(item.zone, 3)

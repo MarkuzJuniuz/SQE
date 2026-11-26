@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.684, RIO Navigation fixed for the F-14B(U)
+In the F-14B(U) it now takes you out of Destination steering, so your HUD follows it, switches itself off when you take the navigation over, and tells you when the jet would not take an order. The menu reads Work the Waypoints: On / Off. Update the script in Settings if you had installed it.
+
 ## v0.41.683, F-14 RIO Navigation (experimental)
 With the script installed, Jester works your F-14B or F-14B(U) steerpoints through the flight, switching off on TGT for a strike, and the Turnpoints menu now serves the B(U) too. The Settings entry is now F-14 RIO Navigation: click Update if you had the Turnpoints script.
 
