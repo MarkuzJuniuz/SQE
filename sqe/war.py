@@ -1037,6 +1037,8 @@ class WarSimulator:
                 state.note("Overnight: " + ln)
             for ln in ground.update_supply_win(state):             # S90: a pack's Force Index win, judged on the morning's figure (none in the Caucasus)
                 state.note("Overnight: " + ln)
+            for ln in ground.update_supply_loss(state):            # S213: the mirror: a pack's Force Index defeat
+                state.note("Overnight: " + ln)
             for bid in state.ground.get("fallen", []):
                 if bid in state.bases:
                     sams.set_field(state, state.bases[bid], 0.0)
@@ -1084,4 +1086,7 @@ def update_status(state: CampaignState) -> str:
             state.status = "DEFEAT"; state.note(f"DEFEAT: the front has collapsed; {ground.defeat_bases()} of our airfields are lost.")
             for ln in story.beat(state, "lose"):
                 state.note(ln)
+        elif (state.ground or {}).get("supply_lost"):                   # S213: a pack's Force Index defeat (`ground.update_supply_loss`)
+            state.ground["pulled_out"] = True                           # the ending's text is the pull-out's, not the fallen front's
+            state.status = "DEFEAT"; state.note("DEFEAT: the coalition's supply has collapsed and Washington has called the war off.")
     return state.status
