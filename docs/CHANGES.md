@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.693, F-14B(U): the station is listed as CAP1
+On a patrol, escort, sweep or TARCAP flight the F-14B(U) listed your first station point as TGT, marked as a surface target. It is now CAP1, as on the kneeboard.
+
 ## v0.41.689, the Caucasus can be lost on supply
 On the Caucasus the war is now also lost if the coalition's Force Index stays at 60% or less for three days: Washington calls the war off. The Overview warns you while it is that low. In practice only Level 3 gets there.
 
