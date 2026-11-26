@@ -1,11 +1,13 @@
 -- SQE F-14 RIO Navigation (experimental): presses what the mission asks for in your F-14B or F-14B(U) (F10 > Other > Work the Waypoints, and Turnpoints).
 --
--- The mission writes one line into Logs\SQE_turnpoints.req ("SQERIO <count> <time> <delay>,<command>,<value>;..."): in your Saved Games\DCS folder in single player,
+-- The mission writes one line into Logs\SQE_turnpoints.req ("SQERIO <count> <time> <delay>,<command>,<value>;... HOLD:<n>/<n>"): in your Saved Games\DCS folder in single player,
 -- in the sibling DCS_Server folder when the sortie runs on the DCS dedicated server on this PC. This script reads it and sends the commands to the cockpit.
 -- When you take the navigation over, it writes Logs\SQE_turnpoints.ovr beside the request and the mission stops working your waypoints:
 --   F-14B:    the destination knob moves without such a command;
 --   F-14B(U): the waypoint or the steering mode on the display changes without one, or you press a TACAN or steering button. It also reports an order the jet did not take.
+--             In auto sequencing the jet moving on to the next waypoint is its own step, not a change of yours.
 -- On the F-14B(U) it first takes the jet out of Destination steering (the PTID's steering push button), sets EGI and manual sequencing.
+-- HOLD lists the waypoints Jester waits at: when the jet steps onto one in auto sequencing, this script switches it to manual so it does not step past.
 -- What it sends and sees is logged in Logs\SQE_rio_navigation.log (started afresh each flight). It does nothing in any other aircraft.
 --
 -- HOW TO INSTALL: SQE does it for you (Settings > DCS integration > Install RIO Navigation). By hand: copy THIS file to
@@ -44,7 +46,8 @@ local previous_after_frame = LuaExportAfterNextFrame
 
 local function reset()
   state = { next_poll = 0, seen = {}, steps = {}, request_path = nil, expected = nil, sent_at = nil, moved_at = nil, overrides = 0,
-            next_due = 0, selected = nil, watch = nil, tid_indication = TID_INDICATION, log_started = false }
+            next_due = 0, selected = nil, watch = nil, tid_indication = TID_INDICATION, log_started = false,
+            sequencing = nil, mode_shown = false, mode_check_at = 0, holds = {} }
 end
 reset()
 
@@ -116,6 +119,48 @@ local function steering_on_display()
   return mode, waypoint, shown
 end
 
+local function add_step(delay, command, value, device)
+  if #state.steps == 0 then state.next_due = (LoGetModelTime() or 0) + delay end
+  state.steps[#state.steps + 1] = { delay = delay, command = command, value = value, device = device }
+end
+
+-- F-14B(U): the sequencing mode we have set ("MAN" or "AUTO"); the display has ORDER_WAIT_S to show it
+local function expect_sequencing(mode, now)
+  state.sequencing = mode
+  state.mode_shown = false
+  state.mode_check_at = now + ORDER_WAIT_S
+end
+
+-- in auto sequencing the jet moves on to the next waypoint by itself
+local function jet_stepped(watch, mode, waypoint)
+  return mode == "AUTO" and state.sequencing == "AUTO" and waypoint == watch.waypoint + 1
+end
+
+-- what the display says against what we set: the reason to stop, or nil
+local function judge_display(now, watch, mode, waypoint)
+  if not OWN_MODES[mode] then return "steer" end
+  if waypoint ~= watch.waypoint then
+    if not jet_stepped(watch, mode, waypoint) then return "steer" end
+    watch.waypoint = waypoint
+    log("the jet sequenced to " .. waypoint)
+  end
+  if state.sequencing then
+    if mode == state.sequencing then
+      state.mode_shown = true
+    elseif state.mode_shown then
+      return "steer"
+    elseif now >= state.mode_check_at then
+      return "sequence"
+    end
+  end
+  -- a waypoint Jester waits at: stop the jet stepping past it
+  if mode == "AUTO" and state.sequencing == "AUTO" and state.holds[waypoint] then
+    log("waypoint " .. waypoint .. " is one to wait at: manual sequencing")
+    add_step(0, STEERING_MODE, MANUAL_SEQUENCING)
+  end
+  return nil
+end
+
 -- F-14B(U): has somebody else changed the navigation (or the jet not taken our order)? Reports it once and stops watching.
 local function check_bu(now, read_display)
   local watch = state.watch
@@ -130,28 +175,24 @@ local function check_bu(now, read_display)
         reason = "button"
       end
     end
-    if not reason and mode and (not OWN_MODES[mode] or waypoint ~= watch.waypoint) then reason = "steer" end
+    if not reason and mode then reason = judge_display(now, watch, mode, waypoint) end
   else
-    if mode and OWN_MODES[mode] and waypoint == watch.waypoint then
+    if mode and OWN_MODES[mode] and (waypoint == watch.waypoint or jet_stepped(watch, mode, waypoint)) then
       watch.confirmed = true
       for _, number in ipairs(PILOT_BUTTONS) do
         watch.buttons[number] = argument(number)
       end
       log("the display shows " .. shown)
+      reason = judge_display(now, watch, mode, waypoint)
     elseif mode and now >= watch.check_at then
       reason = "unable"
     end
   end
   if not reason then return false end
-  log("the display shows " .. tostring(shown) .. ", we sent waypoint " .. watch.waypoint)
+  log("the display shows " .. tostring(shown) .. ", we expect " .. tostring(state.sequencing) .. " " .. watch.waypoint)
   state.watch = nil
   report_override(reason)
   return true
-end
-
-local function add_step(delay, command, value, device)
-  if #state.steps == 0 then state.next_due = (LoGetModelTime() or 0) + delay end
-  state.steps[#state.steps + 1] = { delay = delay, command = command, value = value, device = device }
 end
 
 -- put a step in front of the queue (used by the F-14B(U) set-up)
@@ -181,6 +222,16 @@ local function plan_old_turnpoint(zone)
   add_step(2, ENTER_FROM_ZONE, zone / 100)
 end
 
+-- the waypoints Jester waits at: "HOLD:2/5/6" at the end of a request (a mission built before this has none)
+local function holds_of(text)
+  local holds = {}
+  local list = string.match(text, "HOLD:([%d/]*)")
+  if list then
+    for number in string.gmatch(list, "%d+") do holds[tonumber(number)] = true end
+  end
+  return holds
+end
+
 -- What a file holds when we first look is old (an earlier flight): only a change after that is a request.
 local function poll(now)
   for _, path in ipairs(request_paths()) do
@@ -191,10 +242,11 @@ local function poll(now)
       state.seen[path] = text
       if string.match(text, "^SQERIO ") then
         state.request_path = path
+        state.holds = holds_of(text)
         -- A set-up (switching on, or a turnpoint) starts afresh. Any other order is dropped if you took over just before it arrived.
         local starting = string.match(text, "^SQERIO %d+ %d+ [%d%.]+," .. SETUP_BU .. ",")
         if starting then
-          state.watch, state.steps = nil, {}
+          state.watch, state.steps, state.sequencing = nil, {}, nil
         end
         if starting or not check_bu(now, true) then
           state.watch = nil
@@ -258,6 +310,7 @@ local function set_up_bu(now, step)
     return
   end
   table.remove(state.steps, 1)
+  expect_sequencing("MAN", now)
   if mode ~= "MAN" then insert_step(1, 1, STEERING_MODE, MANUAL_SEQUENCING) end
   if state.steps[1] then state.next_due = now + state.steps[1].delay end
 end
@@ -268,6 +321,13 @@ local function send_step(now, step)
   end
   GetDevice(step.device or COMMAND_DEVICE):performClickableAction(step.command, step.value)
   log(string.format("sent %d %.2f", step.command, step.value))
+  if step.command == STEERING_MODE then
+    if step.value >= MANUAL_SEQUENCING then
+      expect_sequencing("MAN", now)
+    else
+      expect_sequencing("AUTO", now)
+    end
+  end
   if step.command == SELECT_WAYPOINT then state.selected = math.floor(step.value * 100 + 0.5) end
   if step.command == DIRECT_TO and state.selected then
     state.watch = { waypoint = state.selected, check_at = now + ORDER_WAIT_S, confirmed = false, buttons = {} }

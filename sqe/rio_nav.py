@@ -4,11 +4,16 @@ The mission script made here decides everything (which point is next, the "RIO: 
 The export script on the player's PC (`data/sqe_f14_turnpoints_export.lua`) presses them, and reports back through a second file when you take the navigation over (plain F-14B: the destination knob moves;
 F-14B(U): the display's waypoint or steering mode changes, or a TACAN / steering button is pressed) or when the jet did not take an order.
 
+F-14B(U) sequencing (S210b): between the points where Jester waits, the jet is left in AUTO sequencing and steps on by itself; no order is sent for an ordinary leg, the mission script only follows
+where the flight is. At a waiting point (the marshal until its leave time, a station until its exit time, TGT on a strike) the jet is held in MANUAL. Each request ends with "HOLD:n/n/n", the waiting
+points' waypoint numbers, so the export script can switch to manual the moment the jet steps onto one.
+
 F-14B(U), probe flown 2026-11-26 and Heatblur's CDNU manual: direct-to a later waypoint DELETES the ones in between (the one you leave goes to history; the last 5 history points can be flown to again).
 Nothing here steers to a station's far end before its near end, so a point still needed is never jumped. In Destination steering the HUD ignores direct-to, so switching on first steps out of it
 (command 1, done by the export script).
 
-Heatblur's Jester commands: 10017 destination knob, 10018 pick the point to enter, 10019 enter from a trigger zone (F-14A/B); 10037 select a waypoint, 10042 direct-to, 10045 EGI or TACAN (F-14B(U)).
+Heatblur's Jester commands: 10017 destination knob, 10018 pick the point to enter, 10019 enter from a trigger zone (F-14A/B); 10037 select a waypoint, 10042 direct-to, 10043 sequencing (1.0 manual, 0.33 auto),
+10045 EGI or TACAN (F-14B(U)).
 
 Pure functions, no pydcs."""
 from __future__ import annotations
@@ -87,7 +92,8 @@ def plain_legs(rows: list, labels: dict, points: list, nav_points: list, turnpoi
 
 
 def bu_legs(rows: list, labels: dict, points: list) -> list:
-    """The F-14B(U): every route point is a numbered waypoint in the jet; the number is its place in `points` (the takeoff is 0). A row with no point there is left out."""
+    """The F-14B(U): every route point is a numbered waypoint in the jet, in flight plan order; the number is its place in `points` (the takeoff is 0). A row with no point there is left out.
+    Every card row after RTB (DIVERT, TKR, BULLS) is a point after the landing one, so RTB is that many places before the end."""
     legs = []
     for index, row in enumerate(rows):
         name, x, y, planned_s = row
@@ -95,7 +101,8 @@ def bu_legs(rows: list, labels: dict, points: list) -> list:
             continue
         number = None
         if name == "RTB":
-            number = len(points) - 1
+            rows_after = len(rows) - 1 - index
+            number = len(points) - 1 - rows_after
         else:
             for slot in range(1, len(points)):
                 if _near(x, y, points[slot][0], points[slot][1]):
@@ -128,6 +135,8 @@ __TURNPOINTS__
 }
 local GROUP, UNIT, BU, STRIKE, LEAVE, EXIT = __GROUP__, __UNIT__, __BU__, __STRIKE__, __LEAVE__, __EXIT__
 local NM = 1852
+local SEQUENCING, MANUAL, AUTO = 10043, 1.0, 0.33
+local release = false                      -- F-14B(U): the waypoint work went off, tell the export script there is nothing left to hold
 local on, started, current, closest, catching, after_target, typed_zone = true, false, 0, nil, false, false, nil
 local outbox, count, last_override = {}, 0, ""
 local selected_at = 0
@@ -165,11 +174,32 @@ local function press(delay, command, value)
   outbox[#outbox + 1] = string.format("%g,%d,%.2f", delay, command, value)
 end
 
+-- F-14B(U): the points where Jester waits for the clock or for you; the jet is held there in manual sequencing
+local function is_waiting(leg)
+  if not BU or not leg then return false end
+  if leg.kind == "mshl" then return LEAVE ~= nil end
+  if leg.kind == "cap1" or leg.kind == "cap2" then return true end
+  if leg.kind == "tgt" then return STRIKE end
+  return false
+end
+
+-- F-14B(U): their waypoint numbers, for the export script (none once the work is off)
+local function hold_part()
+  if not BU then return "" end
+  local numbers = {}
+  if on then
+    for _, leg in ipairs(legs) do
+      if is_waiting(leg) then numbers[#numbers + 1] = tostring(leg.num) end
+    end
+  end
+  return " HOLD:" .. table.concat(numbers, "/")
+end
+
 local function flush()
-  if #outbox == 0 or not can_write() then return end
+  if (#outbox == 0 and not release) or not can_write() then return end
   count = count + 1
-  write_file("__REQUEST__", string.format("SQERIO %d %d %s", count, math.floor(timer.getTime()), table.concat(outbox, ";")))
-  outbox = {}
+  write_file("__REQUEST__", string.format("SQERIO %d %d %s", count, math.floor(timer.getTime()), table.concat(outbox, ";") .. hold_part()))
+  outbox, release = {}, false
 end
 
 -- F-14B(U), before steering: out of Destination steering and into manual sequencing (command 1, done by the export script; it must come first), then EGI
@@ -186,8 +216,15 @@ end
 
 local function steer_to(leg)
   if BU then
-    press(0, 10037, leg.num / 100)
-    press(2, 10042, 1)
+    if is_waiting(leg) then
+      press(0, SEQUENCING, MANUAL)             -- manual first: the jet must not step past the point
+      press(1, 10037, leg.num / 100)
+      press(2, 10042, 1)
+    else
+      press(0, 10037, leg.num / 100)
+      press(2, 10042, 1)
+      press(1, SEQUENCING, AUTO)               -- and from here the jet sequences itself
+    end
   elseif leg.knob then
     press(0, 10017, leg.knob)
   elseif typed_zone == leg.zone then
@@ -202,15 +239,23 @@ end
 
 local function turn_off(why)
   on = false
+  release = BU
   say(why)
 end
 
-local function select_leg(index)
+-- `forced`: switching on, or keeping up with the clock
+local function select_leg(index, forced)
   local leg = legs[index]
   if not leg then return end
+  -- the F-14B(U) steps from point to point by itself: it needs an order only into or out of a waiting point, or when forced
+  local order = true
+  if BU and not forced then
+    order = is_waiting(leg) or is_waiting(legs[current])
+  end
   current, closest = index, nil
   selected_at = timer.getTime()
-  local note = steer_to(leg)
+  local note = nil
+  if order then note = steer_to(leg) end
   -- type the next hand-entered point now, while the fix point is not the one in use: Jester is slow
   local following = legs[index + 1]
   if not BU and leg.knob and leg.knob ~= 0.4 and following and following.zone and typed_zone ~= following.zone then
@@ -262,16 +307,16 @@ local function switch_on(now)
   on = true
   catching = now > 180
   if BU then set_up_bu() end
-  select_leg(leg_by_clock(now))
+  select_leg(leg_by_clock(now), true)
 end
 
-local function advance()
+local function advance(forced)
   local leg = legs[current]
   if current >= #legs then return end
   if (leg.kind == "cap1" or leg.kind == "cap2") and EXIT and timer.getTime() >= EXIT then
-    select_leg(math.min(station_end(current), #legs))
+    select_leg(math.min(station_end(current), #legs), forced)
   else
-    select_leg(current + 1)
+    select_leg(current + 1, forced)
   end
 end
 
@@ -311,7 +356,7 @@ local function follow(unit)
     catching = false
     advance()
   elseif catching and leg.t > 0 and now > leg.t then
-    advance()                                  -- switched on mid-flight and still behind the plan: keep up with the clock
+    advance(true)                              -- switched on mid-flight and still behind the plan: keep up with the clock
   end
 end
 
@@ -324,6 +369,7 @@ local function off_reason(reason)
     return "Waypoint work off: the jet did not go direct to " .. name .. " (a waypoint you jump over is gone from the F-14B(U))."
   end
   if reason == "mode" then return "Waypoint work off: could not leave Destination steering." end
+  if reason == "sequence" then return "Waypoint work off: the jet did not change between manual and auto sequencing." end
   return "Waypoint work off: you took the steerpoint."
 end
 
