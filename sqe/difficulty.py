@@ -62,7 +62,7 @@ class Difficulty:
     blue_garrison_size: float = 1.0      # scales the vehicle count of a friendly airfield garrison
     sead_valve: int = 3                  # failed SEAD days on one site before the combined SEAD + DEAD package is offered again (war.py)
     sam_retreat: float = 1.0             # scales the nightly chance that a badly hurt long-range SAM site pulls back from the front to recover (sams.retreat)
-    air_retreat: float = 1.0             # nightly chance that a badly depleted air wing or squadron stands down to a rear field to recover (airwings.py)
+    air_retreat: float = 1.0             # NOT READ since S208 (a threatened worn wing always pulls back, `airwings.field_threatened`); was: nightly chance that a badly depleted air wing or squadron stands down to a rear field to recover (airwings.py)
     blue_rebuild: float = 0.15           # nightly chance (x friendly supply) that a destroyed friendly supply site or garrison is replaced
     road_sites_red: int = 0              # v0.41.400 (S41, XO 2026-11-11): supply sites laid along the roads of a new campaign, red's (road_sites.py). Judgment call ("hometown advantage"; tuned with .private/fi_sim.py, 10 seeds a level): red 15 / 30 / 30, blue 5 on every level until v0.41.408 (S49, XO 2026-11-12: blue has NO road sites, a coalition put into Georgia with no local supply network; it keeps only its field fuel farms and depots); was one total 42 / 70 / 70 split 65 / 35 (S24), before that 60 / 100 / 100 (v0.41.241)
     road_sites_blue: int = 0             # v0.41.400 (S41): blue's road supply sites (see road_sites_red)

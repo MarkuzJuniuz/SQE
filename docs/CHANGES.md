@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.674, patrols go where the threat is, and a worn wing under threat pulls back
+Both sides now put their patrol pairs on the most threatened stations instead of drawing them by chance (the carrier group keeps its own share). A squadron worn down to a third whose field the enemy can reach always stands down to recover, rather than sometimes.
+
 ## v0.41.673, fewer dice in what each side tasks
 Which targets get the turn's jobs, red's raid targets, sizes, escorts and strategic-bomber strikes, and how many patrols and sweeps go up no longer come from chance: the best target is taken and fractions are carried to the next turn. Combat results, weather and what a side fails to spot are still uncertain.
 

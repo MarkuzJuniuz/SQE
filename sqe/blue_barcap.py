@@ -12,7 +12,7 @@ Judgment calls (no public source): CAP_SHARE (the part of the areas up in a turn
 from __future__ import annotations
 import math
 
-from . import barcap, clock, fraction
+from . import barcap, clock, fraction, patrol_threat
 from .aircraft import AIRCRAFT
 from .words import cover_word
 from .models import BaseKind, ObjectiveType, Role
@@ -121,21 +121,31 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
         sqs = _cap_squadrons(state, b)
         if sqs:
             cands += [(b, ar, sqs) for ar in bc["blue"] if ar["asset"] == b.id]
-    want = share * len(cands)
-    want = fraction.whole_units(state, "blue_cap", turn, want)              # S207e: a share of the areas that can be up; the fraction is carried, not rolled
-    order = list(range(len(cands)))
-    rng.shuffle(order)
-    up = 0
-    for i in order:
-        if up >= want:
-            break
-        b, ar, sqs = cands[i]
-        kind = "CARRIER_BARCAP" if b.kind == BaseKind.CARRIER else "BASE_BARCAP"
-        got = _pairs(ledger, sqs, t0, t1, KEEP_BACK)
-        for j, (sq, wave, lo, hi) in enumerate(got):
-            flights.append({"id": f"bf{turn}-{b.id}-{ar['id'].rsplit('-', 1)[-1]}.{j}", "kind": kind, "asset": b.id, "area": ar["id"], "squadron": sq.id, "aircraft": sq.aircraft,
-                            "size": 2, "start": lo, "end": hi, "callsign": "", "turn": turn, "wave": wave})
-        up += 1 if got else 0
+    # S208: the most threatened station first (the CAP sits between the threat and the asset), not a shuffle; equal threats: the seeded draw. The fleet is the exception: a carrier
+    # group keeps its own air cover however far red is (judgment call), so its stations get their share of the turn's pairs on their own count.
+    def threat_to_station(index):
+        _base, area, _squadrons = cands[index]
+        return (patrol_threat.red_on(state, area["ax"], area["ay"]), rng.random())
+    fleet_stations = []
+    land_stations = []
+    for index in range(len(cands)):
+        if cands[index][0].kind == BaseKind.CARRIER:
+            fleet_stations.append(index)
+        else:
+            land_stations.append(index)
+    for key, stations in (("blue_cap_fleet", fleet_stations), ("blue_cap", land_stations)):
+        want = fraction.whole_units(state, key, turn, share * len(stations))      # a share of the stations that can be up; the fraction is carried, not rolled (S207e)
+        up = 0
+        for i in sorted(stations, key=threat_to_station, reverse=True):
+            if up >= want:
+                break
+            b, ar, sqs = cands[i]
+            kind = "CARRIER_BARCAP" if b.kind == BaseKind.CARRIER else "BASE_BARCAP"
+            got = _pairs(ledger, sqs, t0, t1, KEEP_BACK)
+            for j, (sq, wave, lo, hi) in enumerate(got):
+                flights.append({"id": f"bf{turn}-{b.id}-{ar['id'].rsplit('-', 1)[-1]}.{j}", "kind": kind, "asset": b.id, "area": ar["id"], "squadron": sq.id, "aircraft": sq.aircraft,
+                                "size": 2, "start": lo, "end": hi, "callsign": "", "turn": turn, "wave": wave})
+            up += 1 if got else 0
     keep = [f for f in (bc.get("blue_flights") or []) if f.get("turn") is not None and f["turn"] < turn]     # earlier turns of the day stay; a whole-day plan from before v0.41.339 (no `turn`) goes
     bc["blue_flights"] = keep + flights
     cover = {ar["id"]: 0 for _b, ar, _s in cands}

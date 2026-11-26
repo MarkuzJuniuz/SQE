@@ -289,6 +289,8 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
   that cannot be crewed from what is left waits.
 * A squadron whose base falls moves to the nearest field with room, losing 30% of its jets, and sits out the move
   (3 or 6 turns).
+* A squadron worn down to 30% of its jets, whose field the enemy can reach (or whose runway is cratered), stands down overnight to a rear field and comes back
+  once it is at 65% and has rested two nights. This is the same for both sides; your squadron and carrier squadrons stay.
 * **Your own squadron** can be picked at any time; the planner offers you the jobs it can crew, and after a flown
   sortie your flight's losses and survivors are booked the same way as any other.
 
@@ -297,7 +299,7 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
 ## 8. Standing cover: BARCAP, the AWACS, the tankers and their guards
 
 * **BARCAP** is blue's patrol over the areas that face red's launch points. Each turn a share of the areas that a squadron can
-  reach gets a pair (Level 3: 60% by day, 20% at night; Level 2: 40% and 16%; Level 1: 20% and 10%). A station gets at most two pairs
+  reach gets a pair, the most threatened areas first (the red jets that can reach them, the nearer the heavier; red does the same with blue's); the carrier group keeps its own share. The shares are (Level 3: 60% by day, 20% at night; Level 2: 40% and 16%; Level 1: 20% and 10%). A station gets at most two pairs
   a turn: the first goes up at the turn's start; when it leaves before the turn ends (a long-legged pair after 120 minutes, a short-legged
   one after 30) the relief goes up in the first wave that opens as it leaves, the third wave for a long-legged pair and the second for a
   short-legged one. Strike packages carry the BARCAP that faces

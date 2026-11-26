@@ -1,14 +1,14 @@
 """Air wings that fall back to recover (v0.36.0), the same rule for both sides. Since v0.41.53 red does it per SQUADRON (a red wing is typed
 squadrons): one squadron of a wing can stand down and return while the others keep flying.
 
-A wing or squadron that is down to RETREAT_FRAC of its aircraft or less may stand down overnight: its survivors go to a rear field (they stop flying, so
+A wing or squadron that is down to RETREAT_FRAC of its aircraft or less stands down overnight when its field is under threat (S208, XO 2026-11-25: no dice; before, a chance, `d.air_retreat`): its survivors go to a rear field (they stop flying, so
 they are off every patrol, raid, escort and threat count), recover at REST_BOOST times the normal replenishment rate, and come back once they are at
 RETURN_FRAC of strength and have rested RETURN_MIN_DAYS nights. While they rest `available` is 0 and the aircraft sit in `reserve`; the strength totals
 (victory / defeat) still count them, because they are not lost. Not touched: your own squadron, carrier squadrons (a ship has no rear field), and the
 strategic bomber wing. Pure planning, no pydcs.
 """
 from __future__ import annotations
-from . import clock
+from . import clock, patrol_threat, runways
 from .loadouts import ENEMY_FIGHTERS
 
 RETREAT_FRAC = 0.30
@@ -66,8 +66,29 @@ def step_moves(state) -> list:
     return out
 
 
+def field_threatened(state, side: str, unit) -> bool:
+    """Is this squadron's field under threat: closed by a runway hit, or within reach of the enemy's ready jets (`patrol_threat`)? A blue squadron's field is its base, a red
+    squadron's its wing's field."""
+    if side == "blue":
+        place_id = unit.base_id
+        place = state.bases.get(place_id)
+    else:
+        place_id = ""
+        for wing in state.enemy_air:
+            if unit in wing.sqns:
+                place_id = wing.base_asset_id
+        place = state.assets.get(place_id)
+    if place is None:
+        return False
+    if runways.is_closed(state, place_id):
+        return True
+    if side == "blue":
+        return patrol_threat.red_on(state, place.x, place.y) > 0.0
+    return patrol_threat.blue_on(state, place.x, place.y) > 0.0
+
+
 def step(state, d, rng) -> list:
-    """Overnight: wings fall back, rest and return. -> report lines. (A squadron on the move is brought back by `step_moves`, every turn.)"""
+    """Overnight: wings fall back, rest and return. -> report lines. (A squadron on the move is brought back by `step_moves`, every turn.) `rng` is no longer used (S208)."""
     out = []
     for side, u, name, gone in _units(state):
         rep = d.friendly_replenish if side == "blue" else d.enemy_replenish
@@ -85,7 +106,7 @@ def step(state, d, rng) -> list:
                 out.append(f"{what[0].upper() + what[1:]} is back in the line with {u.available} aircraft.")
             continue
         if (not gone and u.authorized >= MIN_AUTHORIZED and 0 < u.available <= RETREAT_FRAC * u.authorized
-                and rng.random() < d.air_retreat):
+                and field_threatened(state, side, u)):
             u.reserve, u.available, u.rest_days = u.available, 0, 0
             out.append(f"{what[0].upper() + what[1:]} stood down to a rear field to recover ({u.reserve} aircraft).")
     return out
