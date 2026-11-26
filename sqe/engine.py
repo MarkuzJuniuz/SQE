@@ -450,7 +450,11 @@ class Session(Merging, SeadTiming):
                 seen += len(g)
             return out
 
-        def build_all(forced: set) -> list:
+        def build_all(forced: set | None) -> list:
+            # S208 (pick C): `forced` None = your squadron is offered a seat on the best-ranked jobs it can fly, about half of them (the planner's order);
+            # a set of job indexes = a seat is tried on exactly those (the fallbacks below).
+            seats_wanted = max(1, (len(objs) + 1) // 2)
+            seats = 0
             sweeps.clear()
             pb.short = []
             ledger = make_ledger()
@@ -461,7 +465,11 @@ class Session(Merging, SeadTiming):
             def setpiece_first_then_prep(t):
                 return (0 if carrier_raid(st, t[1]) else (1 if t[1].id in prep_obj_ids else 2))
             for i, o in sorted(enumerate(objs, 1), key=setpiece_first_then_prep):      # v0.41.107: the setpiece is built FIRST (it is rare and needs the carrier squadrons), numbers unchanged
-                fps = (True, False) if (((i - 1) in forced or carrier_raid(st, o) or o.type == ObjectiveType.FLEET_DEFENSE) and not ai_only(st, o)) else (False,)
+                if forced is None:
+                    offer_seat = seats < seats_wanted
+                else:
+                    offer_seat = (i - 1) in forced
+                fps = (True, False) if ((offer_seat or carrier_raid(st, o) or o.type == ObjectiveType.FLEET_DEFENSE) and not ai_only(st, o)) else (False,)
                 if o.type == ObjectiveType.FLEET_DEFENSE and any(hold_left.values()):           # a raid intercept is crewed from the hold first, then the ordinary free jets; ordinary packages never see the hold
                     before = {sid: ledger.free.get(sid, 0) for sid in hold_left}
                     for sid, h in hold_left.items():
@@ -478,6 +486,8 @@ class Session(Merging, SeadTiming):
                     pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=tuple(range(pref[i - 1], _tod.NWAVES + 1)))
                 if pkg is not None:
                     out.append(pkg)
+                    if pkg.player_flight is not None:
+                        seats += 1
             # S16a (XO 2026-11-23, lever A of the S16 probe): a named job that could not be crewed (a stand-off job with no kit jets free, a target out of reach, no SEAD seat) used to leave the turn one
             # package short of its rate. The turn now tries the planner's next candidates, a few at a time, until it has built as many of its jobs as it named (or the tries run out).
             pass_ids = set(job_ids)                                      # (this pass only: a second build pass of the turn starts from the planner's jobs again)
@@ -562,8 +572,7 @@ class Session(Merging, SeadTiming):
 
         def mine(pk):
             return sum(1 for p in pk if any(f.squadron_id == psq and not f.tag for f in p.flights))
-        rng = self._rng(3)
-        pkgs = build_all(set(rng.sample(range(len(objs)), min(len(objs), max(1, (len(objs) + 1) // 2)))))     # your squadron is tasked on about half of them
+        pkgs = build_all(None)                              # S208: your squadron is tasked on the best-ranked jobs it can fly, about half of them (no dice)
         _L0 = make_ledger()
         if psq and not clock.is_night_turn(turn) and mine(pkgs) < 1 and _L0.room(psq, _tod.NWAVES) >= 2:      # a day turn offers your squadron a slot when it has a ready pair
             pkgs = build_all(set(range(len(objs))))

@@ -97,7 +97,7 @@ At the start of each (day) turn the planner builds the turn's tasking list, in t
 The jobs you can be offered are listed on the Missions tab: **Strike**, **Standoff Strike**, **OCA: Runway Strike**, **SEAD**,
 **Standoff DEAD**, **Close DEAD**, **Close Air Support** (including **Troops in Contact**), **Fighter Sweep**, and **Intercept**
 jobs against red's raids ("Base Defense", "Supply Defense", and so on). BARCAP is AI only. A job is shown only if your
-squadron's jets can fly a seat in it. Each tasking can also bring extra flights: escort, TARCAP, SEAD.
+squadron's jets can fly a seat in it; you are offered the most important jobs your jet can fly, about half of the turn's list. Each tasking can also bring extra flights: escort, TARCAP, SEAD.
 
 ### What a package looks like
 

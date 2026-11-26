@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.677, your squadron is offered the most important jobs it can fly
+Your squadron used to be put on a random half of each turn's jobs. It is now offered a seat on the most important ones your jet can fly, about half of them.
+
 ## v0.41.676, red uses its stand-off missiles whenever it can
 At Levels 2 and 3 red now fires Kh-59M stand-off missiles at your supply sites and garrisons whenever a bomber wing that carries them can reach, instead of on some raids only. A raid is massed when red has saved up the jets for it, not on a random day.
 
