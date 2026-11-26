@@ -235,7 +235,7 @@ satellite-guided KAB-500S is planned for supply sites, a Lutorin pull-forward, b
 offer it yet, so the supply kit is still the FAB one.) On Syria the Su-17M4 carries four BetAB-500ShP on a runway, four RBK-500
 (268 PTAB-1M each) on troops and four FAB-500 on a supply site. Red's front-line strike on a blue column carries the troops kit.
 At every level a supply-site or garrison raid carries Kh-59M stand-off missiles whenever a bomber wing that has them can reach,
-under HAWK or Patriot cover too: the bombers come in on the least defended side and fire from about 60 nm, so catch them before
+under HAWK or Patriot cover too: the bombers come in on the least defended side and fire from about 55 nm, so catch them before
 that. Your fighters can also shoot the missiles down in flight, and in a mission or in the war they often do, a whole salvo at a time;
 your SAMs do not engage them. The same goes for your HAWK and Patriot sites: a Kh-59M raid goes in five minutes behind red's
 anti-radiation raid on that site, or alone when red cannot field one. Troops in contact are bombed, not fired at with it. A raid on one of your airfields does the same, with the missiles aimed along the runway: enough hits close the field (see
