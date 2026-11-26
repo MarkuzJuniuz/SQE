@@ -26,7 +26,7 @@ from __future__ import annotations
 import math
 from .models import AssetKind, EnemyAsset
 from .words import strength_word
-from . import story
+from . import fraction, story
 from . import clock
 
 NM = 1852.0
@@ -88,7 +88,6 @@ CLOCK_DAYS = 9                # takeover clock: days after a base falls before o
 REAR_FRAC = 0.7               # red strength in the sectors behind its first line, as a share of its first sector's start strength (judgment call)
 BLUE_ATTACK_MIN = 30.0        # our force in a sector must be at least this before we attack (toy model "THR"; judgment call)
 BLUE_ATTACK_RATIO = 0.9       # ...and not weaker than this share of the enemy's strength there (supply-weighted)
-BLUE_ATTACK_CHANCE = 0.7      # daily chance that a ready force attacks
 SURGE_GRACE_TURNS = 12        # S25: was 24 (the same 48 hours); v0.41.337 (XO 2026-11-09, plan OPEN 3; was SURGE_GRACE_DAYS 2): flyable turns your squadron can skip, with no sortie in between, before red's surge starts (judgment call). A stand-down turn (nothing flyable) does not count
 TURNS_PER_DAY = clock.DAY_MIN // clock.TURN_MIN            # S25: derived (was a literal 12); the surge step (`red_surge`) is still per day: idle turns past the grace count 1/TURNS_PER_DAY of a day each
 SURGE_CAP = 2.0               # ...and the most it adds (x2 at the top)
@@ -559,20 +558,24 @@ def supply_round(state, d, rng) -> list:
         for _ in range(attempts):
             if not sites:
                 return
-            cands = []
+            # S208: the best remaining target (value x health; equal ones: the seeded draw), not a lottery
+            best = None
             for a in sites:
                 cov = covering_sams(state, a) if who == "blue" else []
                 if any(x.variant not in ESCORTABLE for x in cov):
                     continue
-                cands.append((a, SUPPLY_ROUND_P["escorted" if cov else "open"], a.value))
-            if not cands:
+                score = (a.value * a.health, rng.random())
+                if best is None or score > best[0]:
+                    best = (score, a, SUPPLY_ROUND_P["escorted" if cov else "open"])
+            if best is None:
                 return
-            a, p, _v = rng.choices(cands, weights=[c[2] for c in cands])[0]
+            _score, a, p = best
             if rng.random() < p * p_scale:
                 a.health = max(0.0, a.health - SUPPLY_ROUND_HIT)
                 lines.append(f"{'Our' if who == 'red' else 'Enemy'} {a.name} was hit in the background supply strikes ({strength_word(a.health)})")
     pick(list(state.assets.values()), SUPPLY_ROUND_BLUE, "blue")
-    pick(list(getattr(state, "blue_assets", {}).values()), int(getattr(d, "red_supply_strikes", 1)) + int(rng.random() < min(1.0, getattr(d, "raid_rate", 0.3))), "red")
+    extra = fraction.whole_units(state, "red_supply_extra", state.turn, min(1.0, getattr(d, "raid_rate", 0.3)))      # S208: the extra strike comes round by the carried fraction
+    pick(list(getattr(state, "blue_assets", {}).values()), int(getattr(d, "red_supply_strikes", 1)) + extra, "red")
     return lines
 
 
@@ -755,6 +758,14 @@ def push_factor(state, d) -> float:
     return surge(state, d) * works.edge(state, d)
 
 
+def red_attack_ratio(d, push: float) -> float:
+    """S208 (XO 2026-11-25: no dice): red attacks a sector when its supplied strength is this many times blue's there. Derived from the old odds: red attacked with chance
+    `red_attack` x push x (its strength / blue's), so the ratio at which that chance came to 0.5 is 0.5 / (`red_attack` x push). Levels 1, 2, 3 (red_attack 0.15, 0.45, 0.8, push 1):
+    3.33, 1.11, 0.63; the works' push lowers it. Background, not the source of the figure: US Army planning ratios are about 3:1 for a deliberate attack and 2.5:1 for a hasty one
+    (secondary sources: Dupuy Institute, https://dupuyinstitute.org/2018/05/30/dupuys-verities-the-power-of-defense/ ; current FM not checked). Judgment call."""
+    return 0.5 / max(0.01, getattr(d, "red_attack", 0.3) * push)
+
+
 def resolve_day(state, d, rng) -> list:
     """One day of ground fighting. Returns the overnight lines for the log."""
     g = state.ground
@@ -798,9 +809,9 @@ def resolve_day(state, d, rng) -> list:
         att = None
         if forced == ri and not quiet:                                                  # the enemy's last counter-force presses every day
             att = "red"
-        elif state.day >= g.get("red_clock", 0) and rng.random() < getattr(d, "red_attack", 0.3) * sg * _clamp(pR / max(pB, 1.0), 0.4, 1.6):
+        elif state.day >= g.get("red_clock", 0) and pR >= red_attack_ratio(d, sg) * max(pB, 1.0):
             att = "red"
-        elif state.day >= g.get("clock", 0) and B >= BLUE_ATTACK_MIN and pB >= BLUE_ATTACK_RATIO * pR and rng.random() < BLUE_ATTACK_CHANCE:
+        elif state.day >= g.get("clock", 0) and B >= BLUE_ATTACK_MIN and pB >= BLUE_ATTACK_RATIO * pR:
             att = "blue"                                                                # v0.41.143: our force is ready (takeover clock over, enough strength)
         if quiet and not att:
             continue

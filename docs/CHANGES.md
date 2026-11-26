@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.675, ground attacks go in when the odds are there
+On the front a side now attacks whenever it is strong enough, instead of by chance. Red attacks less often than before (at Level 1 almost never), and blue a little more. The background supply strikes of a skipped day go for the best target.
+
 ## v0.41.674, patrols go where the threat is, and a worn wing under threat pulls back
 Both sides now put their patrol pairs on the most threatened stations instead of drawing them by chance (the carrier group keeps its own share). A squadron worn down to a third whose field the enemy can reach always stands down to recover, rather than sometimes.
 

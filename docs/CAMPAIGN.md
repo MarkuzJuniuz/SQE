@@ -39,7 +39,7 @@ You pick the level when you start a campaign. It sets how strong red is and how 
 | Red AI skill | Average | Good | High |
 | Bomber wing (Tu-22M3 at Mozdok) | none | 14, raids the carrier only when red is desperate | 24, raids the carrier as a normal part of its plan |
 | Red counter-attacks on blue bases (`counterstrike`) | low (0.10) | 0.30 | 0.55 |
-| Ground war pressure (`red_attack`) | 0.15 | 0.45 | 0.80 |
+| Red attacks on the ground when its strength in a sector is (`red_attack`) | 3.3x blue's (0.15) | 1.1x (0.45) | 0.6x (0.80) |
 
 Blue is the same at every level: 18 squadrons with 284 jets in total across the coalition fields and the carrier (F-14B(U), F/A-18C, F-16C, F-15C
 and A-10C squadrons, plus F-15E and HVAACAP squadrons and the F-117A squadron that the AI flies). A person can fly the F-14B(U),
@@ -141,7 +141,8 @@ Missions list shows together.
 The front is a chain of sectors, one per airfield from Krymsk to Kutaisi, each with a red and a blue **force strength**. The level decides how many
 are fought over: Levels 1 and 2 contest Sukhumi, Gudauta and Sochi, Level 3 adds Gelendzhik and Krymsk.
 Each night the sectors in contact exchange losses (the defender fights at ×1.25, `DEFENDER`); a side under 30% of the
-other's force in a sector withdraws from it (`BREAK_RATIO`) and nobody is hunted to the last unit. Both sides get
+other's force in a sector withdraws from it (`BREAK_RATIO`) and nobody is hunted to the last unit. A side attacks whenever it is strong enough, not by chance:
+red at the ratio in section 2's table (lower while its works feed the war), blue once its force in the sector is at least 30 and at least 0.9 times red's. Both sides get
 reinforcements, scaled by their **Force Index** (see below), and a dug-in **garrison** in each sector gives its side a bonus and a CAS target.
 
 Blue's CAS and strike work lowers red's force in a sector and lowers its Force Index; red's raids do the same to blue. When
