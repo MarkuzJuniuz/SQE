@@ -72,8 +72,12 @@ _D: dict = {
         "STRIKE": {1: "={LAU-138 wtip - AIM-9M}", 2: "={SHOULDER AIM_54C_Mk47 L}", 3: "={F14-300gal}", 4: "={BRU-32 GBU-10}", 7: "={BRU-32 GBU-10}", 8: "={F14-300gal}", 9: "={F14-LANTIRN-TP}", 10: "={LAU-138 wtip - AIM-9M}"},
     },
     "F-15C": {
-        # stock DCS preset: AIM-9*4,AIM-120*4,Fuel*3
-        "CAP": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 4: "={C8E06185-7CD6-4C90-959F-044679E90751}", 5: "={C8E06185-7CD6-4C90-959F-044679E90751}", 6: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 7: "={C8E06185-7CD6-4C90-959F-044679E90751}", 8: "={C8E06185-7CD6-4C90-959F-044679E90751}", 9: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 10: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 11: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
+        # stock DCS preset: AIM-9*4,AIM-120*4,Fuel*3; S157 (XO 2026-11-22): AIM-120B -> AIM-120C on 4, 5, 7, 8 (test T1fix3: the B launched at 15 to 27 km, the F-16s' C at 33 to 39;
+        # the AIM-120C was first delivered in 1996, designation-systems.net, so it fits Syria 2000; firmness medium)
+        # S165 (XO 2026-11-22: the F-15C CAPs fired all four AIM-120C and stayed on station with only AIM-9s, "sidewinders are no good for CAP work"): every CAP kind (TARCAP, sweep, CAP role, BARCAP / HVAACAP tags) carries 8 AIM-120C on 1, 3, 4, 5, 7, 8, 9, 11 and the three tanks on 2, 6, 10 (pydcs: the AIM-120C fits all eight; the tanks stations take only tanks).
+        # NOT a stock preset (the old AI model's is 4 + 4): judgment call, XO's decision; the AIM-120C was first delivered in 1996 (designation-systems.net), firmness medium. The ESCORT kit stays the stock preset (4 AIM-120C + 4 AIM-9): the escorts are the ones that mostly get into the merge once the TARCAPs are broken (XO).
+        "CAP": {1: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 6: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 7: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 8: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 9: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 10: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 11: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}"},
+        "ESCORT": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 6: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 7: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 8: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 9: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 10: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 11: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
     },
     "F-15E": {
         # NOT a stock preset (the old AI model has none to copy; judgment call): AIM-9M on 1 and 19, AIM-120C on 3 and 17, 610 gal tanks on 2 and 18, GBU-31(V)1 on the four conformal-tank stations 7, 9, 11, 13
@@ -107,7 +111,7 @@ _D: dict = {
     },
 }
 _D["A-10C2"] = _D["A-10C"]          # S103e: the A-10C II (late) choice flies the same pydcs model and the same kits (one table, not a copy of the CLSIDs)
-_ALIAS = {Role.TARCAP: "CAP", Role.ESCORT: "CAP", Role.SWEEP: "CAP", Role.CAP: "CAP"}
+_ALIAS = {Role.TARCAP: "CAP", Role.ESCORT: "ESCORT", Role.SWEEP: "CAP", Role.CAP: "CAP"}      # S165: an ESCORT has its own table where an aircraft has one (the F-15C); every other aircraft falls back to its "CAP" table below
 
 
 def _find(P, want):
@@ -126,6 +130,8 @@ class LoadoutLibrary:
     def for_role(self, key: str, role: Role, kit: str = "") -> dict:
         name = kit or _ALIAS.get(role, role.value)
         c = self.custom.get(key, {})
+        if name == "ESCORT" and "ESCORT" not in c and "CAP" in c:                # S165: XO's captured "CAP" loadout still serves an escort (as before the escort had its own table)
+            name = "CAP"
         if name in c:
             return {int(p): {"CLSID": v} for p, v in c[name].items()}
         if name == "CBU" and "STRIKE" in c:                # v0.41.313 (XO 2026-11-06): the CBU kit starts from his own captured STRIKE loadout, only the bomb pylons change
@@ -222,7 +228,8 @@ ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, 
 
 BOMBER_TYPES = ("Su_24M",)       # v0.41.361 (Phase 10d) made this a tuple of two; S106 (XO 2026-11-18) removed the Su-34, so it is the Su-24M again: the red raid bombers: the types that fly field raids, the SEAD (Kh-31P) group and the DEAD (KAB-500Kr) group. Every test that used to say "Su_24M" reads this
 ARM_PER_JET = {"Su_24M": 2}   # Kh-31P per jet in a SEAD group (Su-24M: pylons 2 and 7, all it takes)
-STRIKE_PER_JET = {"Su_17M4": 4}             # FAB-500 per jet on a plain raid: the Su-24M is not capped (it takes every pylon that takes one; the Su-34 was capped at six, S106 removed it). S90 P3a: the Su-17M4 takes six 500-kg bombs in pydcs (pylons 1, 3, 4, 5, 6, 8): four (outer pairs, 2,000 kg) is the usual combat load (Wikipedia "Sukhoi Su-17": 2,000 kg combat load at low level, firmness medium; judgment call)
+ARM58_PER_JET = {"Su_24M": 2}   # S167 (XO 2026-11-22): the Su-17M4 entry is gone (it never fired its Kh-58U: no ELINT pod exists for it); B2 (XO 2026-11-21): Kh-58U per jet in a long-range SEAD package. Sources: the Kh-58U is the Su-24M's anti-radiation missile from 1991 (Wikipedia "Kh-58": 36 km low, 120 km from 10,000 m, 160 km from 15,000 m; the Kh-58E fits the Su-22M4), so it is era-true for 2001 and 2006; pydcs takes it on the Su-24M's pylons 2 and 7 and on the Su-17M4's pylons 3 and 6 (the Su-17M4 takes no Kh-31P), two a jet (all each type's pylons take). Not flown in DCS: whether the AI fires it at 65 nm and whether the Su-17M4 carries it is checked in XO's flown sorties
+STRIKE_PER_JET = {"Su_17M4": 4}             # FAB-500 (B3: or the kit's bomb, `STRIKE_KITS`) per jet on a plain raid: the Su-24M is not capped (it takes every pylon that takes one; the Su-34 was capped at six, S106 removed it). S90 P3a: the Su-17M4 takes six 500-kg bombs in pydcs (pylons 1, 3, 4, 5, 6, 8): four (outer pairs, 2,000 kg) is the usual combat load (Wikipedia "Sukhoi Su-17": 2,000 kg combat load at low level, firmness medium; judgment call)
 
 
 # S48 (XO musing 2026-11-12): the Kh-59M (AS-18 Kazoo) standoff strike missile for red's raid bombers. SOURCES (open, checked 2026-11-12; the sources are thin and disagree on range, so every figure here is a lead, not a fact):
@@ -236,6 +243,7 @@ STRIKE_PER_JET = {"Su_17M4": 4}             # FAB-500 per jet on a plain raid: t
 #  before it, and ONLY with the APK-9 datalink pod on pylon 4 (without it the Su-24M kept its ammo and flew home): KH59_POD. Missiles flew 55 to 58.6 nm and hit about 335 to 355 s later; the jets turned for home within about 25 s of the second missile.
 KH59_PER_JET = {"Su_24M": 2}   # Kh-59M per jet: every pylon that takes one (pydcs: 2 and 7 / 4 and 9, a balanced pair); the rest stay empty (judgment call: 930 kg each, the pair is the load)
 KH59_POD = {"Su_24M": 4}   # the APK-9 pod (pydcs `APK_9_Datalink_Pod`, clsid {APK_9}) a type needs on this pylon before the AI fires its Kh-59M (the Su-34 needs none). It is not a weapon: `_limit` and the "unarmed" warning count only the missiles
+ARM_POD = {"Su_24M": 5}   # T3b (XO 2026-11-22, server run: Su-24M and Su-17M4 with Kh-31P / Kh-58U flew to the launch point and turned home without firing; XO saw no Fantasmagoria pod on the jet): the L-081 Fantasmagoria ELINT pod (pydcs `L_081_Fantasmagoria_ELINT_pod`, pylon 5) the Su-24M carries with its anti-radiation missiles. Precedent: the Kh-59M fired only with its APK-9 pod (`KH59_POD`, XO's s48 probe). A HYPOTHESIS, not proven for the ARMs: the rerun shows it. The Su-17M4 has no such pod in pydcs
 
 
 def gbu_count(load: dict) -> int:
@@ -292,17 +300,28 @@ def enemy_land_bomber_loadout(cls_name: str) -> dict:
     return out
 
 
-def enemy_arm_loadout(cls_name: str) -> dict:
-    """v0.41.84: Kh-31P anti-radiation missiles on every pylon that takes one (Su-24M: pylons 2 and 7); v0.41.361: at most ARM_PER_JET of them (S106: the Su-34 is gone)."""
+def enemy_arm_loadout(cls_name: str, weapon: str = "Kh_31P") -> dict:
+    """v0.41.84: Kh-31P anti-radiation missiles on every pylon that takes one (Su-24M: pylons 2 and 7); v0.41.361: at most ARM_PER_JET of them (S106: the Su-34 is gone). B2: `weapon` "Kh_58U" gives the long-range kit
+    (Su-24M pylons 2 and 7, Su-17M4 pylons 3 and 6), at most ARM58_PER_JET a jet. Empty for a type that cannot carry the weapon (the Su-17M4 has no Kh-31P)."""
     from dcs import planes
     cls = getattr(planes, cls_name)
+    per = ARM58_PER_JET if weapon == "Kh_58U" else ARM_PER_JET
+    if cls_name not in per:                                                       # S167: a type with no entry flies no SEAD kit (the Su-17M4 never fired its Kh-58U)
+        return {}
     out = {}
     for i in sorted(cls.pylons):
         P = getattr(cls, f"Pylon{i}", None)
-        w = _find(P, "Kh_31P") if P is not None else None
+        w = _find(P, weapon) if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
-    return _limit(out, ARM_PER_JET.get(cls_name))
+    out = _limit(out, per.get(cls_name))
+    pod = ARM_POD.get(cls_name)
+    if out and pod:                                                              # T3b: the Su-24M's ELINT pod rides with its missiles; a pod the pydcs table lacks leaves the kit as it was
+        P = getattr(cls, f"Pylon{pod}", None)
+        w = _find(P, "L_081") if P is not None else None
+        if w is not None:
+            out[pod] = {"CLSID": w[1]["clsid"]}
+    return out
 
 
 def enemy_standoff_loadout(cls_name: str) -> dict:
@@ -326,10 +345,33 @@ def enemy_standoff_loadout(cls_name: str) -> dict:
     return out
 
 
-def enemy_strike_loadout(cls_name: str) -> dict:
-    """Free-fall bombs for a raid on an airfield (Su-24M): FAB-500 where a pylon takes one, else FAB-250."""
+# B3 (XO 2026-11-21): the kit of a red raid by what it attacks, for the types that have one here. Weapon names are pydcs's (`_find` takes the first pylon attribute that contains the name); every pylon that takes the weapon carries it (the
+# Su-24M: pylons 2, 3, 6 and 7, the rest empty: JUDGMENT CALL, the plan left "FAB-250 as before or empty" open), at most STRIKE_PER_JET a jet. A type / kind with no entry, or whose pylons take none of the weapon, keeps the FAB kit below.
+#  - "runway": BetAB-500ShP, the rocket-boosted concrete-piercing bomb made for low-level runway attack (weaponsystems.net "BetAB-500ShP": low drop from 170 m, 10-nozzle booster; Fenix Insight METIS: "normally used for the attack of runways"); late Cold War, so era-true for 2001 and 2006.
+#  - "troops" (raids on troops in contact and garrisons, and red's front-line strike): the RBK-500 cluster bomb. Su-24M: RBK-500U with 126 OAB-2.5RT fragmentation submunitions, the area kit (the RBK-500U was introduced in the late 1980s, TWZ; armyrecognition.com
+#    "RBK-500U"). Su-17M4: pydcs gives it only the PTAB RBK-500s, so the RBK-500 with 268 PTAB-1M (the classic light-armour cluster bomb; globalsecurity.org "RBK cluster bombs"): JUDGMENT CALL on the variant.
+#  - "supply" (raids on supply sites): Su-24M KAB-500S, the satellite-guided bomb. LUTORIN PULL-FORWARD (XO decision 6, 2026-11-21): the KAB-500S(-E) first flew in trials in 2000 and was shown in 2003 and the Su-24M is one of its listed carriers (Wikipedia "KAB-500S-E", deagel.com),
+#    but it is only in service from about 2019, later than the campaign's 2001 / 2006: red gets it early for these raids. NOT AVAILABLE IN THE PINNED pydcs for the Su-24M (it lists the KAB-500S on the Su-30 and Su-34 only), so today `enemy_strike_loadout("Su_24M", "supply")` finds no pylon and returns the FAB kit as before;
+#    the day pydcs lists it on the Su-24M the kit changes by itself. The Su-17M4 has no KAB-500S: its supply raid is the FAB-500 kit.
+STRIKE_KITS = {"Su_24M": {"runway": "BetAB_500ShP", "troops": "RBK_500U", "supply": "KAB_500S"},
+               "Su_17M4": {"runway": "BetAB_500ShP", "troops": "RBK_500___268"}}
+
+
+def enemy_strike_loadout(cls_name: str, kind: str | None = None) -> dict:
+    """Free-fall bombs for a raid (Su-24M, Su-17M4, Su-25): FAB-500 where a pylon takes one, else FAB-250. B3: `kind` ("runway" | "troops" | "supply", `STRIKE_KITS`) gives the kit for what the raid attacks; None, a type or a kind with no entry,
+    or a weapon no pylon takes, gives the FAB kit."""
     from dcs import planes
     cls = getattr(planes, cls_name)
+    want = (STRIKE_KITS.get(cls_name) or {}).get(kind or "")
+    if want:
+        kit = {}
+        for i in sorted(cls.pylons):
+            P = getattr(cls, f"Pylon{i}", None)
+            w = _find(P, want) if P is not None else None
+            if w is not None:
+                kit[i] = {"CLSID": w[1]["clsid"]}
+        if kit:
+            return _limit(kit, STRIKE_PER_JET.get(cls_name))
     out = {}
     for i in sorted(cls.pylons):
         P = getattr(cls, f"Pylon{i}", None)

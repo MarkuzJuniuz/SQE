@@ -16,7 +16,6 @@ import random
 from dcs import mapping
 from dcs.unitgroup import VehicleGroup
 
-ORIGINAL = VehicleGroup.formation_scattered       # pydcs's own, kept for the smoke test (same result wherever it finishes)
 TRIES_BEFORE_WIDENING = 100
 WIDEN_M = 10
 

@@ -4,6 +4,7 @@ Flights arrive at the marshal point, hold (stacked 1,000 ft apart), and leave to
 Pure geometry, no pydcs mission objects, so the kneeboard and briefing reuse it.
 """
 from __future__ import annotations
+import heapq
 import math
 from dataclasses import dataclass
 from . import samtier
@@ -61,6 +62,9 @@ class Geometry:
     carrier: bool = False   # v0.41.12: the flight's base is a carrier (only then a DEP point after take-off)
     launch_nm: float = 0.0  # v0.41.299: a Standoff Strike's launch distance from the target (SLAM_LAUNCH_NM); 0 = the JSOW rule
     sa10_avoid: list = None # [(x, y, nm)]: live medium / long-range SAMs (not the target) an AI flight's route bends around (v0.41.11; all gate SAMs since v0.41.20)
+    prefer: tuple = None    # S140e: (x, y) of red's nearest patrol station or fighter field seen from the target (`FighterStations._red_approach`): a detour with two ways of about the same length takes the side away from it
+    shared: dict = None     # S140b2: {(start, end) of a lane-0 leg: its turn points}, the package's one PUSH -> IP detour (`shared_leg`); the builder gives each package's geometry one
+    all_rings: list = None  # S140b1: [(x, y, nm)] EVERY live, unsuppressed SAM in AVOID_NM (the fighters' `_zone_sams` set, no skip): the rings an AI flight's transit, fighter and home legs go round
 
 
 STANDOFF_EGRESS_NM = 25.0  # a HARM or JSOW flight egresses this far beyond its launch point, straight back out along its own approach
@@ -81,6 +85,9 @@ LOW_LEG_NM = 30.0          # v0.41.16: a low-level (terrain-following) attack de
 SWEEP_PUSH_NM = 15.0       # v0.41.12: a sweep's PUSH, this far from its base toward the target
 AGM88_LAUNCH_NM = 35.0      # v0.41.11: 35 (was 30): the Sukhumi SA-10 engaged HARM shooters at 54-57 km (31 nm); the AI fires from 35-38 nm anyway.
                            # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
+# S153: how far out the AI fires an AGM-88C. Judgment call from the v0.41.11 note above ("the AI fires from 35-38 nm"), not measured yet.
+# A HARM task on a site farther than this from the HARM point makes the AI fly toward that site to get in range.
+AGM88_AI_REACH_NM = 40.0
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
 
 
@@ -91,7 +98,8 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, ca
     hdg = bearing(bx, by, tx, ty)
     # PUSH is ~10 nm from the marshal point toward the target (as in BMS); the long straight cruise from there to the IP is the ingress
     ip_d = max(d - p.ip_nm * NM, 0.5 * d)
-    at = lambda dd: offset(bx, by, hdg, dd)
+    def at(dd):
+        return offset(bx, by, hdg, dd)
     if mshl is None:
         mshl = offset(bx, by, hdg + 180, 15 * NM)
     ip_xy = at(ip_d) if not vary_deg else offset(tx, ty, hdg + 180 + vary_deg, p.ip_nm * NM)       # S104c: an F-117A sortie comes in on its own bearing (`f117.approach_deg`), 0 = the straight line as every other flight
@@ -132,15 +140,15 @@ def jsow_launch_xy(g, jsow_side: float) -> tuple:
 CAP2_FLOOR_NM = 5.0        # Phase 8: the shortest race-track leg worth flying
 
 
-def cap2_point(sx: float, sy: float, axis_deg: float, leg_nm: float, margin, floor_nm: float = CAP2_FLOOR_NM):
+def cap2_point(sx: float, sy: float, axis_deg: float, leg_nm: float, margin, floor_nm: float = CAP2_FLOOR_NM, sides=(90.0, -90.0)):
     """Phase 8 (campaign rules plan, decision 22): the far end (CAP2) of a station's race-track. It lies `leg_nm` from the station (sx, sy), across the
-    axis (`axis_deg` plus or minus 90). `margin(x, y)` is how far inside the clear area that point is, in nm (zero or more = clear). Both sides are tried;
+    axis (`axis_deg` plus or minus 90; S141c: `sides` lists the offsets to try, both by default). `margin(x, y)` is how far inside the clear area that point is, in nm (zero or more = clear). All sides are tried;
     the one with more margin wins. When neither side is clear the leg is halved, down to `floor_nm`. -> (x, y), or None when even the floor leg is not clear.
     No job specifics here: the TARCAP / escort / sweep station and, later, the support CAPs (queue S9) all call it."""
     nm = max(float(leg_nm), floor_nm)
     while True:
         best = None
-        for side in (90.0, -90.0):
+        for side in sides:
             x, y = offset(sx, sy, axis_deg + side, nm * NM)
             m = margin(x, y)
             if m >= 0 and (best is None or m > best[0]):
@@ -206,10 +214,20 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         far = offset(g.tx, g.ty, rel_hdg, (rel_nm + 6) * NM)
         if dist(g.tx, g.ty, *far) > dist(g.tx, g.ty, *g.ip):
             ip_xy = far
+    if human and g.all_rings and role in (Role.STRIKE, Role.SEAD):
+        ip_xy = ip_outside(g, ip_xy)                             # S140c (XO 2026-11-22): a person's IP is the point where he gets ready to shoot: outside the rings that hold the target
     # v0.41.10: deconfliction. AI flights cross PUSH and EGR on their own lane, 1.5 nm apart sideways by stack slot (at most 4.5 nm), so a
     # package's flights do not all converge on one point at one height
     lane = 0.0 if human or not stack_idx else (1 if stack_idx % 2 else -1) * min(4.5, 1.5 * ((stack_idx + 1) // 2))
-    lane_xy = lambda xy: offset(xy[0], xy[1], g.hdg + 90, lane * NM) if lane else xy
+    def lane_xy(xy):
+        if lane:
+            return offset(xy[0], xy[1], g.hdg + 90, lane * NM)
+        return xy
+    def egr_xy(xy):
+        # S140b2 / S140c: an egress point never sits inside a live ring (a person's route too: the mission is the same)
+        if g.all_rings:
+            return out_of_rings(xy, g.all_rings)
+        return xy
     wp.append(Wpt("PUSH", *lane_xy(g.push), alt, p.push_kts, "Push on time, check in with AWACS"))
     st_ = (g.stand or {}).get(key) if role in (Role.TARCAP, Role.ESCORT, Role.SWEEP) else None
     if st_ is not None and len(st_) >= 5:
@@ -224,13 +242,16 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
             for w_ in wp:                                      # v0.41.12: its PUSH lies ahead of the base, toward the station: it climbs straight out
                 if w_.name == "PUSH":
                     w_.x, w_.y = offset(bx, by, g.hdg, SWEEP_PUSH_NM * NM)
-            wp.append(Wpt("CAP1", sx_, sy_, alt, p.cap_kts, f"SWEEP: station {short_:.0f} nm short of the target{why_}; clear the air, do not chase", "SWEEP", orbit=True))
+            wp.append(Wpt("CAP1", sx_, sy_, alt, p.cover_kts or p.cap_kts, f"SWEEP: station {short_:.0f} nm short of the target{why_}; clear the air, do not chase", "SWEEP", orbit=True))
         elif role == Role.TARCAP:
-            wp.append(Wpt("CAP1", sx_, sy_, alt, p.cap_kts, f"TARCAP: on station {short_:.0f} nm short of the target{why_}; hold and shoot, do not chase", "TARCAP", orbit=True))
+            wp.append(Wpt("CAP1", sx_, sy_, alt, p.cover_kts or p.cap_kts, f"TARCAP: on station {short_:.0f} nm short of the target{why_}; hold and shoot, do not chase", "TARCAP", orbit=True))
         else:
-            wp.append(Wpt("CAP1", sx_, sy_, alt, p.cap_kts, f"ESCORT: hold {short_:.0f} nm short of the target{why_} until the strikers are off; do not chase", "ESCORT", orbit=True))
+            wp.append(Wpt("CAP1", sx_, sy_, alt, p.cover_kts or p.cap_kts, f"ESCORT: hold {short_:.0f} nm short of the target{why_} until the strikers are off; do not chase", "ESCORT", orbit=True))
             if egr_ok_:
-                wp.append(Wpt("EGR", *g.egr, ialt, p.egress_kts, "Exit with the package", rad=irad))
+                wp.append(Wpt("EGR", *egr_xy(g.egr), ialt, p.egress_kts, "Exit with the package", rad=irad))
+        if g.all_rings:                                         # S140b1 / S140c: PUSH -> station round every live ring, for a person's route too (the leg after the station is the builder's: CAP2 comes first)
+            ci_ = next(k for k, w in enumerate(wp) if w.orbit)
+            wp[:ci_ + 1] = avoid_circles(wp[:ci_ + 1], g.all_rings, p.max_points - (len(wp) - ci_ - 1), 1, edge=True, start=own_base, prefer=g.prefer)
         if len(wp) + 2 > p.max_points:
             raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
         return wp
@@ -264,19 +285,19 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     elif role == Role.STRIKE:
         wp.append(Wpt("TGT", g.tx, g.ty, 0 if human else ialt, p.attack_kts, p.tgt_note, "BOMB", agl=human, rad=irad and not human))
     elif role == Role.SEAD and human:
-        wp.append(Wpt("TGT", g.tx, g.ty, 0, p.attack_kts, "SEAD site. You set standoff", "SEAD", agl=True))
+        wp.append(Wpt("TGT", g.tx, g.ty, 0, p.attack_kts, "SEAD site", "SEAD", agl=True))
     elif role == Role.SEAD:
         wp.append(Wpt("SEAD", *offset(g.tx, g.ty, agm88_ax, agm88_nm * NM), ialt, p.attack_kts, "HARM launch point", "SEAD", rad=irad))
     elif role in (Role.ESCORT, Role.SWEEP) and so:
         nm_ = "ESCORT" if role == Role.ESCORT else "SWEEP"        # v0.41.60: one name per job (this branch is the old 4-tuple stop-short point; no station reaches it any more)
-        wp.append(Wpt("CAP1", so[0], so[1], alt, p.cap_kts, f"{nm_}: stop here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", nm_, orbit=True))
+        wp.append(Wpt("CAP1", so[0], so[1], alt, p.cover_kts or p.cap_kts, f"{nm_}: stop here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", nm_, orbit=True))
     elif role in (Role.ESCORT, Role.SWEEP):
         nm_ = "ESCORT" if role == Role.ESCORT else "SWEEP"        # a flight with no station of its own (stand-off setting off, or fleet-defence fighters)
         wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts + 30, f"{nm_}: " + ("cover the strikers over target" if role == Role.ESCORT else "clear the airspace"), nm_))
     elif role == Role.CAS:
         wp.append(Wpt("TGT", g.tx, g.ty, 0 if human else ialt, p.attack_kts, "CAS: check in with JTAC (COMM1 CH3)", "CAS", agl=human, rad=irad and not human))
     elif so:
-        wp.append(Wpt("CAP1", so[0], so[1], ialt, p.cap_kts, f"TARCAP: hold here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "TARCAP", rad=irad, orbit=True))
+        wp.append(Wpt("CAP1", so[0], so[1], ialt, p.cover_kts or p.cap_kts, f"TARCAP: hold here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "TARCAP", rad=irad, orbit=True))
     else:
         wp.append(Wpt("TGT", g.tx, g.ty, ialt, p.attack_kts, "TARCAP: cover the strikers over target", "TARCAP", rad=irad))
     standoff = not human and (role == Role.SEAD or (jsow and role == Role.STRIKE) or rel_on)
@@ -295,14 +316,30 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
                 clr_ = min((dist(*e_, kx, ky) - knm * NM for kx, ky, knm in (g.sa10_avoid or [])), default=0.0)
                 if best_ is None or clr_ > best_[0]:
                     best_ = (clr_, e_)
-            wp.append(Wpt("EGR", *best_[1], ialt, p.egress_kts, "Exit: break away to the side, then home", rad=irad))
+            wp.append(Wpt("EGR", *egr_xy(best_[1]), ialt, p.egress_kts, "Exit: break away to the side, then home", rad=irad))
         else:
-            wp.append(Wpt("EGR", *offset(g.tx, g.ty, sax, snm * NM), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
+            wp.append(Wpt("EGR", *egr_xy(offset(g.tx, g.ty, sax, snm * NM)), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
     elif not (so and role in (Role.ESCORT, Role.SWEEP, Role.TARCAP)):         # a stand-off fighter never crosses the target area: it goes home from its hold
-        wp.append(Wpt("EGR", *lane_xy(g.egr), ialt + (1000 * (stack_idx % 3) if lane else 0), p.egress_kts, "Exit threat area", rad=irad))
+        wp.append(Wpt("EGR", *egr_xy(lane_xy(g.egr)), ialt + (1000 * (stack_idx % 3) if lane else 0), p.egress_kts, "Exit threat area", rad=irad))
+    ip_i = next((k for k, w in enumerate(wp) if w.name == "IP"), None)
     if not human and g.sa10_avoid and role in (Role.STRIKE, Role.SEAD, Role.CAS):
+        # the attack legs (IP -> TGT / launch point -> EGR): the rings the flight is not sent against, as before S140b1 (a ring that holds the target is the one it comes for)
         k0 = next((k for k, w in enumerate(wp) if w.name == "PUSH"), 1)
-        avoid_circles(wp, g.sa10_avoid, p.max_points, k0 + 1)
+        avoid_circles(wp, g.sa10_avoid, p.max_points, (k0 if ip_i is None else ip_i) + 1)
+    if g.all_rings and role in (Role.STRIKE, Role.SEAD, Role.CAS) and ip_i is not None:
+        # S140b1 (plan 2.2): the transit legs (SPAWN -> MSHL -> PUSH -> IP) go round every live ring, the flight's own target's too; a leg that starts or ends inside a ring takes its edge
+        pu_i = next((k for k, w in enumerate(wp) if w.name == "PUSH"), None)
+        if pu_i is not None and ip_i == pu_i + 1:
+            # S140b2 (plan 2.4): the PUSH -> IP detour is one path for the whole package (lane 0), every flight's copy shifted by its lane
+            pts_ = shared_leg(g, wp[pu_i], wp[ip_i], lane, p.max_points - len(wp) - 2)
+            if pts_:
+                pa_, pb_ = wp[pu_i], wp[ip_i]
+                wp[ip_i:ip_i] = [Wpt("AVD", x, y, max(pa_.alt_ft, pb_.alt_ft), pa_.speed_kts, "Around a SAM site", rad=pa_.rad) for x, y in pts_]
+            wp[:pu_i + 1] = avoid_circles(wp[:pu_i + 1], g.all_rings, p.max_points - (len(wp) - pu_i - 1), 1, edge=True, start=own_base, prefer=g.prefer)
+        else:
+            wp[:ip_i + 1] = avoid_circles(wp[:ip_i + 1], g.all_rings, p.max_points - (len(wp) - ip_i - 1), 1, edge=True, start=own_base, prefer=g.prefer)
+    elif g.all_rings and role in (Role.TARCAP, Role.ESCORT, Role.SWEEP):
+        avoid_circles(wp, g.all_rings, p.max_points, 1, edge=True, start=own_base, prefer=g.prefer)      # a fighter has no ring of its own: every leg of its route (no station here, so no orbit leg)
     if len(wp) + 2 > p.max_points:
         raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
     return wp
@@ -312,6 +349,14 @@ SA10_AVOID_NM = samtier.get("SA-10", "avoid_nm")       # v0.41.11 (S90 P4: the f
                            # flights bound for Gudauta passed 31 nm from the Sukhumi SA-10 and were shot at from 57 km)
 SA10_STATION_NM = samtier.get("SA-10", "station_nm")     # v0.41.194 (XO 2026-10-29: Dodge 4's TARCAP orbit swung from 39 to 30 nm of the Sukhumi SA-10 and both Eagles died): a fighter STATION keeps this far from a live SA-10 so the orbit's near end (about 5-9 nm closer than its centre) stays outside SA10_AVOID_NM. Judgment call.
 AVOID_NM = {"SA-10": SA10_AVOID_NM, "SA-11": 20.0, "SA-2": 26.0, "SA-6": 16.0, "SA-3": 15.0, "SA-5": samtier.get("SA-5", "avoid_nm")}    # v0.41.20: every gate SAM, by its reach plus a margin
+
+
+def ring_nm(variant: str):
+    """S140b1 (XO 2026-11-22): the ring the SQE map draws and the briefing quotes for a SAM variant is the ring the routes keep out of (`AVOID_NM`: SA-10 35, SA-5 71, SA-2 26, SA-11 20, SA-6 16, SA-3 15), else
+    `samtier.RANGE_NM` (a system no route ring covers). `samtier.RANGE_NM` itself is unchanged: stations, the dormant wake, the F-117 and the threat math read it. None for a variant with neither."""
+    return AVOID_NM.get(variant, samtier.RANGE_NM.get(variant))
+
+
 RAID_SA11_NM = 26.0        # v0.41.276: the carrier raid's interceptors keep this far from a live SA-11 (AVOID_NM says 20). Judgment call: in XO's 2026-11-04 run the SA-11s
                            # engaged the Tomcats at 23 to 26 nm (shots of 42 to 49 km measured by the hook). Lives here (not raid_spawns.py) so threatmap.py can share it
                            # without a circular import (v0.41.287).
@@ -322,32 +367,377 @@ RAID_THREAT_OUT_NM = 165.0 # v0.41.301: was 140, moves out with the point. v0.41
                            # beyond the fighters' station (raid_spawns.RAID_LAUNCH_OUT_NM). Was the route's outer point w1, 220 nm.
 
 
-def avoid_circles(wp: list, circles: list, max_points: int, first: int) -> list:
-    """v0.41.11: bend the legs from index `first` on around each circle (x, y, nm): where a leg passes inside one, a turn point is put
-    2 nm outside it, on the side the leg already passes. Two passes at most; never past the airframe's waypoint limit."""
-    for _ in range(2):
-        changed = False
-        i = max(1, first)
-        while i < len(wp):
-            a, b = wp[i - 1], wp[i]
-            for cx, cy, r in circles:
-                ax, ay, bx, by = a.x, a.y, b.x, b.y
-                vx, vy = bx - ax, by - ay
-                L2 = vx * vx + vy * vy
-                t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((cx - ax) * vx + (cy - ay) * vy) / L2))
-                px, py = ax + t * vx, ay + t * vy
-                d = dist(px, py, cx, cy)
-                if d >= r * NM or t in (0.0, 1.0) or len(wp) + 3 > max_points:
+AVOID_MARGIN_NM = 2.0      # S140a: a turn point sits this far outside the ring it bends round. Source: today's value (v0.41.11 put its one turn point 2 nm outside the ring); kept so the rings keep the same clearance
+AVOID_CORNERS = 12         # S140a: a ring is a 12-corner polygon for the path search; its flats (not its corners) sit AVOID_MARGIN_NM outside the ring. Judgment call: 12 corners overshoot the shortest tangent by under 2 nm on a 35 nm ring
+AVOID_ROUNDS = 40          # S140a: most rounds of "search, then add the rings the best path still touches"
+AVOID_TOUCH_M = 50.0       # a segment touches a ring when its closest point is this much inside the ring edge (a corner on the polygon is margin_nm outside, so it never counts)
+
+
+def _seg_hits(p, q, circles) -> list:
+    """Indexes of the circles (x, y, r metres) that the segment p -> q touches (its closest point lies inside r - AVOID_TOUCH_M)."""
+    ax, ay = p
+    vx, vy = q[0] - ax, q[1] - ay
+    L2 = vx * vx + vy * vy
+    hit = []
+    for i, (cx, cy, r) in enumerate(circles):
+        t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((cx - ax) * vx + (cy - ay) * vy) / L2))
+        if math.hypot(ax + t * vx - cx, ay + t * vy - cy) < r - AVOID_TOUCH_M:
+            hit.append(i)
+    return hit
+
+
+AVOID_SIDE_PCT = 10.0      # S140e: going round a ring on the far side of the leg is taken when it is within this percent of the shortest path and keeps the leg farther from `prefer` (red's fighters). Judgment call (plan 2.8)
+
+
+def safe_path(a, b, circles, margin_nm: float | None = None, prefer=None):
+    """S140e: `_safe_path`, and with `prefer` ((x, y) of red's nearest patrol station or fighter field) the other side of the first ring the shortest path bends round when that path is at most AVOID_SIDE_PCT percent
+    longer and passes farther from `prefer` (ties keep the shortest). `prefer` None (the default) = `_safe_path` exactly."""
+    best = _safe_path(a, b, circles, margin_nm)
+    if prefer is None or not best:
+        return best
+    mg = AVOID_MARGIN_NM if margin_nm is None else margin_nm
+    live = [(cx, cy, r * NM) for cx, cy, r in circles
+            if math.hypot(a[0] - cx, a[1] - cy) >= r * NM and math.hypot(b[0] - cx, b[1] - cy) >= r * NM]
+    # the ring the first turn point belongs to
+    cx, cy, r = None, None, None
+    ring_gap_best = None
+    for live_ring in live:
+        ring_gap = abs(math.hypot(best[0][0] - live_ring[0], best[0][1] - live_ring[1]) - (live_ring[2] + mg * NM))
+        if ring_gap_best is None or ring_gap < ring_gap_best:
+            cx, cy, r = live_ring
+            ring_gap_best = ring_gap
+    def side(p):
+        return (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]) > 0
+    alt = _safe_path(a, b, circles, margin_nm, ban=((cx, cy, r), side(best[0])))
+    if not alt:
+        return best
+    def length(pts):
+        # the length of the path a -> pts -> b. The legs are added with sum() as before: a running total rounds differently
+        leg_starts = [tuple(a)] + list(pts)
+        leg_ends = list(pts) + [tuple(b)]
+        leg_lengths = []
+        for leg_index in range(len(leg_starts)):
+            leg_start = leg_starts[leg_index]
+            leg_end = leg_ends[leg_index]
+            leg_lengths.append(math.hypot(leg_end[0] - leg_start[0], leg_end[1] - leg_start[1]))
+        return sum(leg_lengths)
+    if length(alt) > length(best) * (1 + AVOID_SIDE_PCT / 100.0):
+        return best
+    def near(pts):
+        # the nearest any leg of the path a -> pts -> b comes to `prefer`
+        leg_starts = [tuple(a)] + list(pts)
+        leg_ends = list(pts) + [tuple(b)]
+        nearest_m = None
+        for leg_index in range(len(leg_starts)):
+            leg_m = _seg_dist(leg_starts[leg_index], leg_ends[leg_index], prefer)
+            if nearest_m is None or leg_m < nearest_m:
+                nearest_m = leg_m
+        return nearest_m
+    return alt if near(alt) > near(best) + 1.0 else best
+
+
+def _seg_dist(p, q, c) -> float:
+    """Distance from the point c to the segment p -> q."""
+    vx, vy = q[0] - p[0], q[1] - p[1]
+    L2 = vx * vx + vy * vy
+    t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((c[0] - p[0]) * vx + (c[1] - p[1]) * vy) / L2))
+    return math.hypot(p[0] + t * vx - c[0], p[1] + t * vy - c[1])
+
+
+def _safe_path(a, b, circles, margin_nm: float | None = None, ban=None):
+    """S140a: the turn points between a and b (x, y in metres) that keep the leg out of every circle (x, y, nm): [] when the straight leg is clear,
+    None when there is no way round. Shortest path over a visibility graph (Lozano-Perez and Wesley 1979, the visibility-graph method), searched with A*.
+    Each circle is a polygon of AVOID_CORNERS corners whose flats lie `margin_nm` outside it; a corner inside any circle is not a node. Lazy: only the
+    circles the current best path touches are obstacles, and the search repeats until the path touches none (None after AVOID_ROUNDS rounds, or when a
+    path still touches a circle with every touched circle already an obstacle). A circle that holds a or b is left out of the leg (the leg has to start
+    or end there; S140b handles those legs): v0.41.11 could still bend such a leg when the closest point lay mid-leg. Ties break by node index, so
+    the result is the same on every run. Ported from the probes/s140/crossings.py prototype. S140d1: `margin_nm` None = AVOID_MARGIN_NM as it stands now (`trim_margin` lowers it for one build). S140e: `ban` = ((x, y, r metres), side)
+    leaves out the corners of that ring on that side of the line a -> b (the far-side search of `safe_path`)."""
+    margin_nm = AVOID_MARGIN_NM if margin_nm is None else margin_nm
+    live = [(cx, cy, r * NM) for cx, cy, r in circles
+            if math.hypot(a[0] - cx, a[1] - cy) >= r * NM and math.hypot(b[0] - cx, b[1] - cy) >= r * NM]
+    if not live:
+        return []
+    path = [tuple(a), tuple(b)]
+    active: set = set()
+    for _ in range(AVOID_ROUNDS):
+        hit = set()
+        for i in range(len(path) - 1):
+            hit.update(_seg_hits(path[i], path[i + 1], live))
+        if not hit:
+            return path[1:-1]
+        if hit <= active:
+            return None
+        active |= hit
+        obs = [live[i] for i in sorted(active)]
+        nodes = [tuple(a), tuple(b)]
+        for cx, cy, r in obs:
+            R = (r + margin_nm * NM) / math.cos(math.pi / AVOID_CORNERS)
+            for k in range(AVOID_CORNERS):
+                ang = 2 * math.pi * k / AVOID_CORNERS
+                pt = (cx + R * math.cos(ang), cy + R * math.sin(ang))
+                if ban is not None and (cx, cy, r) == ban[0] and ((b[0] - a[0]) * (pt[1] - a[1]) - (b[1] - a[1]) * (pt[0] - a[0]) > 0) == ban[1]:
                     continue
-                h = bearing(cx, cy, px, py) if d > 1 else bearing(ax, ay, bx, by) + 90
-                nx, ny = offset(cx, cy, h, (r + 2) * NM)
-                wp.insert(i, Wpt("AVD", nx, ny, max(a.alt_ft, b.alt_ft), a.speed_kts, "Around a SAM site", rad=a.rad))
-                changed = True
+                if not any(math.hypot(pt[0] - ox, pt[1] - oy) < orr for ox, oy, orr in live):
+                    nodes.append(pt)
+        n = len(nodes)
+        best, prev, done = {0: 0.0}, {}, set()
+        heap = [(math.hypot(b[0] - a[0], b[1] - a[1]), 0)]
+        found = False
+        while heap:
+            _, u = heapq.heappop(heap)
+            if u in done:
+                continue
+            done.add(u)
+            if u == 1:
+                found = True
                 break
-            i += 1
-        if not changed:
-            break
+            ux, uy = nodes[u]
+            for v in range(n):
+                if v in done:
+                    continue
+                vx, vy = nodes[v]
+                d = best[u] + math.hypot(vx - ux, vy - uy)
+                if d >= best.get(v, 1e18):
+                    continue
+                if _seg_hits(nodes[u], nodes[v], obs):
+                    continue
+                best[v], prev[v] = d, u
+                heapq.heappush(heap, (d + math.hypot(b[0] - vx, b[1] - vy), v))
+        if not found:
+            return None
+        k, path = 1, [nodes[1]]
+        while k != 0:
+            k = prev[k]
+            path.append(nodes[k])
+        path.reverse()
+    return None
+
+
+def _edge_point(c, p, margin_nm: float):
+    """The point of circle c's edge (+ margin) nearest to p (x, y metres); a p at the centre goes east."""
+    cx, cy, r = c
+    d = math.hypot(p[0] - cx, p[1] - cy)
+    ux, uy = ((p[0] - cx) / d, (p[1] - cy) / d) if d > 1.0 else (1.0, 0.0)
+    return (cx + ux * (r + margin_nm) * NM, cy + uy * (r + margin_nm) * NM)
+
+
+def _ring_exit(p, circles, skip, margin_nm: float) -> list:
+    """[the nearest point outside every ring (+ margin) to a position p that sits in one] or [] when p is in none (not counting the rings whose index is in `skip`: the ones the leg's other end sits in too).
+    Where the rings overlap p lies in their union, and the nearest way out is the nearest point of the union's edge: the radial edge point of one ring, or a place where two inflated rings cross
+    (hopping from ring to ring by each one's own nearest edge zig-zags: the first S140b1 run added 184 nm to a sweep that started in a cluster)."""
+    live = [(cx, cy, (r + margin_nm) * NM) for i, (cx, cy, r) in enumerate(circles) if i not in skip]
+    if not any(math.hypot(p[0] - cx, p[1] - cy) < rr - margin_nm * NM for cx, cy, rr in live):
+        return []
+    cand = [_edge_point((cx, cy, (rr / NM) - margin_nm), p, margin_nm) for cx, cy, rr in live]
+    for i in range(len(live)):
+        x1, y1, r1 = live[i]
+        for j in range(i + 1, len(live)):
+            x2, y2, r2 = live[j]
+            d = math.hypot(x2 - x1, y2 - y1)
+            if d < 1.0 or d >= r1 + r2 or d <= abs(r1 - r2):
+                continue
+            al = (r1 * r1 - r2 * r2 + d * d) / (2 * d)
+            h = math.sqrt(max(0.0, r1 * r1 - al * al))
+            mx, my = x1 + al * (x2 - x1) / d, y1 + al * (y2 - y1) / d
+            cand.append((mx + h * (y2 - y1) / d, my - h * (x2 - x1) / d))
+            cand.append((mx - h * (y2 - y1) / d, my + h * (x2 - x1) / d))
+    good = [q for q in cand if all(math.hypot(q[0] - cx, q[1] - cy) >= rr - 1.0 for cx, cy, rr in live)]
+    if not good:
+        return []
+    nearest_good = None
+    nearest_good_key = None
+    for good_point in good:
+        good_key = (math.hypot(good_point[0] - p[0], good_point[1] - p[1]), good_point)
+        if nearest_good_key is None or good_key < nearest_good_key:
+            nearest_good = good_point
+            nearest_good_key = good_key
+    return [nearest_good]
+
+
+EDGE_GAIN_NM = 4.0         # S140b1: a leg with an end inside a ring takes the ring's edge only when that cuts the distance flown inside rings by at least this much. Judgment call: without it, short legs between
+                           # two points in a cluster of overlapping rings (an IP, the target, the egress point) zig-zagged in and out of the cluster and added up to 87 nm to a sweep
+
+
+def _inside_m(path, circles) -> float:
+    """Metres of the polyline `path` ((x, y) points) that lie inside at least one circle (x, y, nm): the union of the chords of each leg."""
+    tot = 0.0
+    for p, q in zip(path, path[1:]):
+        vx, vy = q[0] - p[0], q[1] - p[1]
+        L = math.hypot(vx, vy)
+        if L < 1.0:
+            continue
+        iv = []
+        for cx, cy, r in circles:
+            fx, fy = p[0] - cx, p[1] - cy
+            b_ = 2 * (fx * vx + fy * vy)
+            c_ = fx * fx + fy * fy - (r * NM) ** 2
+            disc = b_ * b_ - 4 * L * L * c_
+            if disc <= 0:
+                continue
+            s = math.sqrt(disc)
+            t0, t1 = max(0.0, (-b_ - s) / (2 * L * L)), min(1.0, (-b_ + s) / (2 * L * L))
+            if t1 > t0:
+                iv.append((t0, t1))
+        end = 0.0
+        for t0, t1 in sorted(iv):
+            if t1 > end:
+                tot += (t1 - max(t0, end)) * L
+                end = t1
+    return tot
+
+
+def safe_path_edge(a, b, circles, margin_nm: float | None = None, prefer=None):
+    """S140b1 (plan 2.2, last row): `safe_path` for a leg that may start or end INSIDE a ring (a blue base near the front, an IP inside the target's ring on a transit leg). Such a ring is
+    entered or left by the shortest way: the leg runs round to the point of the ring's edge (+ margin) nearest the inside end and goes straight in (or goes straight out to it, then on). A ring that
+    holds both ends stays as it is (the leg lies inside it). Only when it pays: the edge route has to cut the distance flown inside rings by EDGE_GAIN_NM against the plain `safe_path` (which leaves
+    the rings that hold an end out of it), else the plain one stands. The same shape as `safe_path` (the turn points, [] when none, None when there is no way round), the edge points included."""
+    margin_nm = AVOID_MARGIN_NM if margin_nm is None else margin_nm
+    plain = safe_path(a, b, circles, margin_nm, prefer)
+    both = {i for i, (cx, cy, r) in enumerate(circles) if math.hypot(a[0] - cx, a[1] - cy) < r * NM and math.hypot(b[0] - cx, b[1] - cy) < r * NM}
+    out_a = _ring_exit(a, circles, both, margin_nm)
+    out_b = _ring_exit(b, circles, both, margin_nm)
+    if not out_a and not out_b:
+        return plain
+    mid = safe_path(out_a[-1] if out_a else tuple(a), out_b[-1] if out_b else tuple(b), circles, margin_nm, prefer)
+    if mid is None:
+        return plain
+    edge = out_a + mid + out_b[::-1]
+    if plain is None:
+        return edge
+    pa, pe = [tuple(a)] + plain + [tuple(b)], [tuple(a)] + edge + [tuple(b)]
+    return edge if _inside_m(pe, circles) <= _inside_m(pa, circles) - EDGE_GAIN_NM * NM else plain
+
+
+def avoid_circles(wp: list, circles: list, max_points: int, first: int, edge: bool = False, start: tuple | None = None, prefer=None) -> list:
+    """v0.41.11: bend the legs from index `first` on around each circle (x, y, nm); one turn point 2 nm outside the circle, two passes at most.
+    S140a: the shortest path round the circles (`safe_path`): each leg from index `first` on gets as many turn points as it needs, from the end of the
+    list backwards, never past the airframe's waypoint limit. A leg with no way round, or with more turn points than the limit allows, stays as it is.
+    S140b1: `edge=True` routes a leg that starts or ends inside a ring by the ring's edge too (`safe_path_edge`); the default leaves such a leg straight, as before. `start` = (x, y) of the
+    airfield the flight takes off from: a route that begins with neither SPAWN nor DEP (the all-AI test's own flight: the take-off belongs to the group) gets it as its missing first point
+    while the legs are routed, so the leg out to the marshal point is routed too.
+    S140e: `prefer` (x, y) = red's nearest patrol station or fighter field: a leg whose two ways round a ring are within AVOID_SIDE_PCT percent takes the side away from it.
+    Changes `wp` in place and returns it."""
+    def path_(a, b, c):
+        if edge:
+            return safe_path_edge(a, b, c, prefer=prefer)
+        return safe_path(a, b, c, prefer=prefer)
+    lead = None
+    if start is not None and wp and wp[0].name not in ("SPAWN", "DEP"):
+        lead = Wpt("BASE", start[0], start[1], wp[0].alt_ft, wp[0].speed_kts, rad=wp[0].rad)
+        wp.insert(0, lead)
+        first = 1 if first <= 1 else first + 1
+        max_points -= 1
+    i = len(wp) - 1
+    while i >= max(1, first):
+        a, b = wp[i - 1], wp[i]
+        pts = path_((a.x, a.y), (b.x, b.y), circles)
+        if pts and len(wp) + len(pts) + 2 <= max_points:
+            alt = max(a.alt_ft, b.alt_ft)
+            wp[i:i] = [Wpt("AVD", x, y, alt, a.speed_kts, "Around a SAM site", rad=a.rad) for x, y in pts]
+        i -= 1
+    if lead is not None:
+        wp.remove(lead)
     return wp
+
+
+IP_MOVE_MAX_NM = 60.0      # S140c: a person's strike / SEAD IP moves out along the run-in at most to this far from the target; no clear point within it (or short of the PUSH): the IP stays. Judgment call, counted by the probe
+
+
+def ip_outside(g, ip_xy):
+    """S140c (XO 2026-11-22, plan 4 answer 2): a person's strike / SEAD IP lies outside every ring that holds the target (+ AVOID_MARGIN_NM): out along the run-in (bearing target -> IP) in 1 nm steps to the
+    first clear point, at most IP_MOVE_MAX_NM from the target and 5 nm short of the PUSH; else ip_xy again. TGT is not touched and nothing is tasked (Human-Flown rule: route shape only)."""
+    hold = [(cx, cy, r) for cx, cy, r in (g.all_rings or []) if math.hypot(g.tx - cx, g.ty - cy) < r * NM]
+    def clear(p):
+        # True when the point is outside every hold circle by the margin
+        for circle_x, circle_y, circle_r in hold:
+            if not math.hypot(p[0] - circle_x, p[1] - circle_y) >= (circle_r + AVOID_MARGIN_NM) * NM:
+                return False
+        return True
+    if not hold or clear(ip_xy):
+        return ip_xy
+    hdg, d = bearing(g.tx, g.ty, *ip_xy), math.hypot(ip_xy[0] - g.tx, ip_xy[1] - g.ty)
+    limit = min(IP_MOVE_MAX_NM * NM, math.hypot(g.push[0] - g.tx, g.push[1] - g.ty) - 5 * NM)
+    while d + NM <= limit:
+        d += NM
+        p = offset(g.tx, g.ty, hdg, d)
+        if clear(p):
+            return p
+    return ip_xy
+
+
+FUEL_ROUTE_FACTOR = 2.4    # S140d1: a built route (every leg, turn points and the way home included, plus the minutes held at the marshal point and on a station at cruise speed) may be this many times the jet's
+                           # combat radius (x 1.5 where the planner judged a tanker fits, x PEN_REACH for the PEN kit). JUDGMENT CALL, set so nothing is dropped at today's routes: the S140 probe's worst route is
+                           # 2.17 x its combat radius (2.3 in the first probe, before the leg rules), the median 0.3 to 0.8. Raise or lower it here.
+
+
+def route_nm(pts) -> float:
+    """S140d1: the length in nm of the polyline through `pts` (objects with x, y in metres)."""
+    return sum(math.hypot(b.x - a.x, b.y - a.y) for a, b in zip(pts, pts[1:])) / NM
+
+
+def routed_nm(a, b, circles):
+    """S140d1: the length in nm of the safe path a -> b (x, y metres; `safe_path_edge` round the circles (x, y, nm)): the straight distance plus what the turn points add. None when there is no way round."""
+    pts = safe_path_edge(a, b, circles)
+    if pts is None:
+        return None
+    path = [tuple(a)] + list(pts) + [tuple(b)]
+    return sum(math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip(path, path[1:])) / NM
+
+
+class trim_margin:
+    """S140d1 (ladder rung 2): `with trim_margin():` the turn points of every route built inside it keep `margin_nm` (default 0) outside the rings instead of AVOID_MARGIN_NM; the rings are already the reach plus a
+    margin in AVOID_NM. Restores the margin on exit."""
+    def __init__(self, margin_nm: float = 0.0):
+        self.m = margin_nm
+
+    def __enter__(self):
+        global AVOID_MARGIN_NM
+        self.old, AVOID_MARGIN_NM = AVOID_MARGIN_NM, self.m
+        return self
+
+    def __exit__(self, *a):
+        global AVOID_MARGIN_NM
+        AVOID_MARGIN_NM = self.old
+        return False
+
+
+EGR_MOVE_MAX_NM = 40.0     # S140b2: an AI flight's egress point inside a ring moves at most this far out of it; farther (a ring cluster with no edge near) it stays where it was. Judgment call, counted by the probe
+
+
+def out_of_rings(xy, circles, max_nm: float = EGR_MOVE_MAX_NM, margin_nm: float | None = None):
+    """S140b2: the point xy (x, y metres) itself when it lies in no ring (x, y, nm), else the nearest point outside every ring + margin (`_ring_exit`); xy again when that is more than max_nm away."""
+    e = _ring_exit(xy, circles, (), AVOID_MARGIN_NM if margin_nm is None else margin_nm)
+    return e[0] if (e and math.hypot(e[0][0] - xy[0], e[0][1] - xy[1]) <= max_nm * NM) else xy
+
+
+def shared_leg(g, a: Wpt, b: Wpt, lane_nm: float, room: int):
+    """S140b2 (plan 2.4): the turn points of the leg a (a PUSH point) -> b (its IP) for one flight of a package, from the package's ONE lane-0 path: `safe_path_edge` from g.push (computed once,
+    cached in g.shared), each point shifted by the flight's lane (`lane_nm`, the offset of its PUSH from g.push, sideways to the package axis). A shifted point that falls inside a ring is pushed
+    radially out to the ring edge + margin. When the shifted path still flies more distance inside rings than the lane-0 path (+ 1 nm), the flight takes its own path from its own PUSH.
+    [] when the leg is clear or the airframe has no room for the points (`room` = points left); None when there is no way round."""
+    rings = g.all_rings
+    a0 = tuple(g.push)
+    cache = g.shared if g.shared is not None else {}
+    key = (round(a0[0]), round(a0[1]), round(b.x), round(b.y), AVOID_MARGIN_NM)
+    if key not in cache:
+        cache[key] = safe_path_edge(a0, (b.x, b.y), rings, prefer=g.prefer)
+    base = cache[key]
+    if not base or not lane_nm:
+        return base if (not base or len(base) <= room) else []
+    pts = []
+    for x, y in base:
+        x, y = offset(x, y, g.hdg + 90, lane_nm * NM)
+        for cx, cy, r in rings:
+            d = math.hypot(x - cx, y - cy)
+            if d < (r + AVOID_MARGIN_NM) * NM:
+                x, y = _edge_point((cx, cy, r), (x, y), AVOID_MARGIN_NM)
+        pts.append((x, y))
+    full0, full = [a0] + list(base) + [(b.x, b.y)], [(a.x, a.y)] + pts + [(b.x, b.y)]
+    if _inside_m(full, rings) > _inside_m(full0, rings) + NM:
+        own = safe_path_edge((a.x, a.y), (b.x, b.y), rings, prefer=g.prefer)
+        return own if (own is None or len(own) <= room) else []
+    return pts if len(pts) <= room else []
 
 
 def leg_seconds(a: Wpt, b: Wpt, climb: bool = False) -> float:
@@ -355,24 +745,34 @@ def leg_seconds(a: Wpt, b: Wpt, climb: bool = False) -> float:
     return dist(a.x, a.y, b.x, b.y) / v * (1.12 if climb else 1.04)
 
 
+def hold_next(wps: list[Wpt], i: int) -> int:
+    """S140b1: the index of the point a flight leaving the HOLD point wps[i] has to cross at push time: the PUSH after it (the turn points of a transit leg round a SAM ring can sit between), else the next point."""
+    return next((k for k in range(i + 1, len(wps)) if wps[k].name == "PUSH"), i + 1)
+
+
+def hold_leg_s(wps: list[Wpt], i: int) -> float:
+    """S140b1: the seconds from the HOLD point wps[i] to `hold_next`, over every point between; 0 at the end of the route."""
+    return sum(leg_seconds(wps[k], wps[k + 1]) for k in range(i, min(hold_next(wps, i), len(wps) - 1)))
+
+
 def assign_times(wps: list[Wpt], t0: float, push_s: float | None = None) -> None:
     """Fill eta_s along the route starting at t0. At a HOLD point the flight waits so that it CROSSES THE NEXT POINT (PUSH)
-    exactly at push_s: it leaves the hold at push_s minus the leg time."""
+    exactly at push_s: it leaves the hold at push_s minus the leg time (S140b1: the whole way to PUSH, turn points included)."""
     t = t0
     for i, w in enumerate(wps):
         if i > 0:
             t += leg_seconds(wps[i - 1], w, climb=(i == 1))
         w.eta_s = t
         if w.action == "HOLD" and push_s is not None:
-            leave = push_s - (leg_seconds(w, wps[i + 1]) if i + 1 < len(wps) else 0)
+            leave = push_s - hold_leg_s(wps, i)
             t = max(t, leave)
 
 
 def hold_leave_s(wps: list[Wpt], push_s: float) -> float:
-    """When a flight must leave its HOLD point to cross the next point at push_s."""
+    """When a flight must leave its HOLD point to cross the PUSH after it at push_s."""
     for i, w in enumerate(wps):
         if w.action == "HOLD":
-            return push_s - (leg_seconds(w, wps[i + 1]) if i + 1 < len(wps) else 0)
+            return push_s - hold_leg_s(wps, i)
     return push_s
 
 

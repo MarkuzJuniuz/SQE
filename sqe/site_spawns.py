@@ -37,7 +37,14 @@ class SiteSpawns:
         centres = list(getattr(self, "_raid_xy", [])) + ([] if only_raid else [(tx, ty)])
         if not centres:
             return
-        near = lambda a: min(dist(a.x, a.y, cx, cy) for cx, cy in centres)      # distance to the nearest centre
+        def near(a):
+            # distance to the nearest centre
+            nearest_m = None
+            for centre_x, centre_y in centres:
+                centre_m = dist(a.x, a.y, centre_x, centre_y)
+                if nearest_m is None or centre_m < nearest_m:
+                    nearest_m = centre_m
+            return nearest_m
         cands = []
         for a in st.assets.values():
             if a.kind in SUPPLY_BUILDINGS and not a.destroyed and a.id not in self.groups_by_asset:
@@ -45,7 +52,9 @@ class SiteSpawns:
         for aid, a in st.blue_assets.items():
             if a.kind in SUPPLY_BUILDINGS and not a.destroyed and aid not in self._supply_built:
                 cands.append((near(a), aid, "blue", a))
-        cands = sorted((c for c in cands if c[0] <= R), key=lambda c: (c[0], c[1]))
+        def distance_then_id(candidate):
+            return (candidate[0], candidate[1])
+        cands = sorted((c for c in cands if c[0] <= R), key=distance_then_id)
         if not cands:
             return
         home = self._home_airfield(tx, ty)
@@ -80,7 +89,8 @@ class SiteSpawns:
         budget = int(max(0, self._units_room()) / w)
         if budget <= 0:
             return
-        ok = lambda x, y: seac.site_ok(x, y, 60.0)
+        def ok(x, y):
+            return seac.site_ok(x, y, 60.0)
         cands = []
         for a in st.assets.values():
             if a.kind == AssetKind.AIRFIELD or a.health >= 0.999:
@@ -91,7 +101,9 @@ class SiteSpawns:
             centre = self.site_pos.get(a.id) or carcass.stable_center(a, st.campaign_id, ok)
             for k, wr in enumerate(carcass.wrecks_for(a, st.campaign_id, centre, SITES, SOFT, ok)):
                 cands.append((dnm, a.id, k, wr))
-        cands.sort(key=lambda c: (c[0], c[1], c[2]))
+        def first_three_fields(candidate):
+            return (candidate[0], candidate[1], candidate[2])
+        cands.sort(key=first_three_fields)
         placed = 0
         for dnm, aid, k, wr in cands[:budget]:
             vt = _vt(wr["type"])
@@ -150,8 +162,16 @@ class SiteSpawns:
             # radar covers about 120 degrees, so a raid from the wrong side met none). Short-range sites on both sides of the field, and a
             # HAWK battery as the middle layer at your home field. A degraded field (below 0.6) keeps the Patriot with 1 launcher and one site.
             ang = tm.nearest_threat_bearing(self.state, p.x, p.y, bearing(p.x, p.y, tx, ty))
-            dry = lambda a0, d0: next(((px, py) for k in range(12) for px, py in [offset(p.x, p.y, a0 + (30 * ((k + 1) // 2)) * (1 if k % 2 else -1), d0)]
-                                       if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
+            def dry(a0, d0):
+                # the nearest bearing that is dry land: the bearing itself, then 30, 60 ... degrees to either side in turn; none dry: the bearing itself
+                for k in range(12):
+                    side = -1
+                    if k % 2:
+                        side = 1
+                    px, py = offset(p.x, p.y, a0 + (30 * ((k + 1) // 2)) * side, d0)
+                    if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0):
+                        return (px, py)
+                return offset(p.x, p.y, a0, d0)
             sites_ = sams.blue_sites(self.state, base)
             def site_at(key, a0, d0):               # v0.41.64: the site's own position (doctrinal bearing + seeded jitter, sams.place_blue_site); the old search if it falls on a runway
                 a_ = sites_.get(key)
@@ -210,7 +230,9 @@ class SiteSpawns:
 
     def _full_map_sites(self, manifest):
         """Full map, stage 1: every live enemy site not built yet, in asset-id order."""
-        for a in sorted(self.state.assets.values(), key=lambda a: a.id):
+        def asset_id_of(asset):
+            return asset.id
+        for a in sorted(self.state.assets.values(), key=asset_id_of):
             if a.destroyed or a.id in self.groups_by_asset:
                 continue
             comp = self._site_comp(a)
@@ -281,7 +303,9 @@ class SiteSpawns:
             tgt, relevant = None, []            # no ground target, but enemy SAMs whose rings touch the route / station stay live
         else:
             tgt = st.assets[obj.target_id]
-            dfn = sorted((st.assets[i] for i in tgt.defended_by if not st.assets[i].destroyed), key=lambda x: dist(x.x, x.y, tgt.x, tgt.y))
+            def distance_to_target(asset):
+                return dist(asset.x, asset.y, tgt.x, tgt.y)
+            dfn = sorted((st.assets[i] for i in tgt.defended_by if not st.assets[i].destroyed), key=distance_to_target)
             relevant = [tgt] + dfn[:2]                                                   # the two nearest defenders; more only costs VR frame rate
             relevant += [g for g in st.assets.values() if g.guards == tgt.id]            # a SAM site's dug-in garrison is part of its cluster
             relevant += fol_
@@ -295,11 +319,17 @@ class SiteSpawns:
                 cs_ = cs_ + extra_
                 extra_ids_ = {a_.id for a_ in extra_}
             if route_near is not None:                                  # v0.41.285: nearest to this point first, so the unit limit trims the furthest (see `_spawn_raid`)
-                cs_.sort(key=lambda a_: (a_.id in extra_ids_, dist(a_.x, a_.y, route_near[0], route_near[1])))      # (v0.41.291: the route's own sites first, then the extras `all_sams` adds)
+                def extras_last_then_near(asset):
+                    return (asset.id in extra_ids_, dist(asset.x, asset.y, route_near[0], route_near[1]))
+                cs_.sort(key=extras_last_then_near)      # (v0.41.291: the route's own sites first, then the extras `all_sams` adds)
             route_ids = {a_.id for a_ in cs_}
             relevant += cs_
+        def distance_to_route(asset):
+            if polyline:
+                return tm.poly_dist(asset.x, asset.y, polyline)
+            return dist(asset.x, asset.y, tx, ty)
         ewrs = sorted((a for a in st.assets.values() if a.kind == AssetKind.EWR and not a.destroyed),
-                      key=lambda a: tm.poly_dist(a.x, a.y, polyline) if polyline else dist(a.x, a.y, tx, ty))
+                      key=distance_to_route)
         relevant += [a for a in ewrs[:2] if (tm.poly_dist(a.x, a.y, polyline) if polyline else 0) < 80 * NM]
         return tgt, relevant, route_ids, extra_ids_
 
@@ -350,7 +380,8 @@ class SiteSpawns:
         """ONE group per site: a SAM battery needs its search/track radars, launchers and command post together."""
         from .mission_builder import _vt, ARMOR_DENSITY, SUPPLY_BUILDINGS, TRACK_RADARS, SEARCH_RADARS  # the builder's module imports this one
         r = self.vrng
-        utype = lambda u: str(getattr(u, "type", ""))
+        def utype(u):
+            return str(getattr(u, "type", ""))
         skill = self._red_skill()
         garrison = a.kind == AssetKind.ARMOR and a.variant == "GARRISON"
         comp = self._armor_site_comp(a) if a.kind == AssetKind.ARMOR else (
@@ -411,7 +442,8 @@ class SiteSpawns:
         """The manifest row of a built site group: its unit names, the count at full health, and which of them are track / search radars."""
         from .mission_builder import TRACK_RADARS, SEARCH_RADARS  # the builder's module imports this one
         mine = bool(primary) and (not manifest.cur_pkg or manifest.cur_pkg == self._anchor_id)
-        utype = lambda u: str(getattr(u, "type", ""))
+        def utype(u):
+            return str(getattr(u, "type", ""))
         trk = [u.name for u in g.units if utype(u) in TRACK_RADARS]
         srch = [u.name for u in g.units if utype(u) in SEARCH_RADARS]
         manifest.add("asset", a.id, names, base_count=base_count, health_before=a.health, primary=mine, label=a.name, trk=trk, srch=srch,

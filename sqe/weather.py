@@ -200,7 +200,10 @@ def _anchor(campaign_id: str, k: int, state: str, clim: dict, month: int) -> dic
     """The 06:00 picture of a day in `state`, with seeded variation."""
     r = _rng(campaign_id, "wxp", k)
     (c0, c1), (b0, b1), (v0, v1), wf, turb, dq, dt = _P[state]
-    u = lambda a, b: a + (b - a) * r.random()
+    # A seeded random value between a and b.
+    def u(a, b):
+        return a + (b - a) * r.random()
+
     return {"cover": u(c0, c1), "base": u(b0, b1), "vis": u(v0, v1), "wind": clim["wind_ms"][month - 1] * wf * u(0.8, 1.25),
             "dir": _wind_dir(clim, month, r), "turb": turb, "qnh": 761 + dq + u(-2, 2), "dt": dt + u(-2.0, 2.0),
             "fog": r.random() < clim["fog"][month - 1] and state in ("OVERCAST", "RAIN", "SCATTERED", "BROKEN")}
@@ -213,7 +216,10 @@ def _fixed(state: str, clim: dict, month: int) -> dict:
 
 
 def _finish(state: str, a: dict, b: dict | None, f: float, hour: float, temp_month: float, mode: str, rng) -> Wx:
-    mix = lambda k: a[k] + ((b[k] - a[k]) * f if b else 0.0)
+    # The value of one weather key, blended from picture a towards picture b by f.
+    def mix(k):
+        return a[k] + ((b[k] - a[k]) * f if b else 0.0)
+
     cover, base, vis = mix("cover"), mix("base"), mix("vis")
     if state == "CLEAR":
         cover, base = min(cover, 0.1), 25000.0
@@ -236,10 +242,6 @@ def _finish(state: str, a: dict, b: dict | None, f: float, hour: float, temp_mon
     return Wx(state=state, cover=round(cover, 2), base_ft=round(base), vis_km=round(vis, 1), rain=rain, fog_m=round(fog_m),
               wind_from=round(wind_dir) % 360, wind_kt=round(mix("wind") * KT, 1), turb=round(mix("turb")), qnh_mmhg=round(mix("qnh"), 1),
               temp_c=round(temp_month + mix("dt"), 1), preset=preset, base_m=round(base_m), mode=mode)
-
-
-def clear_day(temp_c: float = 20.0) -> Wx:
-    return Wx(temp_c=temp_c)
 
 
 def forecast(mode: str, campaign_id: str, start: date, day: int, hour: float, pack: dict, ils_low_vis: bool = False) -> Wx:
@@ -458,7 +460,10 @@ def apply(m, wx: Wx) -> None:
         w.fog_thickness = 200
     if wx.wind_kt > 0:
         ms = wx.wind_kt / KT
-        to = lambda deg: int(round((deg + 180) % 360))                # DCS stores the direction the wind blows TO
+        # DCS stores the direction the wind blows TO
+        def to(deg):
+            return int(round((deg + 180) % 360))
+
         w.wind_at_ground = Wind(to(wx.ground_from if wx.ground_from >= 0 else wx.wind_from), round(ms, 1))
         w.wind_at_2000 = Wind(to(wx.wind_from + 25), round(ms * 1.8, 1))
         w.wind_at_8000 = Wind(to(wx.wind_from + 55), round(ms * 3.2, 1))

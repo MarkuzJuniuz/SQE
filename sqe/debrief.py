@@ -9,6 +9,7 @@ REQUIRES io/lfs un-sanitized in <DCS>\\Scripts\\MissionScripting.lua (Settings h
 from __future__ import annotations
 import json
 import os
+import random
 import re
 import time
 from dataclasses import dataclass, field, asdict
@@ -77,31 +78,45 @@ def _umbrella_lua(x: dict) -> str:
     return ", ux=%.1f, uz=%.1f, um=%d" % (float(x["ux"]), float(x["uz"]), int(x["um"]))
 
 
+BOMB_FAR_KM = 20     # S149 (XO 2026-11-22: a jumped AI striker dumps its bombs and the hook called "Bombs away"): a bomb that leaves farther than this from its flight's target point is a jettison. SQE's strikers release inside 5 nm (JDAM, `routes.JDAM_RELEASE_NM`) to the point itself; 20 km is a judgment call with margin for a CAS target that moves
+
+
+# S184: the SA number a MAGNUM call names, by a part of the DCS type name of the radar or launcher the missile goes for (first match wins).
+# Source: the NATO reporting numbers of these systems (SA-2 S-75, SA-3 S-125, SA-5 S-200, SA-6 Kub, SA-8 Osa, SA-9 Strela-1, SA-10 S-300PS, SA-11 Buk,
+# SA-13 Strela-10, SA-15 Tor, SA-19 Tunguska: public, firmness high); the type names are pydcs `vehicles.AirDefence` ids.
+SAM_NUMBER_WORDS = (("Kub", "six"), ("S-300", "ten"), ("Buk", "eleven"), ("Osa", "eight"), ("Tor 9A", "fifteen"), ("SNR_75", "two"), ("s-125", "three"),
+                    ("RPC_5N62", "five"), ("RLS_19J6", "five"), ("Tunguska", "nineteen"), ("Strela-10", "thirteen"), ("Strela-1 ", "nine"))
+
+
 def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "", group: str = "",
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
              watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
              rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
-             tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None, casdone: list | None = None) -> str:
+             tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None, casdone: list | None = None, bomb_tgt: dict | None = None) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
+    btg = ", ".join(f"[{_lq(k)}]={{x={float(v[0]):.1f}, z={float(v[1]):.1f}}}" for k, v in (bomb_tgt or {}).items())
     ea = ", ".join(f"[{_lq(n)}]=true" for n in (enemy_air or []))
-    lst = lambda xs: "{" + ", ".join(_lq(x) for x in xs) + "}"
+    # A Lua list of quoted strings.
+    def lst(xs):
+        return "{" + ", ".join(_lq(x) for x in xs) + "}"
+
     sc = ", ".join(f'{{pkg={_lq(x["pkg"])}, g={_lq(x["grp"])}, k={_lq(x["k"])}, units={lst(x["units"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, '
                     f'you={"true" if x["you"] else "false"}, tot={float(x["tot"]):.0f}}}' for x in (scrub or []))
     st = ", ".join(f'{{id={_lq(x["id"])}, label={_lq(x["label"])}, who={_lq(x["who"])}, prim={"true" if x["prim"] else "false"}, '
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
     ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
                    for r in (ruins or []))
-    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}}}'
+    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, more={{{", ".join(_lq(n) for n in x.get("more", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}}}'
                    for x in (gates or []))
     cd_ = ", ".join(f'{{g={_lq(x["grp"])}, units={lst(x["units"])}, to={int(x["to"])}, tx={float(x["tx"]):.1f}, tz={float(x["tz"]):.1f}}}' for x in (casdone or []))
     cr = ", ".join("{x=%.1f, z=%.1f, pw=%.0f}" % (c[0], c[1], c[2]) for c in (cfg or {}).get("craters", []))
     return (LUA_HOOK.replace("__CRATERS__", cr).replace("__RWYS__", ", ".join("{id=%s, x=%.1f, z=%.1f, h={%s}}" % (_lq(r["id"]), r["x"], r["z"], ", ".join(str(int(h_)) for h_ in r["h"])) for r in (cfg or {}).get("rwys", []))).replace("__RWYLEN__", f"{RUNWAY_HALF_LEN_M:.0f}").replace("__RWYWID__", f"{RUNWAY_HALF_WIDTH_M:.0f}").replace("__SCRUB__", sc).replace("__SCRUBFRAC__", repr(float(SCRUB_LOSS_FRAC))).replace("__SCRUBGRACE__", f"{float(SCRUB_STRIKE_GRACE_S):.0f}").replace("__SCRUBLEAD__", f"{float(SCRUB_COVER_LEAD_S):.0f}").replace("__CASDONE__", cd_).replace("__CASDONEFRAC__", repr(float(CAS_DONE_FRAC))).replace("__CASLEASH__", f"{float(CAS_LEASH_M):.0f}")
             .replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATETEST__", _gate_test_lua()).replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
-            .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
+            .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf).replace("__BTGT__", btg).replace("__BOMBFAR__", str(int(BOMB_FAR_KM)))
             .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__ECMP__", ecm_player if ecm_player in ("live", "f10") else "").replace("__ECMMSG__", "1" if ecm_msg else "0")
             .replace("__TUNEF__", ", ".join(str(int(f)) for f in (tune_flags or []))).replace("__TUNEMHZ__", f"{float(tune_mhz):.3f}").replace("__AWUNIT__", _lua_str(awacs_unit))
             .replace("__DMGL__", ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (dmg or {}).items())).replace("__DMGON__", "true" if dmg_on else "false").replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
@@ -111,9 +126,12 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__COVER__", ", ".join(f'{{g={_lq(c["g"])}, n={int(c["n"])}, bf={int(c["bf"])}, rf={int(c["rf"])}, u={float(c["u"]):.0f}}}' for c in (cover or [])))
             .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}, sq={_lq(a.get("sq", ""))}}}' for a in (alerts or [])))
             .replace("__PHOME__", ("{ x = %.1f, z = %.1f }" % tuple((cfg or {})["phome"])) if (cfg or {}).get("phome") else "nil")
+            .replace("__SAMNUM__", ", ".join("{%s, %s}" % (_lq(part), _lq(word)) for part, word in SAM_NUMBER_WORDS))
+            .replace("__MAGVAR__", "%.1f" % float((cfg or {}).get("magvar", 0.0)))
+            .replace("__BLUEPLACES__", ", ".join(f"[{_lq(n_)}]=true" for n_ in (cfg or {}).get("blue_places", [])))
             .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
             .replace("__RECOV__", _recov_lua((cfg or {}).get("recov")))
-            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov", "rwys", "craters")}).replace("'", "")))
+            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov", "rwys", "craters", "blue_places", "magvar")}).replace("'", "")))
 
 
 def _recov_lua(rs) -> str:
@@ -136,14 +154,14 @@ def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despaw
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
                  watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
                  rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
-                 tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None, casdone: list | None = None) -> None:
+                 tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None, casdone: list | None = None, bomb_tgt: dict | None = None) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player, ecm_msg, tune_flags, tune_mhz, awacs_unit, dmg, dmg_on, scrub, casdone))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player, ecm_msg, tune_flags, tune_mhz, awacs_unit, dmg, dmg_on, scrub, casdone, bomb_tgt))))
     mission.triggerrules.triggers.append(t)
 
 
@@ -218,6 +236,27 @@ def tally(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     return t
 
 
+def _kh59_runway_debrief(state, data: dict, group: dict, alive: list, where: str, wing, t_now: float, out: dict) -> None:
+    """S209: one bomber group of a flown Kh-59M runway raid. The mission counts the missiles that came down on the runway (`rwy`, applied by `runways.add_hits` further on), so nothing is added here. Only a mission
+    left before the missiles could land is settled the old way: half the time the group's missiles got through (`raids.hit`)."""
+    from . import raids
+    base_id = group["raid_base"]
+    landed_by = float(group.get("raid_arrive_s", 0.0)) + raids.KH59_FLY_S
+    if alive and t_now < landed_by:
+        roll = random.Random(f"{state.campaign_id}:{state.day}:early")
+        if roll.random() < 0.5:
+            out["lines"].append(f"Raid: you left before the missiles arrived; they came through to {where}")
+            for line in raids.hit(state, base_id, wing, roll, len(alive), "", group.get("ac"), kh59=True):
+                out["lines"].append(line.strip())
+        else:
+            out["lines"].append("Raid: you left before the missiles arrived; the defences stopped them")
+        return
+    if not (data.get("rwy") or {}).get(base_id):
+        line = f"Raid on {where}: no missile hit the runway"
+        if line not in out["lines"]:
+            out["lines"].append(line)
+
+
 def _plan_entry(state, pkg_id: str, pending: dict | None = None) -> dict:
     """The package dict for an id. The flown package's own `package_dict` first (it holds the support flights attached at build time, the plan's copy does not), else the campaign plan."""
     pd = (pending or {}).get("package_dict") or {}
@@ -278,7 +317,7 @@ def _status_of(obj: dict, manifest: Manifest, data: dict) -> tuple:
 
 def combat_flight_groups(state, manifest: Manifest, pending: dict | None = None) -> list:
     """Friendly manifest groups that belong to a combat package (the flown one and the merged ones): the plan's flight with NO tag.
-    Tagged flights (BASE_BARCAP, CARRIER_BARCAP, HAVCAP, TKR_HAVCAP) are supports; reliefs are copies of them (same id), and alert / standby pairs are
+    Tagged flights (BASE_BARCAP, CARRIER_BARCAP, HVAACAP, TKR_HVAACAP) are supports; reliefs are copies of them (same id), and alert / standby pairs are
     not plan flights at all, so neither counts. Tankers / AWACS are `support` groups, not `friendly`."""
     ids = [manifest.package_id] + [m["id"] for m in manifest.merged]
     tag = {}
@@ -384,7 +423,10 @@ def package_rows(state, manifest: Manifest, data: dict, pending: dict | None = N
         else:
             phase = "Returning"
         rows.append((tot is None, tot or 0.0, {"name": name, "text": _title(f"{res}, {phase}" if res else phase)}))
-    rows.sort(key=lambda r: r[:2])              # XO 2026-11-15: by TOT, earliest first, no TOT last; the flown package is not special (a stable sort keeps the order among equal TOTs)
+    def tot_sort_key(row):
+        return row[:2]
+
+    rows.sort(key=tot_sort_key)              # XO 2026-11-15: by TOT, earliest first, no TOT last; the flown package is not special (a stable sort keeps the order among equal TOTs)
     return [r[2] for r in rows]
 
 
@@ -426,9 +468,30 @@ def kill_log(manifest: Manifest, data: dict) -> list[str]:
     return out
 
 
+def stranded_jets(manifest: Manifest, data: dict) -> dict:
+    """S130b (XO 2026-11-22): a blue jet that landed at a field that is not blue's is lost: captured at a red field, interned at a neutral one. -> {unit name: (place, "captured" or "interned")}.
+    The hook writes the place's coalition under `landings[unit]["c"]` (0 neutral, 1 red, 2 blue, -1 it could not tell). A save, state file or landing without that number counts as blue (no change)."""
+    out = {}
+    landings = data.get("landings") or {}
+    for g in manifest.groups:
+        if g["kind"] != "friendly":
+            continue
+        for unit_name in g["units"]:
+            landing = landings.get(unit_name)
+            if not landing:
+                continue
+            coalition = int(landing.get("c", 2))
+            if coalition == 1:
+                out[unit_name] = (landing.get("p") or "a red field", "captured")
+            elif coalition == 0:
+                out[unit_name] = (landing.get("p") or "a neutral field", "interned")
+    return out
+
+
 def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     """Player-flown package: results are applied 1:1 (no dice). Returns a structured outcome for the debrief screen."""
-    lost = set(data.get("dead", [])) | set(data.get("ejected", []))
+    stranded = stranded_jets(manifest, data)                 # S130b: landed at a red or neutral field: counts as lost (never twice: a jet that is also dead / ejected is in the set once)
+    lost = set(data.get("dead", [])) | set(data.get("ejected", [])) | set(stranded)
     lost_all = lost
     landed = set(data.get("landed", []))
     out = {"blue_losses": [], "red_assets": [], "red_air_lost": 0, "blue_air_lost": 0, "target_damage": 0.0,
@@ -450,6 +513,10 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             if dead:
                 out["blue_losses"].append({"callsign": g.get("callsign", g["ref"]), "lost": len(dead), "total": len(g["units"])})
                 out["lines"].append(f"{g.get('callsign', g['ref'])}: lost {len(dead)}/{len(g['units'])} ({sq.name}: {sq.available}/{sq.authorized} left)")
+            for unit_name in g["units"]:
+                if unit_name in stranded:
+                    place, fate = stranded[unit_name]
+                    out["lines"].append(f"{g.get('callsign', g['ref'])} landed at {place} and is lost ({fate})")
         elif g["kind"] == "friendly_ground" and str(g.get("ref", "")).startswith("sector:"):
             if g["units"]:                                         # S81/S83: a front battle staged under a flight that is not its CAS: its losses cost the sector's Blue strength like red's column's cost its Red
                 from . import ground as _gr3
@@ -472,7 +539,10 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                     a0 = state.assets[g["ref"]]
                     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
                     if fields:
-                        nb = min(fields, key=lambda b: (b.x - a0.x) ** 2 + (b.y - a0.y) ** 2)
+                        def squared_distance_to_position(base):
+                            return (base.x - a0.x) ** 2 + (base.y - a0.y) ** 2
+
+                        nb = min(fields, key=squared_distance_to_position)
                         from . import sams as _sams
                         _sams.hit_field(state, nb, 0.10)
                         out["lines"].append(f"The position was overrun; the column presses on toward {nb.name}")
@@ -527,14 +597,18 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 out["lines"].append(f"Raid: {len(g['units']) - len(alive)} of {len(g['units'])} attack aircraft shot down")
             if cv_sunk_ and cv_ is not None and g["raid_base"] == cv_.id:
                 continue
+            weapons = "missiles" if g.get("raid_kh59") else "bombs"
+            if g.get("raid_kh59") and not g.get("raid_aim"):
+                _kh59_runway_debrief(state, data, g, alive, where, wing, t_now, out)          # S209: the runway hits are what the mission counted
+                continue
             rg_ = (data.get("rgate") or {}).get(g.get("raid_group", ""), {}) if g.get("raid_gate_s") is not None else {}
             arrive_ = g.get("raid_arrive_s", 0.0)
             if rg_.get("open") is not None:                       # v0.41.126: held at the gate until the radars went down: it can arrive no sooner than that plus the leg in
                 arrive_ = max(arrive_, float(rg_["open"]) + float(g["raid_gate_s"]))
             if alive and g.get("raid_gate_s") is not None and rg_.get("abort") is not None and rg_.get("open") is None:
-                out["lines"].append(f"Raid on {where}: the radars were still up, so the attack aircraft turned back at the gate; no bombs fell")
+                out["lines"].append(f"Raid on {where}: the radars were still up, so the attack aircraft turned back at the gate; no {weapons} fell")
             elif alive and g.get("raid_gate_s") is not None and rg_.get("open") is None:
-                out["lines"].append(f"Raid on {where}: the attack aircraft were still held outside the defences; no bombs fell")
+                out["lines"].append(f"Raid on {where}: the attack aircraft were still held outside the defences; no {weapons} fell")
             elif alive and t_now >= arrive_:
                 from . import raids as _rd
                 import random as _rnd
@@ -550,7 +624,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 else:
                     out["lines"].append("Raid: you left before the raiders arrived; the defences stopped them")
             else:
-                out["lines"].append(f"Raid on {where}: stopped, no bombs fell")
+                out["lines"].append(f"Raid on {where}: stopped, no {weapons} fell")
     for aid_, cap_ in site_cap.items():                     # ...the buildings that really burned count: the site is at most that healthy
         a_ = (getattr(state, "blue_assets", None) or {}).get(aid_)
         if a_ is not None and cap_ < a_.health - 1e-6:
@@ -577,7 +651,10 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         if closed_rw:
             out["target_damage"] = max(out["target_damage"], RUNWAY_CREDIT)
     # alert / scramble groups (v0.40.8): called, airborne, or stuck on the ground; and the build's settings, so test runs can be told apart
-    ms_ = lambda t_: f"{int(t_) // 60:d}:{int(t_) % 60:02d}"                  # v0.41.208 (XO): scrambles are numbered in the order the build lists them (the briefing's QRA list uses the same numbers)
+    # Seconds as m:ss. v0.41.208 (XO): scrambles are numbered in the order the build lists them (the briefing's QRA list uses the same numbers)
+    def ms_(t_):
+        return f"{int(t_) // 60:d}:{int(t_) % 60:02d}"
+
     owner_ = {q.id: q for w_ in state.enemy_air for q in w_.sqns}
     pkg_ = next((p_ for p_ in (state.plan or []) if p_.get("id") == data.get("package")), None)
     st_min_ = None                                                          # v0.41.343 (Phase 6a): the mission's start, absolute minute (the package's start time on today's clock)
@@ -663,6 +740,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         out["player"] = "ejected"
     elif pu in data.get("dead", []):
         out["player"] = "lost"
+    elif pu in stranded:
+        out["player"] = stranded[pu][1]                 # S130b: "captured" or "interned": you walked away from it, the jet is gone
     elif pu in landed:
         out["player"] = "recovered"
     out["lines"] += _fleet.apply_debrief(state, manifest, data)             # v0.41.257: ships sunk in the mission (the carrier, its escorts)

@@ -16,13 +16,14 @@ from dcs.point import PointAction
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import callsigns, reactive, scramble
+from . import blue_commit, callsigns, reactive, runways, samtier, scramble
 from . import seacheck as seac
 from . import threatmap as tm
 from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
 from .loadouts import BOMBER_TYPES, ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_land_bomber_loadout, enemy_standoff_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
+from .raids import KH59_LAUNCH_NM       # S209: the plan needs it too (the way in is measured from the launch point)
 from .red_air_picture import CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, a2a_zone_nm
 from .support_caps import SUPPORT_CAP_ZONE_NM
 from .routes import AVOID_NM, FT, NM, RAID_IP_NEAR_NM, RAID_SA11_NM, Wpt, avoid_circles, bearing, dist, offset
@@ -41,7 +42,7 @@ RAID_GROUP_GAP_S = 60         # v0.41.108: the bomber groups of a big raid follo
 RAID_ROUTE_SAMS = 99            # v0.41.256: red SAM sites along a fleet raid's way in that are built in the mission (judgment call: the default is 2; the unit limit still binds)
 RAID_SWEEP_LEAD_S = 90        # ...and the raid's sweep escorts fly this far ahead of the first bomber group (judgment call)
 SEAD_SWEEP_LEAD_S = 60        # S66 (XO 2026-11-13): the fighter sweep ahead of a SEAD raid flies this far ahead of the SEAD flights on the same route and clock, so blue's intercepts commit to it before the Kh-31P salvo (judgment call). It stops SEAD_SWEEP_STOP_NM from the site, 20 nm short of the launch point (about 160 s at the raid's speed), so it passes its last point about 3 minutes before the salvo
-SEAD_SWEEP_STOP_NM = 70       # ...and its last point is this far from the site: outside a Patriot's 40 nm ring (raids.PATRIOT_NM) by the 20 nm margin the blue sweep uses (sweep.SWEEP_RING_MARGIN_NM); the SEAD flights go on to ARM_LAUNCH_NM (judgment call)
+SEAD_SWEEP_STOP_NM = 70       # ...and its last point is this far from the site: outside a Patriot's base 40 nm ring (raids.PATRIOT_NM) by the 20 nm margin the blue sweep uses (sweep.SWEEP_RING_MARGIN_NM); the SEAD flights go on to ARM_LAUNCH_NM (judgment call)
 RAID_HOLD_MAX_S = 600         # ...and one with plenty of time appears at most 10 min before it must push
 RAID_EGRESS_NM = 30           # ...off target it turns 40 degrees off its way in and leaves this far before heading home     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
 ARM_LAUNCH_NM = 50            # S107 (XO 2026-11-18): 50 nm, was 40 (v0.41.84: the edge of a Patriot's 40 nm ring); the Kh-31P is the longer-ranged missile and a high launch adds to that. Public figure about 110 km (60 nm) at a high launch, launch envelope 100 m to 15 km (Wikipedia Kh-31, the Russian export catalog esp.fsvts.gov.ru; medium firmness; the DCS value was not found: its forum pages could not be read), so 50 nm keeps 10 nm of margin, like KH59_LAUNCH_NM 50 against 62 (judgment call). v0.41.84: a red SEAD flight fires its Kh-31P this far from the SAM site (S36b: the standoff launch of the SEAD raid) (judgment call: inside the 60 nm the Kh-31 page gives, with margin for a low launch)
@@ -64,7 +65,6 @@ RAID_LAUNCH_WINDOW_S = 120    # ...the attack task runs this long after the bomb
 # Pt. 2" (medium firmness, one article): a regiment's takeoff took about half an hour, then a cruise formation, the split about 500 km from the task force, and a salvo had to land
 # within 1 min (best) or 2 min (satisfactory).
 RAID_STAGE_ON = True          # False = the old raid (airborne at its marshal from the start, no runway takeoffs; the engage order still starts at the PUSH)
-RAID_MARSHAL_FRAC = 0.5       # (no longer used by the fleet raid, see RAID_BOMBERS_UP) share of the groups already airborne on the marshal at the start
 RAID_BOMBERS_UP = 1           # v0.41.274 (XO 2026-11-04: intelligence has spotted the movement): this many bomber groups (a pair each) are airborne on the marshal at the start...
 RAID_GUARD_UP = 1             # ...with this many escort groups (up to 4 jets) guarding them; every other group takes off, the bombers first and the rest of the escorts last
 RAID_MEET_LEAD_S = 120        # v0.41.280 (XO 2026-11-04: blue got over Mozdok while the bombers were still taking off and shot the raid on the ramp): the interceptors are timed to be on the intercept point this long before the bombers' planned arrival there (their push + the flight from the marshal). Judgment call
@@ -87,7 +87,12 @@ RAID_FIRST_TAKEOFF_S = 30     # the first batch takes off this long after the mi
 RAID_JOIN_S = 60              # the raid pushes this long after the last batch reaches the marshal
 RAID_CLIMB_S = 180            # allowance for the climb from the runway to the marshal
 RAID_STAGED_GAP_S = 15        # a staged raid's groups push this far apart (the salvo spread; the old raid used RAID_GROUP_GAP_S 60 s)
+RAID_SHARED_START_M = 1000    # S194 (found in the U708 server run: 11 raid aircraft died at t=0 to 2 s): two raid groups that would start in the air within this of each other...
+RAID_SHARED_START_STEP_M = 300  # ...get their own level, each this much lower than the one before (about 1,000 ft, the usual vertical separation; judgment call, the S26 marshal step of 150 m was for groups on one orbit)
 RAID_MSHL_STEP_M = 150        # each group orbits the marshal this much lower than the one before (no two share a level)
+RAID_ESCORT_ABOVE_M = 300     # S169: the lowest escort flies this far above the HIGHEST bomber lane (judgment call: about the 1,000 ft vertical separation, 305 m), the next escort groups RAID_MSHL_STEP_M higher each. The Escort task holds
+                              # a point 300 m above its own bomber, which with the 150 m lane grading put the escort of group 4 exactly in group 2's lane (T3e, t=1145: a RAID-E MiG-23MLD and a RAID-B Su-24M collided at 8,994 m); the first fix
+                              # (every escort at one level) made two escort groups collide over the marshal (round 1, t=1101): so every escort group has a level of its own
 RAID_REACH_NM = 208           # how far the Tu-22M3's X-22 shoots as DCS flies it: 380 to 385 km (208 nm) in XO's 2026-11-03 run (measured)
 RAID_MSHL_CLEAR_NM = 12       # the marshal stays this far outside that
 
@@ -102,10 +107,16 @@ RAID_IP_LEG_NM = 10           # the orbit leg at the intercept point, across the
 RAID_IP_LANE_PTS = 12         # waypoint budget for the bends of the dash lane round SAM circles
                               # v0.41.287 (XO 2026-11-04: "every SAM threatening the intercept line"): RAID_BLOCK_MAX (the old cap of 2 blocking sites, PR 2) is retired;
                               # every live site tm.raid_inbound_sites finds now gets its own SEAD/DEAD flight, not just the minimum needed to open a lane
+ARM58_LAUNCH_NM = 65          # B2 (XO 2026-11-21): a Kh-58U package fires from this far from the site. Source: the Kh-58U reaches 120 km (65 nm) from a 10,000 m launch and 160 km from 15,000 m (Wikipedia "Kh-58"; medium firmness; the SEAD raid flies SEAD_ALT_FT, 9,100 m, a little under that); 65 nm sits outside a Patriot's 40 nm ring by 25 nm. JUDGMENT CALL on the figure: DCS's own Kh-58U launch range was not found and the AI may not fire it at 65 nm (the code's fallback is the same EngageTargetsInZone task as the Kh-31P package's); raise or lower it only after a flown sortie shows where the missiles fly from
+ARM58_MPS = 1050              # B2: the Kh-58U's average speed over the shot, for the launch-time lead (`arm_fly_s`). Source: Mach 3.6 (Wikipedia "Kh-58"), about 1,080 m/s at launch altitude; a little under that as an average because the missile accelerates first (judgment call)
+ARM31_MPS = 1000              # B2: the Kh-31P's average speed over the shot (about 1,000 m/s, Wikipedia "Kh-31": Mach 3.1 to 3.5 at altitude; judgment call on the average)
 SEAD_ALT_FT = 30000          # S107 (XO 2026-11-18): the SEAD raid's whole route, escorts and sweep included (the raid shares one level): the Kh-31P's range is for a high launch; 30 000 ft is inside its 100 m to 15 km envelope and a loaded Su-24M's reach (judgment call)
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
+PATRIOT_FACE_NM = 63          # S179c: a blue Patriot turns to face a raid's route where it passes this close: the Patriot's reach against a high target (`samtier.RING_BY_ALT_NM`, S171: 63 nm above 8 km, measured)
+PATRIOT_FACE_STEP_M = 5000.0  # S179c: the route is sampled this often for that (a judgment call: fine enough for a 63 nm ring)
+SEAD_ARC_DEG = 40             # S179c: a SEAD package's launch point lies at most this far off the facing of the target's Patriot radar. Measured on the dedicated server (2026-11-24, `.claude/test-runs/S179b-strip/REPORT.md`): a DCS Patriot detects, engages and can be targeted by an ARM only inside its radar's sector: bombers 44 deg off its facing fired, 52 and 65 deg off never did; turned to face them, they fired. The real AN/MPQ-53 searches about 90 deg (public figure, firmness medium). 40 = the measured 44 with a margin
+ARM_IP_NM = 6                 # S179b: the SEAD raid's ARM task starts at an IP this far before the ARM point, on the straight inbound leg (blue's AI HARM flights do the same: `routes.plan_route`, "the IP sits 6 nm before the launch point"; 57 of 82 of them fired in the server runs). Judgment call
 # S48: the switch KH59_RAIDS (and the share, the hit size) live in `raids.py`: the plan reads them too, and `raids` cannot import this module. The spawner reads `raids.KH59_RAIDS` at call time.
-KH59_LAUNCH_NM = 50           # the Kh-59M raid fires from this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M with margin for a low launch, outside HAWK_NM 25 and PATRIOT_NM 40 (judgment call; the probe, 2026-11-12: the Su-34 fired at 54.9 nm, the Su-24M at 58.6 nm, the missiles hit: 50 is safe inside the range)
 KH59_WINDOW_S = 240           # ...and the missile task runs this long after the jets reach the launch point (judgment call, like ARM_WINDOW_S; the probe: the jets turn for home on their own within about 25 s of the second missile, so the window never bites)
 KH59_TASK = "Bombing"         # ...which DCS task carries the launch: "Bombing" on the aim point (probe 2026-11-12: Bombing and AttackMapObject fire the Kh-59M; AttackGroup and AttackUnit never did; the supply sites and garrisons are statics, no group to attack)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
@@ -157,6 +168,36 @@ def sead_package_sizes(n, per):
     else:
         out[-1] += rem
     return out
+
+
+SEAD_ONE_MISSILE = "Kh_31P"   # S167 (XO 2026-11-22: "why not have the same sead missile for all?" and "Just use the longer range missile"): every package of a SEAD raid fires this missile, from `arm_ring_nm(kind)` out. None = the B2 alternation (Kh-58U, Kh-31P, ...). XO chose the Kh-58U (65 nm), BUT the server runs T3d / T3e showed it never lands: 46 launches from Su-24Ms with the pod at 60.5 to 62.3 nm (plan 65), ZERO impacts or blasts; the Kh-31P at 48.9 to 50.5 nm (plan 50) lands (T3d: 14 impact rows, T3c: units killed). So the one missile is the Kh-31P until XO says otherwise: "Kh_58U" here (and a closer `ARM58_LAUNCH_NM`) flips it back
+
+
+def sead_packages(members, per):
+    """B2 (XO 2026-11-21), S167: a SEAD raid's packages and the kind of each: ([jets, ...], ["Kh_58U" | "Kh_31P", ...]). The jets are cut into packages as `sead_package_sizes` does. S167: every package fires `SEAD_ONE_MISSILE`
+    (the Kh-31P, from `ARM_LAUNCH_NM`); with SEAD_ONE_MISSILE None the packages alternate, the first (and every second) one a Kh-58U package, the others Kh-31P (`ARM_LAUNCH_NM`), and a package with a jet that cannot carry
+    the Kh-31P is a Kh-58U package whatever its place. `members` = `raids.raid_members(extra)`: [(wing, type, jets)]."""
+    flat = [t for _a, t, n in members for _j in range(int(n))]
+    sizes = sead_package_sizes(len(flat), per)
+    kinds, i0 = [], 0
+    for k, sz in enumerate(sizes):
+        chunk = set(flat[i0:i0 + sz]); i0 += sz
+        if SEAD_ONE_MISSILE:
+            kinds.append(SEAD_ONE_MISSILE)
+            continue
+        long_only = any(not enemy_arm_loadout(t, "Kh_31P") for t in chunk)
+        kinds.append("Kh_58U" if (k % 2 == 0 or long_only) else "Kh_31P")
+    return sizes, kinds
+
+
+def arm_ring_nm(kind):
+    """B2: how far from the site a package of this kind launches."""
+    return ARM58_LAUNCH_NM if kind == "Kh_58U" else ARM_LAUNCH_NM
+
+
+def arm_fly_s(kind):
+    """B2: the missile's flight time from its launch ring, seconds (ring distance / average speed, judgment call: ARM58_MPS, ARM31_MPS). The packages' launch times are staggered by the difference so that the missiles of every package reach the site together."""
+    return arm_ring_nm(kind) * NM / (ARM58_MPS if kind == "Kh_58U" else ARM31_MPS)
 
 
 class RaidSpawns:
@@ -281,11 +322,7 @@ class RaidSpawns:
         """(top, bottom, left, right) of the map in DCS metres (x runs north, y east): the active pack's `map_box` {x0, x1, y0, y1} (S90 J8: pydcs's Syria bounds have top below bottom and stop short of Jordan), else the
         terrain's own bounds with top the larger x (the Caucasus: the same numbers as before)."""
         from . import theatres
-        mb = theatres.hook("map_box")
-        if mb is not None:
-            return float(mb["x1"]), float(mb["x0"]), float(mb["y0"]), float(mb["y1"])
-        b = self.t.bounds
-        return max(b.top, b.bottom), min(b.top, b.bottom), b.left, b.right
+        return theatres.map_edges(self.t)
 
     def _raid_edge(self, dx, dy, brg):
         """The point where the ray from the carrier on `brg` leaves the map (RAID_EDGE_MARGIN_NM inside it), at most RAID_EDGE_MAX_NM out."""
@@ -463,23 +500,117 @@ class RaidSpawns:
         self._leash_fleet_cap(pts, 0, geom.tx, geom.ty)
         return (pts[0].x, pts[0].y)
 
-    def _raid_bend(self, pts, raided):
+    def _raid_bend(self, pts, raided, alt_ft=20000):
         """v0.41.29: a red raid's legs bend round blue's Patriot fields (raids.PATRIOT_NM; the field it raids is the one it goes for, so not that
         one), and (v0.41.31) round the carrier group (FLEET_RAID_AVOID_NM). Only fields whose defences are standing (defense >= 0.15, the rule _place_base builds by). -> the points with turn points added."""
-        from .raids import PATRIOT_NM
-        circles = [(b.x, b.y, PATRIOT_NM) for b in self.state.bases.values()
-                   if b.kind == BaseKind.AIRFIELD and b.id != raided.id and b.defense >= 0.15]
+        # S171: the Patriot's ring against a jet at the raid's altitude (samtier.ring_nm: 40 low, 54 from 9,843 ft, 63 from 26,247 ft; measured, see samtier)
+        patriot_ring_nm = samtier.ring_nm("Patriot", alt_ft)
+        circles = [(b.x, b.y, patriot_ring_nm) for b in self.state.bases.values()
+                   if b.kind == BaseKind.AIRFIELD and b.id != raided.id and b.defense >= 0.15 and b.id not in getattr(self, "_bend_exempt", ())]
         # v0.41.31: and round the carrier group (its escorts' SM-2s), unless the fleet is what it is raiding
         circles += [(b.x, b.y, FLEET_RAID_AVOID_NM) for b in self.state.bases.values() if b.kind == BaseKind.CARRIER and b.id != raided.id]
         if not circles or len(pts) < 2:
             return list(pts)
-        wps = [Wpt("P", x, y, 20000, 450) for x, y in pts]
+        wps = [Wpt("P", x, y, alt_ft, 450) for x, y in pts]
         for _ in range(4):                  # a leg straight through a big circle needs more than one turn point (two passes per call)
             n0 = len(wps)
             avoid_circles(wps, circles, 24, 1)
             if len(wps) == n0:
                 break
         return [(w.x, w.y) for w in wps]
+
+    def _layer_exempt_fields(self, ex) -> set:
+        """S183 rule 2: the airfield ids whose Patriot ring a second SEAD wave does not bend round (the outer Patriot's field, `extra["layer_sites"]`)."""
+        exempt = set()
+        for layer_id in (ex.get("layer_sites") or []):
+            layer_site = (self.state.blue_sams or {}).get(layer_id)
+            if layer_site is not None:
+                exempt.add(layer_site.guards)
+        return exempt
+
+    def _raid_route_lines(self, packages) -> tuple:
+        """S188: [(x1, y1, x2, y2)] the lines the red raids of this mission fly BEFORE they are spawned: from each wing that flies in a raid (raiders, escorts, sweep, pooled wings) to the raid's target, bent round
+        blue's Patriot fields by the same `_raid_bend` the spawner uses. A raid that is already under way at mission start flies along the same line, so it is covered. Fleet (carrier) raids have no
+        land target here and are left out. The tanker track keeps `threatmap.TANKER_RAID_NM` from these lines. S189: -> (lines, sweep lines): the sweep wings' lines are a list of their own
+        (`threatmap.TANKER_SWEEP_NM` / `AWACS_SWEEP_NM`: a red sweep hunts the tanker and the AWACS far from its bombers)."""
+        st = self.state
+        lines = []
+        sweep_lines = []
+        for package in packages:
+            ex = package.extra or {}
+            if package.objective.type != ObjectiveType.FLEET_DEFENSE or not ex.get("land") or not ex.get("dest"):
+                continue
+            raided = st.bases.get(package.objective.target_id)
+            if raided is None:
+                continue
+            layer_of = ex.get("layer_of")
+            if layer_of and layer_of not in getattr(self, "_layer_present", {layer_of}):
+                continue                                          # S183: a second wave whose first wave is not in the mission is not built
+            altitude_ft = SEAD_ALT_FT if ex.get("sead") else 20000
+            wing_ids = {ex.get("bomber_wing"), ex.get("escort_wing")}
+            for partner in (ex.get("pool") or []):
+                wing_ids.add(partner.get("wing"))
+            for partner in (ex.get("esc_pool") or []):
+                wing_ids.add(partner.get("wing"))
+            sweep_ids = {ex.get("sweep_wing")}
+            for partner in (ex.get("sweep_pool") or []):
+                sweep_ids.add(partner.get("wing"))
+            wing_ids -= sweep_ids
+            self._bend_exempt = self._layer_exempt_fields(ex)
+            dest = (float(ex["dest"][0]), float(ex["dest"][1]))
+            for wing_ids_of_kind, into in ((wing_ids, lines), (sweep_ids, sweep_lines)):
+                for wing_id in sorted(w for w in wing_ids_of_kind if w):
+                    field = st.assets.get(wing_id)
+                    if field is None:
+                        continue
+                    path = self._raid_bend([(field.x, field.y), dest], raided, altitude_ft)
+                    for index in range(len(path) - 1):
+                        into.append((path[index][0], path[index][1], path[index + 1][0], path[index + 1][1]))
+        self._bend_exempt = set()
+        return lines, sweep_lines
+
+    def _face_patriots_to_raid(self, route, package_routes) -> None:
+        """S179c (XO 2026-11-24): every blue field Patriot within reach of a red raid's route turns to face the part of the route it can reach. A DCS Patriot
+        sees and shoots only inside its radar's sector (about 45 degrees either side, measured), and the builder faces it to the nearest enemy fighter field,
+        so raiders passed a neighbouring field's Patriot on its blind side. A site a SEAD raid goes for keeps facing its own raid; a site already turned for
+        an earlier raid of this mission keeps that facing. Only headings change: no unit moves."""
+        routes = [list(route)]
+        for package_route in (package_routes or []):
+            routes.append(list(package_route))
+        for field_groups in self.base_ad.values():
+            group = field_groups.get("pat")
+            if group is None or group.id in self._patriot_faced:
+                continue
+            radar = None
+            for unit in group.units:
+                if unit.type == "Patriot str":
+                    radar = unit
+            if radar is None:
+                continue
+            # the mean bearing of the route points within the Patriot's reach, sampled every PATRIOT_FACE_STEP_M along each leg
+            sum_north = 0.0
+            sum_east = 0.0
+            samples = 0
+            for one_route in routes:
+                for index in range(len(one_route) - 1):
+                    start = one_route[index]
+                    end = one_route[index + 1]
+                    steps = max(1, int(dist(start[0], start[1], end[0], end[1]) / PATRIOT_FACE_STEP_M))
+                    for step in range(steps + 1):
+                        x = start[0] + (end[0] - start[0]) * step / steps
+                        y = start[1] + (end[1] - start[1]) * step / steps
+                        if dist(radar.position.x, radar.position.y, x, y) > PATRIOT_FACE_NM * NM:
+                            continue
+                        angle = math.radians(bearing(radar.position.x, radar.position.y, x, y))
+                        sum_north += math.cos(angle)
+                        sum_east += math.sin(angle)
+                        samples += 1
+            if samples == 0:
+                continue
+            facing = math.degrees(math.atan2(sum_east, sum_north)) % 360
+            for unit in group.units:
+                unit.heading = facing
+            self._patriot_faced[group.id] = "cover"
 
     def _raid_launch(self, package, station, w1=None):
         """v0.41.248: where a raid on the FLEET fires from: on the raid's bearing, RAID_LAUNCH_OUT_NM beyond the blue CAP `station`, not closer than RAID_LAUNCH_MIN_NM
@@ -543,7 +674,8 @@ class RaidSpawns:
         unseen_ = not getattr(self, "_detect_full", True)                               # v0.41.346 (Phase 7a): an unseen package (detection.cast = "barcap") draws no red reactive pair (blue's pairs below are unchanged)
         picks = reactive.plan_red(st, d, rr, tx, ty, base_n, blue_f, used, ENEMY_FIGHTERS, bearing, self._hold_drawn) if not (fleet_obj or unseen_) else []
         skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         alt, spd = 22000 * FT, 400 * KPH
         placed_red, seen_src = 0, set()
         for k, pk in enumerate(picks, 1):
@@ -580,6 +712,7 @@ class RaidSpawns:
             g.add_waypoint(pt(ix_, iy_), alt, spd, "INTERCEPT").tasks.append(ct)
             self._land_home(g, ap)
             self._limit_engage(g, o.enemy_cap_engage_nm)
+            self._commit_register("red", g, blue_commit.red_reach_nm(pk["type"]), 0, tot_s + 3600)      # S160: a red raid-defence pair commits once airborne
             names = []
             for j, u in enumerate(g.units, 1):
                 u.name = f"ENM-{a.id}-R{k}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
@@ -668,6 +801,8 @@ class RaidSpawns:
             if self.o.ai_despawn_on_land:
                 despawn.extend(names)
             committed[sq.id] = committed.get(sq.id, 0) + 2
+            from .mission_builder import cover_reach_nm          # lazy: the builder module imports this one
+            self._commit_register("blue", g, cover_reach_nm(sq.aircraft), 0, tot_s + o.cap_minutes * 60)      # S160: a blue alert pair commits once airborne
             srcs = reactive.blue_sources(st, AIRCRAFT, fight, committed, *dpt)
             self._intel.append(f"Alert fighters of {sq.name} ({self._short(base.name)}) are on cockpit alert and may launch to help.")
 
@@ -739,13 +874,16 @@ class RaidSpawns:
             base = st.bases[f.base_id]
             alt, spd = c1.alt, c1.speed * 3.6                      # pydcs keeps the speed in m/s; _arm_callin takes km/h
             n0 = len(self._hot_calls)
+            def blue_lands_home(g_, b_=base):
+                return self._blue_back_home(g_, b_)
             self._arm_callin(g, None, (sx, sy), (hx, hy), SUPPORT_CAP_ZONE_NM, alt, spd, end_s, tot_s, bf_, {}, tx, ty,
-                             cap2=(c2.position.x, c2.position.y), land=lambda g_, b_=base: self._blue_back_home(g_, b_))
+                             cap2=(c2.position.x, c2.position.y), land=blue_lands_home)
             calls.append(self._hot_calls.pop())
             assert len(self._hot_calls) == n0
         if not calls:
             return
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         if not self._callin_lua:
             t0 = triggers.TriggerOnce(comment="define SQE_CALLIN")
             t0.add_condition(condition.TimeAfter(1))
@@ -763,7 +901,8 @@ class RaidSpawns:
     def _blue_back_home(self, g, base) -> None:
         """The second way home of a called-in blue patrol (after its shift): the field's landing, or its recovery entry point when this base type
         skips landings; the boat's deck. The recovery net of the first home leg still covers the group."""
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         if base.kind == BaseKind.AIRFIELD:
             if self._skip_landing(base):
                 lp_ = g.points[-1].position
@@ -837,7 +976,8 @@ class RaidSpawns:
         from . import raids, ground
         st, d, r = self.state, self.d, self.vrng
         kind = raids.aim_kind(aim)
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         if kind == "sam":                               # S36b: the SAM site under SEAD attack is already on the map (the field's batteries)
             return
         if kind == "supply":
@@ -874,7 +1014,8 @@ class RaidSpawns:
         points near that other field are dropped too (a SEAD group for a neighbouring battery)."""
         pts = list(path[:-1])
         ring_ = ARM_LAUNCH_NM if ring_nm is None else ring_nm
-        near = lambda q: dist(*q, dx, dy) <= (ring_ + 10) * NM or (fx is not None and dist(*q, fx, fy) <= (ring_ + 10) * NM)
+        def near(q):
+            return dist(*q, dx, dy) <= (ring_ + 10) * NM or (fx is not None and dist(*q, fx, fy) <= (ring_ + 10) * NM)
         while len(pts) > 1 and near(pts[-1]):
             pts.pop()
         return pts
@@ -921,7 +1062,7 @@ class RaidSpawns:
             if dist(*mshl, dx, dy) > dist(*w1, dx, dy) + 15 * NM:
                 lane.append(w1)
             launch = self._raid_launch(package, station, w1)
-            path = self._raid_bend(lane, cvb) + [launch]
+            path = self._raid_bend(lane, cvb, 30000) + [launch]          # a fleet raid flies at 30,000 ft (S171)
             L = sum(dist(*path[i], *path[i + 1]) for i in range(len(path) - 1))
             stg = self._raid_stage(ex, ba, path, arrive, V, dx, dy, L) if staged_ok else None
             self._rclock[package.id]["t_leave"] = stg["T_push"] if stg else arrive - L / V
@@ -934,19 +1075,37 @@ class RaidSpawns:
         ex = package.extra
         if not ex:
             return
+        # S183 rule 2: wave 2 of a layered SEAD raid is built only when wave 1 is in this mission (`_layer_present`) and flown (`_layer_gone`: wave 1 had already struck); the war sim resolves it then
+        layer_of = ex.get("layer_of") or ex.get("flank_after")          # S186: a flank raid waits for its SEAD raid like a second layer does
+        your_own = package.objective.id == getattr(self, "_anchor_objective_id", None)      # S209: the raid you were sent to stop is never left out (you would take off to nothing)
+        if layer_of and not your_own and (layer_of in getattr(self, "_layer_gone", set()) or layer_of not in getattr(self, "_layer_present", {layer_of})):
+            self.warns.append(f"package #{package.number}: the second SEAD wave is not in this mission (wave 1 is not flown in it)")
+            return
+        self._bend_exempt = self._layer_exempt_fields(ex)        # S183 rule 2: the field of the outer Patriot a second wave strips past: the route does not bend round it (that crossing is the point of the layers); every other live Patriot's ring is still avoided
+        sead_fly_s = 0.0                                         # S183: the longest missile flight of the raid's packages (all its packages' missiles land together); 0 for a raid that is not a SEAD raid
         cvb = st.bases[package.objective.target_id]
         aim = ex.get("aim", "") or ""
+        # S171: the altitude the raid flies (the `alt` further down: land raids 12,000 / 20,000, SEAD raids SEAD_ALT_FT, fleet raids 30,000): the Patriot ring it bends round depends on it
+        if not ex.get("land"):
+            bend_alt_ft = 30000
+        elif ex.get("sead"):
+            bend_alt_ft = SEAD_ALT_FT
+        else:
+            bend_alt_ft = 20000
         sead_r = bool(ex.get("sead"))                            # S36b (XO 2026-11-11): a SEAD raid on a blue SAM site: its "bombers" are the SEAD flights, they fire from standoff and turn home
         from . import raids as _raids48
         from .raids import raid_members, escort_members
-        bmem = raid_members(ex) if ex.get("land") else [(ex["bomber_wing"], ex.get("raider", "Tu_22M3"), int(ex["bombers"]))]     # S46: [(wing, type, jets)], the lead first; one entry for every raid that is not pooled
-        kh59_r = bool(_raids48.is_kh59(ex) and ex.get("land") and aim and not sead_r
-                      and all(enemy_standoff_loadout(t_) for _a, t_, _n in _raids48.raid_members(ex)))       # S48 (the switch is `raids.KH59_RAIDS`, read now): every member must carry a Kh-59M (a Su-25 cannot: a pool with one is a plain raid), on a supply site / garrison aim (not the runway)
+        bmem = raid_members(ex) if (ex.get("land") or ex.get("pool")) else [(ex["bomber_wing"], ex.get("raider", "Tu_22M3"), int(ex["bombers"]))]     # S46: [(wing, type, jets)], the lead first; one entry for every raid that is not pooled (B1: a carrier raid drawn from several bomber fields is)
+        kh59_r = bool(_raids48.is_kh59(ex) and ex.get("land") and not sead_r
+                      and all(enemy_standoff_loadout(t_) for _a, t_, _n in _raids48.raid_members(ex)))       # S48 (the switch is `raids.KH59_RAIDS`, read now): every member carries a Kh-59M (S209: the plan books only carrying types)
         launch_ = None
-        pk_sizes, pk_path = None, None                          # S59a: a SEAD raid's packages and each one's own route (the shared way in, then its own launch point)
+        strike_kind = {"field": "runway", "garrison": "troops", "sector": "troops", "supply": "supply"}.get(_raids48.aim_kind(aim))          # B3: what a plain raid attacks -> its kit (`loadouts.STRIKE_KITS`): the runway (no aim), troops and garrisons, supply sites
+        pk_sizes, pk_path, pk_kind, pk_off = None, None, None, None      # S59a: a SEAD raid's packages and each one's own route (the shared way in, then its own launch point); B2: each package's kind and launch delay
+        sead_rep = []                                           # B2: one line per SEAD package (kind, jets, launch distance, times), kept on `self.sead_report` for the checks; nothing reads it in the mission
         dx, dy = (ex.get("dest") or (cvb.x, cvb.y))              # where the raiders are going: the field, a supply site, a garrison or a sector
         cvg = self.ship.get(cvb.id)
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         station = (sx_, sy_)
         ba, w1, mshl, staged_ok, apt_r = self._raid_axis(package, station)          # v0.41.265: one place for the marshal and the outer point (the interceptors' dash point uses them too)
         V = RAID_MPS
@@ -958,6 +1117,13 @@ class RaidSpawns:
         u_ = (getattr(self, "_rclock", {}).get(package.id) or {}).get("u")          # (v0.41.280: drawn earlier by `_raid_clock_prep`, the same number)
         arrive = tot_s + (u_ if u_ is not None else r.uniform(60, 150))                    # at the station: 1-2.5 min after our scramble's TOT
         t_tgt = arrive + dist(sx_, sy_, dx, dy) / V            # the raid's own TOT
+        if ex.get("flank_after") and not sead_r:
+            # S186 (XO 2026-11-24): the flank raid reaches its IP (the station point `arrive` is the time at) layer_gap_s after the SEAD raid's missiles are due to land; the bomb run follows
+            sead_impact_s = (getattr(self, "_layer_impact", {}) or {}).get(ex["flank_after"])
+            if sead_impact_s is not None:
+                flank_shift_s = sead_impact_s + float(ex.get("layer_gap_s", 300)) - arrive
+                arrive += flank_shift_s
+                t_tgt += flank_shift_s
         # v0.41.29: the raid flies blue's shape. Marshal on red's side (in a red SAM's cover along its way in, else just off its field), PUSH,
         # ingress bent round blue's Patriot fields (not the one it is raiding), the target at its TOT, then egress and home.
         lane = [mshl, offset(*mshl, bearing(*mshl, *(w1 if dist(*mshl, *w1) > 15 * NM else station)), RAID_PUSH_NM * NM)]
@@ -970,27 +1136,67 @@ class RaidSpawns:
         launch = self._raid_launch(package, station, w1) if standoff else None
         if standoff:
             t_tgt = arrive                                      # (the launch point, not the carrier)
-            lane = self._raid_bend(lane, cvb) + [launch]
+            lane = self._raid_bend(lane, cvb, bend_alt_ft) + [launch]
             path = lane
         else:
-            lane = self._raid_bend(lane, cvb) + [station]
+            lane = self._raid_bend(lane, cvb, bend_alt_ft) + [station]
             path = lane + [(dx, dy)]
             if sead_r or kh59_r:                                # the way in without the points inside the launch ring, ending on the Kh-31P launch point ARM_LAUNCH_NM from the site (S48: the Kh-59M launch point KH59_LAUNCH_NM from the aim)
                 ring_ = KH59_LAUNCH_NM if kh59_r else ARM_LAUNCH_NM
-                pts_ = self._arm_pts(path, dx, dy, ring_nm=ring_)
+                path_in = path
+                if sead_r:                                      # B2: the packages' kinds; the central route (the sweep's, the raid's clock) is a Kh-31P route when any package is one, else the Kh-58U's
+                    pk_sizes, pk_kind = sead_packages(bmem, _raids48.sead_n(d))
+                    if "Kh_31P" not in pk_kind:
+                        ring_ = ARM58_LAUNCH_NM
+                pts_ = self._arm_pts(path_in, dx, dy, ring_nm=ring_)
                 launch_ = offset(dx, dy, bearing(dx, dy, *pts_[-1]), ring_ * NM)
                 path = pts_ + [launch_]
-                if sead_r:                                      # S59a: P packages, package k launches from a point on bearing b0 + (k - (P - 1) / 2) * SEAD_AXIS_DEG (b0 = the old launch bearing); each flies the shared way in, then its own leg
-                    pk_sizes = sead_package_sizes(sum(n_ for _a, _t, n_ in bmem), _raids48.sead_n(d))
+                if sead_r:                                      # S59a: P packages, package k launches from a point on bearing b0 + (k - (P - 1) / 2) * SEAD_AXIS_DEG (b0 = the old launch bearing); each flies the shared way in, then its own leg. B2: a package's launch point is its kind's ring from the site, and its way in loses the points inside that ring + 10 (`_arm_pts`)
                     b0_ = bearing(dx, dy, *pts_[-1])
-                    pk_path = [pts_ + [offset(dx, dy, b0_ + (k_ - (len(pk_sizes) - 1) / 2.0) * SEAD_AXIS_DEG, ring_ * NM)] for k_ in range(len(pk_sizes))]
+                    # S179c (XO 2026-11-24: "Both"): a Patriot works only inside its radar's sector. The targeted site turns to face the raid's way in (its crew knows
+                    # the threat axis), and every package's launch bearing is kept inside the arc, so each SEAD group has an emitter to fire at.
+                    site_group = (self.base_ad.get(cvb.id) or {}).get(aim.rsplit("_", 1)[1])
+                    radar_facing = None
+                    if site_group is not None:
+                        has_sector_radar = False
+                        for site_unit in site_group.units:
+                            if site_unit.type == "Patriot str":
+                                has_sector_radar = True
+                        if has_sector_radar:
+                            radar_facing = b0_ % 360
+                            for site_unit in site_group.units:
+                                site_unit.heading = radar_facing
+                            self._patriot_faced[site_group.id] = "target"      # it keeps facing its own raid, whatever else flies past
+                    package_bearings = []
+                    for k_ in range(len(pk_kind)):
+                        package_bearing = b0_ + (k_ - (len(pk_sizes) - 1) / 2.0) * SEAD_AXIS_DEG
+                        if radar_facing is not None:
+                            off_facing = (package_bearing - radar_facing + 180) % 360 - 180
+                            if off_facing > SEAD_ARC_DEG:
+                                package_bearing = radar_facing + SEAD_ARC_DEG
+                            if off_facing < -SEAD_ARC_DEG:
+                                package_bearing = radar_facing - SEAD_ARC_DEG
+                        package_bearings.append(package_bearing)
+                    pk_path = [(pts_ if arm_ring_nm(kd_) == ring_ else self._arm_pts(path_in, dx, dy, ring_nm=arm_ring_nm(kd_)))
+                               + [offset(dx, dy, package_bearings[k_], arm_ring_nm(kd_) * NM)] for k_, kd_ in enumerate(pk_kind)]
+                    fly_ = [arm_fly_s(kd_) for kd_ in pk_kind]
+                    pk_off = [max(fly_) - f_ for f_ in fly_]      # B2: a package with a shorter missile flight launches this much later, so that every package's missiles reach the site together
                 t_tgt = arrive + dist(sx_, sy_, *launch_) / V
+                if sead_r:
+                    sead_fly_s = max(fly_)
+                    first_impact_s = (getattr(self, "_layer_impact", {}) or {}).get(layer_of) if layer_of else None
+                    if first_impact_s is not None:
+                        # S183 rule 2: arrive so that this wave's missiles land layer_gap_s after wave 1's (it never lands before wave 1's plus the gap)
+                        layer_shift_s = first_impact_s + float(ex.get("layer_gap_s", 300)) - (t_tgt + sead_fly_s)
+                        arrive += layer_shift_s
+                        t_tgt += layer_shift_s
         if standoff:
             # v0.41.256 (XO 2026-11-03: no SAMs across the mountains, so blue's F-15s could bum-rush the bombers): the red SAM sites whose ring touches the bombers' way in
             # (the route starts at most 220 nm from the fleet) are live in the mission, RAID_ROUTE_SAMS of them beyond the ones already built; the unit limit still binds
             near_ = ((getattr(self, "_rsp", {}) or {}).get(package.id) or {}).get("ip")                  # v0.41.285 (XO 2026-11-04): every route SAM is live; the unit limit trims the ones furthest from the intercept point
             self._spawn_opfor_ground(package, dx, dy, manifest, list(path), route_sites=RAID_ROUTE_SAMS, route_near=(near_["ip"] if near_ else launch), all_sams=bool(ex.get("setpiece")))
         ox, oy = launch if standoff else (launch_ if launch_ is not None else (dx, dy))               # where the route ends: the launch point, else the target
+        self._face_patriots_to_raid(path, pk_path)
         L = sum(dist(*path[i], *path[i + 1]) for i in range(len(path) - 1))
         Lc, Lcap = L, L                                        # S59a: Lc = the central route; L = the longest package route (the raid pushes so that it arrives on time); Lcap = the shortest (a raid already under way cannot start further back than that)
         pk_L = None
@@ -1013,10 +1219,14 @@ class RaidSpawns:
             (sx, sy), seg_i = tm.point_back_along(path, back_)
             remaining = path[seg_i:]
             hit_s = back_ / V
+        if sead_r:                                              # S183: when this raid's missiles land (mission seconds), for the wave behind it
+            if not hasattr(self, "_layer_impact"):
+                self._layer_impact = {}
+            self._layer_impact[package.objective.id] = float(hit_s + sead_fly_s)
         egr_ = offset(ox, oy, bearing(ox, oy, *remaining[-2] if len(remaining) > 1 else (sx, sy)) + 40, RAID_EGRESS_NM * NM)
         def home_of(aid_):                                       # S46: a pooled raid's members each go home to their OWN field (the lead's is `ba`)
             a_ = st.assets.get(aid_) or ba
-            return self._raid_bend([egr_, (a_.x, a_.y)], cvb)[1:]
+            return self._raid_bend([egr_, (a_.x, a_.y)], cvb, bend_alt_ft)[1:]
         home_ = home_of(ex["bomber_wing"])                       # turn points round blue's Patriot fields, then its own field
         home_n = {}                                              # group name -> how many of its last points are the way home
         pooled_ = bool(ex.get("pool") or ex.get("esc_pool"))
@@ -1063,10 +1273,10 @@ class RaidSpawns:
 
         mshl_lvl = [0]                                         # S26: the next free marshal level for an unstaged group
 
-        def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0, lateral_nm=0.0, home=None, path_=None, L_=None, stop_short=False):
+        def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0, lateral_nm=0.0, home=None, path_=None, L_=None, stop_short=False, aim_at=None):
             pos, rem, hold, act = start_at(shift, path_, L_)
             fin = fin_
-            if stop_short and launch_ is not None and len(path) > 2 and rem and rem[-1] == launch_:          # S66: a SEAD raid's sweep never flies the last leg (same route and clock as the SEAD flights, `shift` s ahead): the launch point is ARM_LAUNCH_NM from the site, on the edge of a Patriot's ring (raids.PATRIOT_NM 40); its last point is SEAD_SWEEP_STOP_NM out, on the line site - last way-in point (the launch point lies on it), and it turns home from there
+            if stop_short and launch_ is not None and len(path) > 2 and rem and rem[-1] == launch_:          # S66: a SEAD raid's sweep never flies the last leg (same route and clock as the SEAD flights, `shift` s ahead): the launch point is ARM_LAUNCH_NM from the site, on the edge of a Patriot's low 40 nm ring (raids.PATRIOT_NM; S171, XO 2026-11-23: INSIDE its 63 nm ring against a 30,000 ft jet, accepted: the Kh-31P reaches about 50 nm, T3c-T3e lost no Su-24M); its last point is SEAD_SWEEP_STOP_NM out, on the line site - last way-in point (the launch point lies on it), and it turns home from there
                 stop_ = offset(dx, dy, bearing(dx, dy, *path[-2]), SEAD_SWEEP_STOP_NM * NM) if dist(*path[-2], dx, dy) > (SEAD_SWEEP_STOP_NM + 1) * NM else None
                 rem, fin = rem[:-1] + ([stop_] if stop_ is not None else []), "ING"
                 if hold is None and dist(*pos, dx, dy) < SEAD_SWEEP_STOP_NM * NM:          # (it would have spawned inside that ring: it starts on its last point and only turns for home)
@@ -1083,6 +1293,18 @@ class RaidSpawns:
             nm_ = (["PUSH"] + ["ING"] * (len(rem) - 2) + [fin]) if hold is not None else (["ING"] * (len(rem) - 1) + [fin])
             sl = stg["plan"].get(name) if (stg and hold is not None) else None          # v0.41.261: a staged raid's group: on the marshal from the start, or off the runway
             m_alt = alt - (sl["mk"] * RAID_MSHL_STEP_M if sl else 0.0)
+            if sl is None and hold is None and act < 30 and not edge:
+                # S194: a group that starts in the air at mission start where another raid group of this mission already starts (a raid already under way: the groups' places on the route
+                # coincide when the route left is short or the start is clamped) flies its own level the whole way, so they do not collide at t=0
+                if not hasattr(self, "_raid_air_starts"):
+                    self._raid_air_starts = []
+                already_here = 0
+                for start_x, start_y in self._raid_air_starts:
+                    if dist(start_x, start_y, pos[0], pos[1]) < RAID_SHARED_START_M:
+                        already_here += 1
+                if already_here:
+                    m_alt = alt - already_here * RAID_SHARED_START_STEP_M
+                self._raid_air_starts.append((pos[0], pos[1]))
             if sl is None and hold is not None:                # S26 (run 12-38-58: three groups on one marshal point at one level collided at t=0): an unstaged group on the marshal gets its own level too
                 m_alt = alt - mshl_lvl[0] * RAID_MSHL_STEP_M
                 mshl_lvl[0] += 1
@@ -1123,19 +1345,36 @@ class RaidSpawns:
                     hold_stop(ct_, g, name, hold, False); g.points[0].tasks.append(ct_)
                     g.points[0].name = "MSHL"
             for k, q in enumerate(rem):
+                task_wp = None
+                if k == len(rem) - 1 and bomber and sead_r:
+                    # S179b: the ARM task hangs on an IP on the straight leg into the ARM point, not on the ARM point itself. DCS starts a point's tasks only
+                    # when the group gets close to the point; on a sharp turn home the group cut the fly-by ARM point about 10 km short, its task never
+                    # started and it fired nothing (S174 / S178 runs: Raid Bomber 3 and 4). A fly-over ARM point (S179) made a group that had dodged a SAM
+                    # circle back low to overfly it and fire nothing either (S179 run). At the IP there is no turn to cut.
+                    leg_start = pos
+                    if k > 0:
+                        leg_start = rem[k - 1]
+                    leg_m = dist(leg_start[0], leg_start[1], q[0], q[1])
+                    ip_back_m = ARM_IP_NM * NM
+                    if leg_m < 2 * ip_back_m:
+                        ip_back_m = leg_m / 2.0
+                    ip_xy = offset(q[0], q[1], bearing(q[0], q[1], leg_start[0], leg_start[1]), ip_back_m)
+                    task_wp = g.add_waypoint(pt(*ip_xy), r_alt, 450 * KPH, "IP")
                 wp = g.add_waypoint(pt(*q), r_alt, 450 * KPH, nm_[k])
                 if k == len(rem) - 1 and bomber:
                     if sead_r:                                  # S36b: the SEAD flight fires its Kh-31P at the site's radars from the launch point (an ARM task on the site's group), then turns home
+                        wp = task_wp                             # S179b: the tasks below go on the IP
                         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
                         if sead_tgt is not None:
                             ca_ = task.ControlledTask(task.AttackGroup(sead_tgt.id, weapon_type=task.WeaponType.ARM, group_attack=True, expend=task.Expend.All))      # v0.41.399: all Kh-31P at the site in one go (the Auto default fired one a jet at any radar), then home
-                            ca_.stop_after_time(int(hit_s + ARM_WINDOW_S)); wp.tasks.append(ca_)          # S59a: every group's window ends at T + ARM_WINDOW_S
+                            ca_.stop_after_duration(int(ARM_WINDOW_S)); wp.tasks.append(ca_)          # S59a / S178 / S179b: the window runs ARM_WINDOW_S from when the group reaches the point that carries the task (the IP) (it was an absolute time: a group delayed by an evasive dive arrived after it had ended and never fired, S174)
                         zt_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(dx, dy), int(SEAD_ZONE_NM * NM), [task.Targets.All.GroundUnits.AirDefence]))      # S59a: the fallback, after the AttackGroup: the site's own air defence, inside SEAD_ZONE_NM
-                        zt_.stop_after_time(int(hit_s + ARM_WINDOW_S)); wp.tasks.append(zt_)
+                        zt_.stop_after_duration(int(ARM_WINDOW_S)); wp.tasks.append(zt_)          # S178: the same duration for the fallback zone task
                     elif kh59_r:                                # S48: the Kh-59M flight fires its missiles at the aim from the launch point (the point task chosen by KH59_TASK), then turns home
                         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
-                        tk_ = (task.AttackMapObject(mapping.Vector2(dx, dy), group_attack=True) if KH59_TASK == "AttackMapObject"
-                               else task.Bombing(mapping.Vector2(dx, dy), expend=task.Expend.All, group_attack=True))
+                        aim_x, aim_y = aim_at or (dx, dy)       # S209: a runway raid gives each flight its own point along the runway
+                        tk_ = (task.AttackMapObject(mapping.Vector2(aim_x, aim_y), group_attack=True) if KH59_TASK == "AttackMapObject"
+                               else task.Bombing(mapping.Vector2(aim_x, aim_y), expend=task.Expend.All, group_attack=True))
                         ca_ = task.ControlledTask(tk_)
                         ca_.stop_after_time(int(hit_s + shift + KH59_WINDOW_S)); wp.tasks.append(ca_)
                     elif land and apt is not None:
@@ -1180,16 +1419,20 @@ class RaidSpawns:
             k = max(1, math.ceil(n / cap))
             return [n // k + (1 if i < n % k else 0) for i in range(k)]
 
-        def bomber_kit(t_):
-            """(class, task, loadout) of a raider type. S46: one per member, a pooled raid flies each type with its own loadout."""
+        def bomber_kit(t_, kind_=None):
+            """(class, task, loadout) of a raider type. S46: one per member, a pooled raid flies each type with its own loadout. B2: a SEAD package's kit is its kind's (`kind_`: "Kh_58U" | "Kh_31P")."""
             if land:
-                return (getattr(planes, t_), (task.SEAD if sead_r else (task.GroundAttack if aim else task.RunwayAttack)),
-                        enemy_arm_loadout(t_) if sead_r else enemy_standoff_loadout(t_) if kh59_r else (enemy_land_bomber_loadout("Tu_22M3") if t_ == "Tu_22M3" else enemy_strike_loadout(t_)))      # v0.41.355 (Phase 10a): the Tu-22M3 land strike carries OFAB-250 racks, no Kh-22, no anti-ship task
+                return (getattr(planes, t_), (task.SEAD if sead_r else (task.GroundAttack if (aim or kh59_r) else task.RunwayAttack)),
+                        enemy_arm_loadout(t_, kind_ or "Kh_31P") if sead_r else enemy_standoff_loadout(t_) if kh59_r else (enemy_land_bomber_loadout("Tu_22M3") if t_ == "Tu_22M3" else enemy_strike_loadout(t_, strike_kind)))      # v0.41.355 (Phase 10a): the Tu-22M3 land strike carries OFAB-250 racks, no Kh-22, no anti-ship task
             return planes.Tu_22M3, task.AntishipStrike, enemy_bomber_loadout("Tu_22M3")
-        kits_ = {t_: bomber_kit(t_) for _a, t_, _n in bmem}
-        for t_, kit_ in kits_.items():
-            if not kit_[2]:
-                self.warns.append(f"{t_.replace('_', '-')}: no bomb or missile found; the raid is unarmed.")
+        kits_ = {}
+        def kit_of(t_, kind_=None):
+            """B2: the kit of a type (and a SEAD package's kind), built once; an empty one warns."""
+            if (t_, kind_) not in kits_:
+                kits_[(t_, kind_)] = bomber_kit(t_, kind_)
+                if not kits_[(t_, kind_)][2]:
+                    self.warns.append(f"{t_.replace('_', '-')}: no bomb or missile found; the raid is unarmed.")
+            return kits_[(t_, kind_)]
         bomber_gs, rn_ = [], self._raid_n          # S47: one counter set per mission (`self._raid_n`): a second raid folded into this mission continues the numbers, so no unit or group name repeats
         gap_ = RAID_STAGED_GAP_S if stg else RAID_GROUP_GAP_S      # (a SEAD raid's groups use SEAD_GROUP_GAP_S inside a package and none between packages, see below)
         bcap_ = RAID_BOMBER_BATCH if stg else 4
@@ -1205,23 +1448,48 @@ class RaidSpawns:
                         bent_.append((key_[0], key_[1], k_)); bpk_.append(pk_)
         lat_ = [(i_ - (len(bent_) - 1) / 2.0) * RAID_ECHELON_NM if len(bent_) > 1 else 0.0 for i_ in range(len(bent_))]         # v0.41.296: echelon, centred on the route
         bsh_, bpa_, bLk_, pk_seen = [], [], [], {}
+        runway_points = []
+        if kh59_r and aim.startswith("bsam_"):              # S209: a Kh-59M raid on a SAM site: the flights aim at its radars first, then its launchers
+            site_group = (self.base_ad.get(cvb.id) or {}).get(aim.rsplit("_", 1)[1])
+            if site_group is not None:
+                radars = []
+                others = []
+                for site_unit in site_group.units:
+                    name = str(site_unit.type)
+                    if name == "Patriot str" or name.startswith("Hawk") and name.endswith((" sr", " tr", " cwar", " pcp")):
+                        radars.append((site_unit.position.x, site_unit.position.y))
+                    else:
+                        others.append((site_unit.position.x, site_unit.position.y))
+                runway_points = radars + others
+        if kh59_r and not aim:                              # S209: a Kh-59M runway raid: one aim point along the runway for each bomber group
+            raided_airport = self.t.airports.get(cvb.airport) if cvb.airport else None
+            if raided_airport is not None:
+                runway_points = runways.aim_points(raided_airport, len(bent_))
         for gi, (aid_, t_, n_) in enumerate(bent_):         # v0.41.108: a big raid is several groups, a minute apart on the same route
-            cls_b, task_b, load = kits_[t_]
-            if sead_r:                                      # S59a: every package arrives at T on its own leg; the groups of one package SEAD_GROUP_GAP_S apart
+            cls_b, task_b, load = kit_of(t_, pk_kind[bpk_[gi]] if sead_r else None)
+            if sead_r:                                      # S59a: every package arrives at T on its own leg; the groups of one package SEAD_GROUP_GAP_S apart. B2: and a package whose missile flies shorter leaves pk_off later
                 pk_i = bpk_[gi]
-                bsh_.append(pk_seen.get(pk_i, 0) * SEAD_GROUP_GAP_S); pk_seen[pk_i] = pk_seen.get(pk_i, 0) + 1
+                bsh_.append(pk_seen.get(pk_i, 0) * SEAD_GROUP_GAP_S + pk_off[pk_i])
+                if pk_i not in pk_seen:
+                    sead_rep.append({"pkg": pk_i, "kind": pk_kind[pk_i], "jets": pk_sizes[pk_i], "ring_nm": arm_ring_nm(pk_kind[pk_i]), "launch_nm": round(dist(*pk_path[pk_i][-1], dx, dy) / NM, 1),
+                                     "fly_s": round(arm_fly_s(pk_kind[pk_i]), 1), "launch_t": round(hit_s + pk_off[pk_i], 1), "impact_t": round(hit_s + pk_off[pk_i] + arm_fly_s(pk_kind[pk_i]), 1)})
+                pk_seen[pk_i] = pk_seen.get(pk_i, 0) + 1
                 bpa_.append(pk_path[pk_i]); bLk_.append(pk_L[pk_i])
             else:
                 bsh_.append(gi * gap_); bpa_.append(None); bLk_.append(None)
-            g = build_group(f"Raid Bomber {rn_['bg'] + 1}", cls_b, n_, task_b, bomber=True, shift=bsh_[gi], lateral_nm=lat_[gi], home=home_of(aid_), path_=bpa_[gi], L_=bLk_[gi])
+            aim_at = None
+            if runway_points:
+                aim_at = runway_points[gi % len(runway_points)]
+            g = build_group(f"Raid Bomber {rn_['bg'] + 1}", cls_b, n_, task_b, bomber=True, shift=bsh_[gi], lateral_nm=lat_[gi], home=home_of(aid_), path_=bpa_[gi], L_=bLk_[gi], aim_at=aim_at)
             rn_["bg"] += 1
             names = []
             for u in g.units:
                 rn_["bu"] += 1
                 u.name = f"RAID-B-{rn_['bu']}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", aid_, names, ac=t_, raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
-                         raid_arrive_s=float(hit_s + bsh_[gi]), raid_group=g.name, **({"raid_pkg": int(bpk_[gi])} if sead_r else {}))          # S46: each group is charged to its own wing and type (the debrief takes a loss off that squadron)
+                         raid_arrive_s=float(hit_s + bsh_[gi]), raid_group=g.name, raid_kh59=kh59_r, **({"raid_pkg": int(bpk_[gi])} if sead_r else {}))          # S46: each group is charged to its own wing and type (the debrief takes a loss off that squadron)
             bomber_gs.append(g)
+        self.sead_report = sead_rep                                # B2: read by the checks
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
         if ex.get("escorts") or (sead_r and ex.get("sweeps")):
             # v0.41.108: the escorts of a big raid split in two jobs. Half (at least 3 groups) fly a sweep RAID_SWEEP_LEAD_S ahead of the bombers on the same
@@ -1256,8 +1524,12 @@ class RaidSpawns:
                                 continue
                             pt_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(pt_.position.x, pt_.position.y), int(esc_nm_ * NM), [task.Targets.All.Air]))
                     else:
+                        # S169: the escort's point is above the highest bomber lane, and each escort group on a level of its own (RAID_MSHL_STEP_M apart, like the bomber lanes): none shares a level with a bomber group or another escort group
+                        top_lane_m = max(group_.points[1].alt for group_ in bomber_gs if len(group_.points) > 1)
+                        escort_level_m = top_lane_m + RAID_ESCORT_ABOVE_M + RAID_MSHL_STEP_M * ci
+                        escort_height_m = max(RAID_ESCORT_ABOVE_M, escort_level_m - bg.points[1].alt) if len(bg.points) > 1 else RAID_ESCORT_ABOVE_M
                         eg.points[0].tasks.insert(0, task.EscortTaskAction(group_id=bg.id, engagement_max_dist=int(esc_nm_ * NM), lastwpt=len(bg.points) - home_n[bg.name],
-                                                                            targets=[task.Targets.All.Air.id], position={"x": -1000, "y": 300, "z": 500}))
+                                                                            targets=[task.Targets.All.Air.id], position={"x": -1000, "y": escort_height_m, "z": 500}))
                 rtbe_ = task.OptRTBOnOutOfAmmo(); rtbe_.params["action"]["params"]["value"] = AAM_WEAPONS
                 eg.points[0].tasks.append(rtbe_)
                 en = []

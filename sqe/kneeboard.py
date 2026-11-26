@@ -1,5 +1,6 @@
 """Kneeboard pages (PNG 768x1024), laid out like a printed form: shaded section bands, ruled rows, and exactly three type sizes.
 Page 1: comms ladder + waypoints (numbered the way YOUR jet's cockpit numbers them), the tolerances, the time zone and the minimum safe altitude (with the ground-height scan).
+Page 1 (plain F-14A / B, S175): a route point the jet cannot hold has its position on a line under its row; Page 1b only when those lines do not fit.
 Page 2: fuel, codes, weather, target lat/long, bullseye, package who's-who (with Link 16 STNs).
 Page 3: the other packages in the mission (own push / TOT), threats near the target, intelligence.
 Every clock time is hh:mm:ss. Text wraps only at logical breaks (after a comma or a sentence), never inside an item."""
@@ -18,10 +19,26 @@ _FB = ["DejaVuSansMono-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSansMo
        "C:/Windows/Fonts/consolab.ttf", "C:/Windows/Fonts/courbd.ttf"]
 
 
+# Fonts already loaded, by (size, bold). The card asks for the same three sizes hundreds of times per mission, and loading a font by name can
+# search the whole system font folder: that was more than a quarter of a mission build.
+_FONTS: dict = {}
+
+
 def _font(size, bold=False):
-    for c in (_FB if bold else []) + _F:
+    key = (size, bold)
+    if key not in _FONTS:
+        _FONTS[key] = _load_font(size, bold)
+    return _FONTS[key]
+
+
+def _load_font(size, bold):
+    """The first of the monospace fonts above that this computer has."""
+    names = _F
+    if bold:
+        names = _FB + _F
+    for name in names:
         try:
-            return ImageFont.truetype(c, size)
+            return ImageFont.truetype(name, size)
         except OSError:
             continue
     return ImageFont.load_default(size)
@@ -142,43 +159,70 @@ def render_pages(outdir, ctx: dict) -> list:
     pages = []
 
     # ------------------------------------------------ page 1: comms + the times YOU must hit
-    f = _Form(head)
-    f.line(ctx["objective"][:60], color=DIM, gap=8)
-    if ctx.get("fc3"):                      # FC3 radios have no channels: just the frequencies
-        f.band("FREQUENCIES")
-        for e in list(ctx["comm1"].values()) + list(ctx["comm2"].values()):
-            f.row([(0, e.label), (12, f"{e.mhz:7.3f}"), (21, (e.callsign + " " + e.note).strip()[:40])], True)
-    else:
-        f.band("COMM 1 (UHF)")
-        for ch, e in ctx["comm1"].items():
-            f.row([(0, f"CH{ch}"), (4, e.label), (14, f"{e.mhz:7.3f}"), (23, ((e.callsign or e.note).replace("carrier control", "CVN")).strip()[:36])], True)
-        f.band("COMM 2 (VHF)")
-        for ch, e in ctx["comm2"].items():
-            f.row([(0, f"CH{ch}"), (4, "TOWER" if e.label == "ATC" else e.label), (14, f"{e.mhz:7.3f}"), (23, ((e.callsign or e.note).replace("carrier control", "CVN")).strip()[:36])], True)
-    f.band("", [(0, "WP"), (3, "NAME"), (12, "TIME"), (22, "ALT"), (29, "KTS"), (34, "HDG/NM")])
-    for r in ctx["waypoints"]:
-        hot = r["name"] in ("MSHL", "PUSH", "TGT", "SEAD", "CAP1")
-        f.row([(0, r["wp"]), (3, r["name"]), (12, hms(r["time"])), (22, r["alt"]), (29, r["kts"]), (34, r["leg"])], hot, gap=4)
-        if r["name"] == "TGT":
-            note = _tgt_note(r, bool(ctx.get("target_data")))
+    # S175: the plain F-14B's by-hand route points get their position on a line under their row ("-" in the WP column) when the page has
+    # room; if those lines would run off the bottom, page 1 is drawn again without them and they go on page 1b instead.
+    def draw_page_one(positions_inline):
+        f = _Form(head)
+        f.line(ctx["objective"][:60], color=DIM, gap=8)
+        if ctx.get("fc3"):                      # FC3 radios have no channels: just the frequencies
+            f.band("FREQUENCIES")
+            for e in list(ctx["comm1"].values()) + list(ctx["comm2"].values()):
+                f.row([(0, e.label), (12, f"{e.mhz:7.3f}"), (21, (e.callsign + " " + e.note).strip()[:40])], True)
         else:
-            note = " ".join(x for x in (r["win"], r["note"]) if x) if (hot or r["name"] in ("TKR", "RTB", "DIVERT", "TAKEOFF")) else ""
-        if note:
-            f.line(_tol(hms(note)), False, INK if hot else DIM, indent=3, gap=6)
-    f.band("NOTES")
-    num = str(ctx.get("numbering", "")).replace("...", "").rstrip(" .,")
-    notes = [f"{ctx['jet']} waypoint numbers: {num}.", "PUSH +/-30 s, TOT +/-1 min.", ctx.get("zulu_note", "Times are local.")]
-    if ctx.get("tkr_line"):
-        notes.append(ctx["tkr_line"])                   # S103d: the plain F-14B has no tanker waypoint
-    if ctx.get("msa"):
-        notes.append(f"MSA {int(ctx['msa']):,} ft along the route.")
-    for note in notes:
-        f.line(note, color=DIM, gap=4)
-    if ctx.get("nav"):                      # v0.41.182 (XO 2026-10-28): the recovery block closes the page; at the top it read as part of the task line
-        f.band("RECOVERY: ILS / TACAN / ICLS")
-        for ln in ctx["nav"]:
-            f.line(ln, True, gap=2)
+            f.band("COMM 1 (UHF)")
+            for ch, e in ctx["comm1"].items():
+                f.row([(0, f"CH{ch}"), (4, e.label), (14, f"{e.mhz:7.3f}"), (23, ((e.callsign or e.note).replace("carrier control", "CVN")).strip()[:36])], True)
+            f.band("COMM 2 (VHF)")
+            for ch, e in ctx["comm2"].items():
+                f.row([(0, f"CH{ch}"), (4, "TOWER" if e.label == "ATC" else e.label), (14, f"{e.mhz:7.3f}"), (23, ((e.callsign or e.note).replace("carrier control", "CVN")).strip()[:36])], True)
+        f.band("", [(0, "WP"), (3, "NAME"), (12, "TIME"), (22, "ALT"), (29, "KTS"), (34, "HDG/NM")])
+        for r in ctx["waypoints"]:
+            hot = r["name"] in ("MSHL", "PUSH", "TGT", "SEAD", "CAP1")
+            f.row([(0, r["wp"]), (3, r["name"]), (12, hms(r["time"])), (22, r["alt"]), (29, r["kts"]), (34, r["leg"])], hot, gap=4)
+            if r["name"] == "TGT":
+                note = _tgt_note(r, bool(ctx.get("target_data")))
+            else:
+                note = " ".join(x for x in (r["win"], r["note"]) if x) if (hot or r["name"] in ("TKR", "RTB", "DIVERT", "TAKEOFF")) else ""
+            if note:
+                f.line(_tol(hms(note)), False, INK if hot else DIM, indent=3, gap=6)
+            if positions_inline and r.get("pos"):
+                f.line(r["pos"], False, INK, indent=3, gap=6)
+        f.band("NOTES")
+        num = str(ctx.get("numbering", "")).replace("...", "").rstrip(" .,")
+        notes = [f"{ctx['jet']} waypoint numbers: {num}.", "PUSH +/-30 s, TOT +/-1 min.", ctx.get("zulu_note", "Times are local.")]
+        if ctx.get("tkr_line"):
+            notes.append(ctx["tkr_line"])                   # S103d: the plain F-14B has no tanker waypoint
+        if ctx.get("detour_line"):
+            notes.append(ctx["detour_line"])                # S140c: the detour round the SAM rings (the TP rows above)
+        if ctx.get("turnpoint_line"):
+            notes.append(ctx["turnpoint_line"])             # the plain F-14B with the Turnpoints script: how to load one
+        if ctx.get("msa"):
+            notes.append(f"MSA {int(ctx['msa']):,} ft along the route.")
+        for note in notes:
+            f.line(note, color=DIM, gap=4)
+        if ctx.get("nav"):                      # v0.41.182 (XO 2026-10-28): the recovery block closes the page; at the top it read as part of the task line
+            f.band("RECOVERY: ILS / TACAN / ICLS")
+            for ln in ctx["nav"]:
+                f.line(ln, True, gap=2)
+        return f
+
+    f = draw_page_one(True)
+    hand_on_page_one = True
+    if ctx.get("hand_table") and f.y > H - 10:
+        f = draw_page_one(False)
+        hand_on_page_one = False
     pages.append(f.save(outdir / "1_comms_times.png"))
+
+    # ------------------------------------------------ page 1b (plain F-14A / B only, when page 1 has no room): every route point the jet cannot hold
+    if ctx.get("hand_table") and not hand_on_page_one:
+        f = _Form(head)
+        f.band("", [(0, "#"), (3, "ROUTE POINTS (ENTER BY HAND)"), (27, "LAT / LONG"), (53, "ALT")])
+        for r in ctx["hand_table"]:
+            label = r["name"]
+            if r["leg"]:
+                label = r["name"] + " " + r["leg"]
+            f.row([(0, r["n"]), (3, label[:23]), (27, r["pos"]), (53, r["alt"])], gap=3)
+        pages.append(f.save(outdir / "1b_route_points.png"))
 
     # ------------------------------------------------ page 2: fuel, codes, weather, target, package
     f = _Form(head)

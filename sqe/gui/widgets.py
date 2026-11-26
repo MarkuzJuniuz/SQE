@@ -26,7 +26,11 @@ class StepSpin(QWidget):
         self._minus, self._plus = QToolButton(), QToolButton()
         for b, txt, step in ((self._minus, "\u2212", self._spin.stepDown), (self._plus, "+", self._spin.stepUp)):
             b.setText(txt); b.setObjectName("step"); b.setAutoRepeat(True); b.setFocusPolicy(Qt.NoFocus); b.setCursor(Qt.PointingHandCursor)
-            b.clicked.connect(lambda _=False, f=step: f())
+            # The default `f=step` binds THIS button's step method now (a plain closure would see the last one); `_` takes the `checked` flag so it is not passed on as a step count.
+            def press_step(_=False, f=step):
+                f()
+
+            b.clicked.connect(press_step)
         lay.addWidget(self._minus); lay.addWidget(self._spin, 1); lay.addWidget(self._plus)
         self._spin.valueChanged.connect(self.valueChanged)
 
@@ -129,6 +133,7 @@ class MapView(QWidget):
         if _GEO is None or _GEO_ID != theatres.active()["id"]:
             _GEO_ID, _GEO = _load_geo()
         from ..briefing import RANGE_NM
+        from ..routes import ring_nm
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
         p.fillRect(self.rect(), QColor(SEA))
         st = self.state
@@ -140,7 +145,10 @@ class MapView(QWidget):
         minx, maxx, miny, maxy = min(xs) - pad, max(xs) + pad, min(ys) - pad, max(ys) + pad
         sc = min(self.width() / max(1, maxx - minx), self.height() / max(1, maxy - miny))
         ox = (self.width() - sc * (maxx - minx)) / 2; oy = (self.height() - sc * (maxy - miny)) / 2
-        P = lambda x, y: QPointF(ox + (y - minx) * sc, oy + ((-x) - miny) * sc)
+        # A map point (x north, y east) to a screen point.
+        def P(x, y):
+            return QPointF(ox + (y - minx) * sc, oy + ((-x) - miny) * sc)
+
         # land, lakes, coast, borders
         p.setPen(QPen(QColor(COAST), 1.2)); p.setBrush(QBrush(QColor(LAND)))
         for ring in _GEO["land"]:
@@ -155,7 +163,7 @@ class MapView(QWidget):
         if self.rings:
             for a in st.assets.values():
                 if a.kind == AssetKind.SAM and not a.destroyed and a.variant in RANGE_NM and RANGE_NM[a.variant] >= 8:
-                    c = P(a.x, a.y); r = RANGE_NM[a.variant] * 1852 * sc; h = max(0.25, min(1.0, a.health))
+                    c = P(a.x, a.y); r = ring_nm(a.variant) * 1852 * sc; h = max(0.25, min(1.0, a.health))      # S140b1: the avoid ring, as the routes keep it
                     p.setPen(QPen(QColor(255, 93, 108, int(60 + 110 * h)), 1)); p.setBrush(QBrush(QColor(255, 93, 108, int(8 + 18 * h))))
                     p.drawEllipse(c, r, r)
             from ..raids import PATRIOT_NM, HAWK_NM

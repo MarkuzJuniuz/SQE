@@ -12,7 +12,7 @@ Judgment calls (no public source): CAP_SHARE (the part of the areas up in a turn
 from __future__ import annotations
 import math
 
-from . import barcap, clock
+from . import barcap, clock, fraction, patrol_threat
 from .aircraft import AIRCRAFT
 from .words import cover_word
 from .models import BaseKind, ObjectiveType, Role
@@ -29,15 +29,32 @@ PATROL_LOSS_P = 0.15           # a patrol that fights a raid loses a jet this of
 LEAD_MIN = 10                  # a sortie that comes on station this soon after the package's start still covers it
 
 
+# S150: the sort keys this module uses (they were lambdas)
+def _first_two(row):
+    return (row[0], row[1])
+
+
+def _second_then_base_id(row):
+    return (row[1], row[0].id)
+
+
+def _most_available_then_id(squadron):
+    return (-squadron.available, squadron.id)
+
+
+def _base_id(base):
+    return base.id
+
+
 def _cap_squadrons(state, base) -> list:
-    """The fighter squadrons that fly a base's patrol: its own; a field with none borrows the nearest capable squadron within its combat radius. A HAVCAP squadron (Phase 9b) flies guards only, never a patrol."""
-    own = [sq for sq in state.squadrons.values() if sq.base_id == base.id and Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2 and sq.role != "havcap"]
+    """The fighter squadrons that fly a base's patrol: its own; a field with none borrows the nearest capable squadron within its combat radius. An HVAACAP squadron (Phase 9b) flies guards only, never a patrol."""
+    own = [sq for sq in state.squadrons.values() if sq.base_id == base.id and Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2 and sq.role != "hvaacap"]
     if own or base.kind == BaseKind.CARRIER:
         return own
     best, best_d = None, 1e9
     for sq in state.squadrons.values():
         spec = AIRCRAFT[sq.aircraft]
-        if Role.CAP not in spec.roles or sq.available < 2 or sq.role == "havcap":
+        if Role.CAP not in spec.roles or sq.available < 2 or sq.role == "hvaacap":
             continue
         b = state.bases[sq.base_id]
         d = math.hypot(b.x - base.x, b.y - base.y) / NM
@@ -48,12 +65,16 @@ def _cap_squadrons(state, base) -> list:
 
 def _crew(ledger, sqs, wave: int, keep: int):
     """The squadron with the most jets for a pair in this wave (`keep` jets stay behind), or None."""
-    return max((q for q in sqs if ledger.room(q.id, wave) >= 2 + keep), key=lambda q: (ledger.room(q.id, wave), q.id), default=None)
+    def room_then_id(q):
+        return (ledger.room(q.id, wave), q.id)
+    return max((q for q in sqs if ledger.room(q.id, wave) >= 2 + keep), key=room_then_id, default=None)
 
 
-def _crew_havcap(ledger, sqs, wave: int):
-    """The HAVCAP squadron with the most jets for a guard pair in this wave (`Ledger.hroom`), or None."""
-    return max((q for q in sqs if ledger.hroom(q.id, wave) >= 2), key=lambda q: (ledger.hroom(q.id, wave), q.id), default=None)
+def _crew_hvaacap(ledger, sqs, wave: int):
+    """The HVAACAP squadron with the most jets for a guard pair in this wave (`Ledger.hroom`), or None."""
+    def guard_room_then_id(q):
+        return (ledger.hroom(q.id, wave), q.id)
+    return max((q for q in sqs if ledger.hroom(q.id, wave) >= 2), key=guard_room_then_id, default=None)
 
 
 def _pairs(ledger, sqs, t0: int, t1: int, keep: int) -> list:
@@ -88,7 +109,7 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
     """This turn's standing patrols and guards (v0.41.339, Phase 4b; it was a plan for the whole day, `plan`). `t0`: the turn's first minute of the day; `ledger`: the turn's jets (the pairs are taken
     off it, so the packages are built from what is left); `rng`: seeded by the turn; `wins`: this turn's AWACS / tanker windows (`support_assets.plan`). The turn's flights are added to
     `state.barcap["blue_flights"]` (those of earlier turns of the day stay; a plan of this turn made before is replaced) and `blue_cover` (minutes of the day each area has a pair up) is made
-    again from them. -> this turn's flights [{id, kind BASE_BARCAP|CARRIER_BARCAP|HAVCAP|TKR_HAVCAP, asset, area, squadron, aircraft, size, start, end (minutes of the day), callsign "", turn, wave}]."""
+    again from them. -> this turn's flights [{id, kind BASE_BARCAP|CARRIER_BARCAP|HVAACAP|TKR_HVAACAP, asset, area, squadron, aircraft, size, start, end (minutes of the day), callsign "", turn, wave}]."""
     bc = barcap.ensure(state)
     level = max(1, min(3, int(getattr(d, "level", 1))))
     t1 = t0 + clock.TURN_MIN
@@ -96,25 +117,35 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
     flights = []
     _plan_guards(state, ledger, flights, turn, t0, t1, wins)    # the AWACS and tanker guards first (the tanker's is not optional)
     cands = []
-    for b in sorted((b for b in state.bases.values() if b.kind in (BaseKind.AIRFIELD, BaseKind.CARRIER) and not b.divert), key=lambda b: b.id):          # Phase 9a: no patrol from a divert field
+    for b in sorted((b for b in state.bases.values() if b.kind in (BaseKind.AIRFIELD, BaseKind.CARRIER) and not b.divert), key=_base_id):          # Phase 9a: no patrol from a divert field
         sqs = _cap_squadrons(state, b)
         if sqs:
             cands += [(b, ar, sqs) for ar in bc["blue"] if ar["asset"] == b.id]
-    want = share * len(cands)
-    want = int(want) + (1 if rng.random() < want - int(want) else 0)        # a share of the areas that can be up, a fraction is a seeded chance of one more
-    order = list(range(len(cands)))
-    rng.shuffle(order)
-    up = 0
-    for i in order:
-        if up >= want:
-            break
-        b, ar, sqs = cands[i]
-        kind = "CARRIER_BARCAP" if b.kind == BaseKind.CARRIER else "BASE_BARCAP"
-        got = _pairs(ledger, sqs, t0, t1, KEEP_BACK)
-        for j, (sq, wave, lo, hi) in enumerate(got):
-            flights.append({"id": f"bf{turn}-{b.id}-{ar['id'].rsplit('-', 1)[-1]}.{j}", "kind": kind, "asset": b.id, "area": ar["id"], "squadron": sq.id, "aircraft": sq.aircraft,
-                            "size": 2, "start": lo, "end": hi, "callsign": "", "turn": turn, "wave": wave})
-        up += 1 if got else 0
+    # S208: the most threatened station first (the CAP sits between the threat and the asset), not a shuffle; equal threats: the seeded draw. The fleet is the exception: a carrier
+    # group keeps its own air cover however far red is (judgment call), so its stations get their share of the turn's pairs on their own count.
+    def threat_to_station(index):
+        _base, area, _squadrons = cands[index]
+        return (patrol_threat.red_on(state, area["ax"], area["ay"]), rng.random())
+    fleet_stations = []
+    land_stations = []
+    for index in range(len(cands)):
+        if cands[index][0].kind == BaseKind.CARRIER:
+            fleet_stations.append(index)
+        else:
+            land_stations.append(index)
+    for key, stations in (("blue_cap_fleet", fleet_stations), ("blue_cap", land_stations)):
+        want = fraction.whole_units(state, key, turn, share * len(stations))      # a share of the stations that can be up; the fraction is carried, not rolled (S207e)
+        up = 0
+        for i in sorted(stations, key=threat_to_station, reverse=True):
+            if up >= want:
+                break
+            b, ar, sqs = cands[i]
+            kind = "CARRIER_BARCAP" if b.kind == BaseKind.CARRIER else "BASE_BARCAP"
+            got = _pairs(ledger, sqs, t0, t1, KEEP_BACK)
+            for j, (sq, wave, lo, hi) in enumerate(got):
+                flights.append({"id": f"bf{turn}-{b.id}-{ar['id'].rsplit('-', 1)[-1]}.{j}", "kind": kind, "asset": b.id, "area": ar["id"], "squadron": sq.id, "aircraft": sq.aircraft,
+                                "size": 2, "start": lo, "end": hi, "callsign": "", "turn": turn, "wave": wave})
+            up += 1 if got else 0
     keep = [f for f in (bc.get("blue_flights") or []) if f.get("turn") is not None and f["turn"] < turn]     # earlier turns of the day stay; a whole-day plan from before v0.41.339 (no `turn`) goes
     bc["blue_flights"] = keep + flights
     cover = {ar["id"]: 0 for _b, ar, _s in cands}
@@ -126,30 +157,31 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
 
 # the guard of each support asset: key -> flight tag. The assets and their guards are standing entities on their own schedule (S71, XO 2026-11-13): every package that carries the asset gets the guard.
 # A second tanker (another direction) is one more TABLE row in support_assets and one more entry here.
-GUARDS = {"bl_kc135": "TKR_HAVCAP", "bl_s3": "TKR_HAVCAP", "bl_e3": "HAVCAP", "bl_e2": "HAVCAP"}      # tankers first: their guard is not optional
+AWACS_GUARD_JETS = 4       # S182 (XO 2026-11-24: "awacs guards a minimum of 4 ships"): the AWACS guard's size when the HVAACAP squadron can give it. Evidence: the AWACS died with a pair on guard in the S174 and S177 server runs (raid escorts). Judgment call
+GUARDS = {"bl_e3": "HVAACAP", "bl_e2": "HVAACAP", "bl_kc135": "TKR_HVAACAP", "bl_s3": "TKR_HVAACAP"}      # S182: the AWACS guards are crewed first; a tanker's guard is still not optional (it takes any capable squadron's pair). Before: tankers first
 
 
-def _havcap_squadrons(state, base) -> list:
-    """The HAVCAP squadrons (`Squadron.role`, Phase 9b) that can guard an asset based at `base`: ready jets and the base within their combat radius."""
+def _hvaacap_squadrons(state, base) -> list:
+    """The HVAACAP squadrons (`Squadron.role`, Phase 9b) that can guard an asset based at `base`: ready jets and the base within their combat radius."""
     out = []
     for sq in state.squadrons.values():
-        if sq.role != "havcap" or sq.available < 2 or Role.CAP not in AIRCRAFT[sq.aircraft].roles:
+        if sq.role != "hvaacap" or sq.available < 2 or Role.CAP not in AIRCRAFT[sq.aircraft].roles:
             continue
         b = state.bases[sq.base_id]
         if math.hypot(b.x - base.x, b.y - base.y) / NM <= AIRCRAFT[sq.aircraft].combat_radius_nm:
             out.append(sq)
-    return sorted(out, key=lambda q: (-q.available, q.id))
+    return sorted(out, key=_most_available_then_id)
 
 
 def _guard_squadrons(state, base) -> list:
     """The fighters that guard an asset based at `base`: the base's own; else the nearest within reach; else any capable squadron (the tanker's
-    guard is not optional). The player's squadron is left to the packages. A HAVCAP squadron never shows here (`_havcap_squadrons` is tried first)."""
+    guard is not optional). The player's squadron is left to the packages. An HVAACAP squadron never shows here (`_hvaacap_squadrons` is tried first)."""
     pl = state.player.squadron_id if getattr(state, "player", None) else None
     sqs = [q for q in _cap_squadrons(state, base) if q.id != pl]
     if sqs:
         return sqs
-    cands = [sq for sq in state.squadrons.values() if sq.id != pl and Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2 and sq.role != "havcap"]
-    return sorted(cands, key=lambda q: (-q.available, q.id))[:1]
+    cands = [sq for sq in state.squadrons.values() if sq.id != pl and Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2 and sq.role != "hvaacap"]
+    return sorted(cands, key=_most_available_then_id)[:1]
 
 
 def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
@@ -163,7 +195,13 @@ def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
         spans = [(max(s, t0), min(e, t1)) for s, e in (wins.get(key) or []) if e > t0 and s < t1]
         if a is None or not spans or a["base_id"] not in state.bases:
             continue
-        hv = _havcap_squadrons(state, state.bases[a["base_id"]])           # Phase 9b: the HAVCAP squadron guards first, within reach
+        # Phase 9b: the HVAACAP squadron guards first, within reach. S182 (XO 2026-11-24: "Batumi is special awacs guard, tankers take from normal
+        # squadrons"): it guards the land-based AWACS only. Its 8 jets (Batumi parks 10) then fly four one turn and the other four the next,
+        # while the first four refit. A tanker's guard and the carrier AWACS's guard (it sits under the fleet's SM-2s and BARCAP) come from the
+        # ordinary squadrons
+        hv = []
+        if tag == "HVAACAP" and state.bases[a["base_id"]].kind != BaseKind.CARRIER:
+            hv = _hvaacap_squadrons(state, state.bases[a["base_id"]])
         sqs = _guard_squadrons(state, state.bases[a["base_id"]])
         if not sqs and not hv:
             continue
@@ -171,7 +209,7 @@ def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
         w = max([k for k in range(1, NWAVES + 1) if t0 + wave_open(k) <= lo] or [1])
         sq = None
         while True:
-            sq, hav = (_crew_havcap(ledger, hv, w) if hv else None), True
+            sq, hav = (_crew_hvaacap(ledger, hv, w) if hv else None), True
             if sq is None:
                 sq, hav = _crew(ledger, sqs, w, 0), False                 # none ready (it has had its turn): the ordinary guards
             if sq is not None or w >= NWAVES:
@@ -180,8 +218,16 @@ def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
             lo = max(lo, t0 + wave_open(w))
         if sq is None or lo >= hi:
             continue
-        (ledger.htake if hav else ledger.take)(sq.id, 2, w)
-        flights.append({"id": f"bg{turn}-{key}", "kind": tag, "asset": key, "area": "", "squadron": sq.id, "aircraft": sq.aircraft, "size": 2, "start": lo,
+        # S182: the land AWACS's guard is a four-ship when the HVAACAP squadron has the jets in this wave; a pair otherwise (and always a pair from an
+        # ordinary squadron, whose jets the packages need: the tankers' and the carrier AWACS's guards)
+        guard_jets = 2
+        if tag == "HVAACAP" and hav and ledger.hroom(sq.id, w) >= AWACS_GUARD_JETS:
+            guard_jets = AWACS_GUARD_JETS
+        if hav:
+            ledger.htake(sq.id, guard_jets, w)
+        else:
+            ledger.take(sq.id, guard_jets, w)
+        flights.append({"id": f"bg{turn}-{key}", "kind": tag, "asset": key, "area": "", "squadron": sq.id, "aircraft": sq.aircraft, "size": guard_jets, "start": lo,
                         "end": hi, "callsign": "", "turn": turn, "wave": w})
 
 
@@ -235,7 +281,7 @@ def attach(state, pkgs: list, until: int | None = None, since: int | None = None
             if no.isdigit():
                 used[nm] = max(used.get(nm, 0), int(no))
     tw = [(b, w) for b, w in raids.target_weights(state) if b.kind != BaseKind.CARRIER]
-    base_cap = max(tw, key=lambda bw: (bw[1], bw[0].id))[0] if tw else None
+    base_cap = max(tw, key=_second_then_base_id)[0] if tw else None
     for p in pkgs:
         obj = p.objective
         setp = bool(p.extra.get("setpiece"))                              # v0.41.109: the carrier raid setpiece gets the carrier BARCAP and the guards too
@@ -252,7 +298,9 @@ def attach(state, pkgs: list, until: int | None = None, since: int | None = None
             hit = [f for f in planned if f["kind"] == tag and f["asset"] == key and f["start"] <= hi and f["end"] >= lo]
             if not hit:
                 continue
-            pf = max(hit, key=lambda f: (min(f["end"], hi) - max(f["start"], lo), -f["start"]))
+            def overlap_then_earliest(f):
+                return (min(f["end"], hi) - max(f["start"], lo), -f["start"])
+            pf = max(hit, key=overlap_then_earliest)
             sq = state.squadrons[pf["squadron"]]
             if not pf["callsign"]:
                 pf["callsign"] = _next_callsign(state, sq, used)
@@ -290,7 +338,9 @@ def attach(state, pkgs: list, until: int | None = None, since: int | None = None
             hit = [f for f in planned if f["area"] == ar["id"] and f["start"] <= hi and f["end"] >= lo]
             if not hit:
                 continue
-            pf = max(hit, key=lambda f: (min(f["end"], hi) - max(f["start"], lo), -f["start"]))
+            def overlap_then_earliest(f):
+                return (min(f["end"], hi) - max(f["start"], lo), -f["start"])
+            pf = max(hit, key=overlap_then_earliest)
             sq = state.squadrons[pf["squadron"]]
             if not pf["callsign"]:
                 pf["callsign"] = _next_callsign(state, sq, used)
@@ -311,16 +361,16 @@ def status_lines(state) -> list:
     for ar in barcap.plan_areas(state, "blue"):
         if ar["id"] in cover:
             parts.append((ar["name"], dirs[int(((ar.get("bearing", 0) % 360) + 22.5) // 45) % 8], round(100 * cover[ar["id"]] / 1440)))
-    parts.sort(key=lambda t: (t[0], t[1]))
+    parts.sort(key=_first_two)
     by = {}
     for n, d, pc in parts:
         by.setdefault(n, []).append(f"{d} {cover_word(pc / 100.0)}")
-    g = [f for f in bc["blue_flights"] if f["kind"] in ("HAVCAP", "TKR_HAVCAP")]
+    g = [f for f in bc["blue_flights"] if f["kind"] in ("HVAACAP", "TKR_HVAACAP")]
     out = ["BARCAP cover so far today (how much of the day a pair is up):"] + [f"   {n}: " + ", ".join(v) for n, v in by.items()]
     if not by:
         out[0] = "BARCAP cover so far today: none planned"
     if g:
-        out.append(f"Tanker / AWACS guards so far today: {sum(1 for f in g if f['kind'] == 'TKR_HAVCAP')} tanker, {sum(1 for f in g if f['kind'] == 'HAVCAP')} AWACS sorties")
+        out.append(f"Tanker / AWACS guards so far today: {sum(1 for f in g if f['kind'] == 'TKR_HVAACAP')} tanker, {sum(1 for f in g if f['kind'] == 'HVAACAP')} AWACS sorties")
     return out + detection_lines(state)
 
 

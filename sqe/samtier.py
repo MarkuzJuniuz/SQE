@@ -24,14 +24,36 @@ from __future__ import annotations
 # reach_km: the practical reach (it opens fire this far out) | avoid_nm: an AI route keeps this far | station_nm: a fighter station (TARCAP / escort) keeps this far
 # sweep_nm: a sweep station | scramble_nm: a defender (alert pair) station | gate_km: the DEAD gate / hold orbit keeps this far | gate_reach_nm: the strike gate's
 # cover radius (war.covering_sams) | jsow_keep_nm: a JSOW launch point stays this far | harm_nm: a HARM point of another package stays this far | fighter_nm: a sweep's fight circle stops this far short
+# S153 (2026-11-22): a HARM point also stays harm_nm from its OWN target when the target is an SA-10. SA-10 harm_nm 35 -> 40: in test T1 the Sukhumi S-300 first fired
+# at 64.1 km (34.6 nm) at F-16s at 25,000 ft and killed the SEAD flight that sat on its 35 nm point; the Syria raid test saw 62 to 63 km. 40 nm = that plus about 5 nm (judgment call).
 SYSTEMS = {
-    "SA-10": dict(reach_km=55.0, avoid_nm=35.0, station_nm=45.0, sweep_nm=45.0, scramble_nm=35.0, gate_km=60, gate_reach_nm=35, jsow_keep_nm=40.0, harm_nm=35.0, fighter_nm=31),
+    "SA-10": dict(reach_km=55.0, avoid_nm=35.0, station_nm=45.0, sweep_nm=45.0, scramble_nm=35.0, gate_km=60, gate_reach_nm=35, jsow_keep_nm=40.0, harm_nm=40.0, fighter_nm=31),
     "SA-5":  dict(reach_km=122.0, avoid_nm=71.0, station_nm=81.0, sweep_nm=81.0, scramble_nm=71.0, gate_km=127, gate_reach_nm=71, jsow_keep_nm=76.0, harm_nm=71.0, fighter_nm=67),
 }
 
 # The ring table: how far a live site of this variant threatens (nm). The SA-10's 48 nm is the old table value (its measured reach is the SYSTEMS row);
 # the SA-5's 70 is the measured high-altitude reach rounded up. SA-9: Strela-1 reach 4.2 km (public, firm) = 2.3 nm, rounded to the MANPAD's 3.
-RANGE_NM = {"SA-8": 7, "AAA": 3, "MANPAD": 3, "SA-2": 25, "SA-3": 13, "SA-6": 13, "SA-11": 18, "SA-10": 48, "SA-15": 8, "SA-19": 5, "SA-5": 70, "SA-9": 3}
+RANGE_NM = {"SA-8": 7, "AAA": 3, "MANPAD": 3, "SA-2": 25, "SA-3": 13, "SA-6": 13, "SA-11": 18, "SA-10": 48, "SA-15": 8, "SA-19": 5, "SA-5": 70, "SA-9": 3, "Patriot": 40}
+
+# S168 (XO 2026-11-22, "resize rings"): how far a live site REALLY fires depends on the target's altitude. Measured in 31 server runs (`probes/s168/launch_ranges.py`, the p90 of the launch distance
+# to a target in the band, rounded up): the SA-11 (9M38M1, 113 launches) 3 to 8 km: p90 23.9 / max 25.0 nm, above 8 km: p90 25.7 / max 28.4; below 3 km (2 launches) too few: the base ring stays.
+# S171 (XO 2026-11-23, "resize by altitude"): the Patriot (MIM-104, 313 launches, 207 with a target altitude, 36 server runs, same probe): below 3 km (16 launches) p90 40.2 / max 49.3: the base ring 40 stays;
+# 3 to 8 km (145) p90 53.3 / max 57.5 -> 54; above 8 km (46) p90 62.3 / max 63.7 -> 63. "Patriot" is a blue field battery (`state.blue_sams`), not an asset variant: only the red raid routes read it (`raids.PATRIOT_NM` is the base).
+# Floors in feet (3 km = 9,843 ft, 8 km = 26,247 ft), ascending. A variant with no row keeps its base ring: the S-300 (SA-10) fires well inside its 48 (p90 31 to 35 nm) and the SA-15 inside its 8.
+RING_BY_ALT_NM = {"SA-11": ((9843, 24.0), (26247, 26.0)), "Patriot": ((9843, 54.0), (26247, 63.0))}
+
+
+def ring_nm(variant: str, alt_ft=None) -> float:
+    """S168: the ring of a live site of this variant against a jet at alt_ft (None = the base `RANGE_NM`, the low-altitude ring). Never smaller than the base ring."""
+    base = RANGE_NM.get(variant, 0)
+    if alt_ft is None:
+        return base
+    reach = base
+    for floor_ft, nm in RING_BY_ALT_NM.get(variant, ()):
+        if alt_ft >= floor_ft and nm > reach:
+            reach = nm
+    return reach
+
 
 LONG_RANGE_NM = 30.0       # a SAM whose ring reaches this far counts as long-range for the station rule (profiles._long_range_threat): the SA-5 and SA-10 pass, the SA-2 / 3 / 6 / 11 do not
 

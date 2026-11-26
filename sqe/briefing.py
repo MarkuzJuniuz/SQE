@@ -5,7 +5,7 @@ from . import narrative, credit_line
 from .aircraft import AIRCRAFT
 from .words import chance_word
 from .models import AssetKind
-from .routes import dist, NM
+from .routes import dist, NM, ring_nm
 
 _SAM_NAME = {"SA-8": "SA-8 Gecko", "AAA": "AAA", "MANPAD": "MANPADS", "SA-2": "SA-2 Guideline", "SA-3": "SA-3 Goa", "SA-6": "SA-6 Gainful",
              "SA-11": "SA-11 Gadfly", "SA-10": "SA-10 Grumble", "SA-15": "SA-15 Gauntlet", "SA-19": "SA-19 Grison",
@@ -21,8 +21,8 @@ def threat_lines(state, tx, ty) -> list:
         d = dist(a.x, a.y, tx, ty) / NM
         if d <= 60:
             nm = _SAM_NAME.get(a.variant, "Early-warning radar")
-            rng = RANGE_NM.get(a.variant)
-            out.append((d, f"{nm}{f' (~{rng} nm)' if rng else ''}, {d:.0f} nm from target"))
+            rng = ring_nm(a.variant)          # S140b1: the ring the routes keep out of (the map draws the same)
+            out.append((d, f"{nm}{f' (~{rng:g} nm)' if rng else ''}, {d:.0f} nm from target"))
     out.sort()
     return [t for _, t in out[:8]]
 
@@ -61,9 +61,18 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
             esc_n = " (" + " and ".join(f"{n} {t.replace('_', '-')}" for t, n in by_e_.items()) + ")" if len(by_e_) > 1 else ""      # one type: "6 fighters" as before
         from .raids import is_kh59
         kh59_ = is_kh59(e)                                   # S48: a Kh-59M raid reads like the SEAD line (it says nothing about how accurate the missiles are)
-        sit += ["", (f"Intelligence reports {rtype_n if e.get('pool') else str(e['bombers']) + ' ' + rtype} with {'Kh-31P anti-radiation missiles' if e.get('sead') else 'Kh-59M cruise missiles' if kh59_ else 'free-fall bombs'} inbound toward {what}, "
+        arm_ = ("Kh-31P anti-radiation missiles", " They will fire from about 50 nm out and turn for home; stop them before they launch.")
+        if e.get("sead") and e.get("land"):                  # B2: a SEAD raid's packages are Kh-58U (65 nm) and Kh-31P (50 nm) ones, alternating; the line names the kinds it has
+            from .difficulty import get as _gdb
+            from .raid_spawns import ARM58_LAUNCH_NM, ARM_LAUNCH_NM, sead_packages
+            from .raids import raid_members as _rm, sead_n as _sn
+            _k = set(sead_packages(_rm(e), _sn(_gdb(state.level)))[1])
+            arm_ = (("Kh-58U and Kh-31P anti-radiation missiles", f" They will fire from about {ARM58_LAUNCH_NM} nm (Kh-58U) and {ARM_LAUNCH_NM} nm (Kh-31P) out and turn for home; stop them before they launch.") if len(_k) > 1
+                    else (("Kh-58U anti-radiation missiles", f" They will fire from about {ARM58_LAUNCH_NM} nm out and turn for home; stop them before they launch.") if "Kh_58U" in _k
+                          else ("Kh-31P anti-radiation missiles", f" They will fire from about {ARM_LAUNCH_NM} nm out and turn for home; stop them before they launch.")))      # S167: a one-missile raid names its own missile
+        sit += ["", (f"Intelligence reports {rtype_n if e.get('pool') else str(e['bombers']) + ' ' + rtype} with {arm_[0] if e.get('sead') else 'Kh-59M cruise missiles' if kh59_ else 'free-fall bombs'} inbound toward {what}, "
                      f"approaching from a bearing of about {e['brg']:.0f} degrees."
-                     + (" They will fire from about 40 nm out and turn for home; stop them before they launch." if e.get("sead") else " They will fire from about 50 nm out and turn for home; stop them before they launch." if kh59_ else "") if e.get("land") else
+                     + (arm_[1] if e.get("sead") else (" The missiles are aimed at the runway." if not e.get("aim") else "") + " They will fire from about 55 nm out and turn for home; stop them before they launch." if kh59_ else "") if e.get("land") else
                      f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
                      f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier. They will launch from about 100 nm out and turn for home; stop them before they fire."
                      + ((" The SEAD packages went in the turn before: a SAM site they did not take down is still up and shooting. Hold on your station, outside the SAM rings, and engage what comes to you; "
@@ -182,7 +191,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if x.get("ecm_player") == "f10":
         com.append("ECM: your jet's jammer cannot be read by the mission. Press F10 > Other > SQE ECM Switch each time you flip it; SQE trusts that call (it starts off). If SQE and your jet disagree, switch the jet's ECM off and press SQE ECM OFF. Shutting the engines down clears it and the menu item returns when you start up again.")
     elif x.get("ecm_player") == "live":
-        com.append("ECM: your jammer is read from the ECM lamp when the ECM script is installed (Settings > DCS integration); without it SQE counts it on over the attack leg.")
+        com.append("ECM: your jammer is read from your cockpit when the ECM script is installed (Settings > DCS integration); without it SQE counts it on over the attack leg.")
     if x.get("link16"):
         com.append("Link 16: your wing are members, the other Link 16 flights of your package are donors (the AWACS is not on the net). Station numbers (STN) are on your kneeboard.")
     if pkg.jtac:

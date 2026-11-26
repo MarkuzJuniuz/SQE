@@ -36,6 +36,11 @@ ROSTERS = {
 }
 
 
+# S150: the sort keys this module uses (they were lambdas)
+def _first_three(row):
+    return (row[0], row[1], row[2])
+
+
 def _share(total: int, desire: dict, cap: dict) -> dict:
     """Split `total` over the keys in proportion to `desire`, never more than `cap[key]` each (largest remainder, ties by key). Less than `total`
     only when the caps run out."""
@@ -51,7 +56,9 @@ def _share(total: int, desire: dict, cap: dict) -> dict:
             out[k] += g; gave += g
         left -= gave
         if left > 0 and gave == 0:                                  # all quotas below 1: the biggest remainders get one each
-            for k in sorted(live, key=lambda k: (-(quota[k] - math.floor(quota[k])), k)):
+            def largest_remainder_then_key(k):
+                return (-(quota[k] - math.floor(quota[k])), k)
+            for k in sorted(live, key=largest_remainder_then_key):
                 if left <= 0:
                     break
                 if out[k] < cap[k]:
@@ -69,7 +76,8 @@ def consolidate(plan: dict, fields: list, cap_heavy: dict | None = None) -> None
     same way, and a swap that would put a field over its heavy-parking cap is skipped. Groups: the light fighters, the strikers; the long-range fighters
     (Su-27, MiG-31 depth gradient) are left as they are."""
     big = 10 ** 6
-    hv = lambda f: sum(n for k, n in plan[f].items() if k in HEAVY)
+    def hv(f):
+        return sum(n for k, n in plan[f].items() if k in HEAVY)
     for group in (LIGHT_FIGHTERS, STRIKERS):
         for _ in range(400):
             best = None
@@ -129,15 +137,19 @@ def allocate(level: int, fields: list, weight: dict, tier: dict, cap_all: dict, 
     roster = ROSTERS[level] if roster is None else roster
     big = 10 ** 6
     plan = {f: {} for f in fields}
-    used = lambda f: sum(plan[f].values())
-    used_hv = lambda f: sum(n for k, n in plan[f].items() if k in HEAVY)
+    def used(f):
+        return sum(plan[f].values())
+    def used_hv(f):
+        return sum(n for k, n in plan[f].items() if k in HEAVY)
 
     def room(f, t):                                                   # can field f take one more jet of type t?
         return used(f) < (cap_all.get(f) or big) and (t not in HEAVY or used_hv(f) < (cap_heavy.get(f) or big))
 
     def no_lone_jets(t):                                              # a single jet of a type at a field joins the biggest block of that type (or tops its field up to two)
         for f in [f for f in fields if plan[f].get(t) == 1]:
-            blocks = sorted((g for g in fields if g != f and plan[g].get(t, 0) >= 2), key=lambda g: (-plan[g][t], fields.index(g)))
+            def most_of_type_then_field_order(g):
+                return (-plan[g][t], fields.index(g))
+            blocks = sorted((g for g in fields if g != f and plan[g].get(t, 0) >= 2), key=most_of_type_then_field_order)
             if not blocks:
                 continue
             if t in LONG_RANGE and plan[blocks[0]][t] >= 4 and room(f, t):      # a long-range jet at a deep field is the "spice": its field gets a second one from the biggest block
@@ -154,7 +166,10 @@ def allocate(level: int, fields: list, weight: dict, tier: dict, cap_all: dict, 
         if t == "MiG_31":
             desire = {f: weight[f] * MIG31_SHARE.get(tier.get(f, 3), 0.5) for f in fields}
         elif t == "Su_27":
-            desire = {f: weight[f] * (1.0 - MIG31_SHARE.get(tier.get(f, 3), 0.5)) for f in fields}
+            if roster.get("MiG_31", 0) > 0:
+                desire = {f: weight[f] * (1.0 - MIG31_SHARE.get(tier.get(f, 3), 0.5)) for f in fields}
+            else:                                                       # S195: a roster with no MiG-31 (Caucasus Level 3: only MiG-29S and Su-27): the Su-27 follows the field weights alone
+                desire = {f: float(weight[f]) for f in fields}
         elif t == "Su_24M":                                             # the SEAD / DEAD / strike supply sits deeper, away from blue's reach: weight x (tier - 1)
             desire = {f: weight[f] * max(1, tier.get(f, 3) - 1) for f in fields}
         else:
@@ -177,7 +192,7 @@ def allocate(level: int, fields: list, weight: dict, tier: dict, cap_all: dict, 
                 donors = [(plan[g].get(t, 0), g, t) for g in fields for t in FIGHTERS if g != f and t not in HEAVY and plan[g].get(t, 0) >= 4]
                 if not donors:
                     break
-                n, g, t = max(donors, key=lambda x: (x[0], x[1], x[2]))
+                n, g, t = max(donors, key=_first_three)
                 if room(f, "MiG_29A") and sum(plan[f].values()) + 2 <= (cap_all.get(f) or big):
                     plan[g][t] -= 2; plan[f][t] = plan[f].get(t, 0) + 2
                     continue

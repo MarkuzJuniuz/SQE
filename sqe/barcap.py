@@ -30,7 +30,7 @@ STATION_MAX_NM = 50            # (v0.41.113: was 30) never further from the asse
 SAM_MARGIN_NM = 8              # a station stays this far outside an enemy SAM ring (judgment call)
 SECTOR_MERGE_DEG = 40          # hostile bases within this many degrees of each other share one area (judgment call)
 MAX_SECTORS = 3
-FLEET_REACH_NM = 70            # a carrier group's SM-2 reach (measured: red CAP pairs were killed 51-67 nm out; raids.FLEET_NM)
+FLEET_REACH_NM = 78            # S168 (XO: resize rings): was 70; 87 SM-2ER launches in the server runs (73 at jets above 8 km): median 72.4 / p90 77.5 / max 78.2 nm. A carrier group's SM-2 reach (measured: red CAP pairs were killed 51-67 nm out; raids.FLEET_NM)
 THREAT_REACH_NM = 300          # a hostile base further than this cannot send anything at the asset (judgment call)
 
 
@@ -154,7 +154,11 @@ def facing_area(state, side: str, asset_id: str, toward_xy: tuple):
     if not areas:
         return None
     want = bearing(areas[0]["ax"], areas[0]["ay"], toward_xy[0], toward_xy[1])
-    return min(areas, key=lambda a: (_angdiff(a["bearing"], want), a["id"]))
+    # Closest to the wanted bearing; the area id breaks a tie.
+    def bearing_gap_then_id(area):
+        return (_angdiff(area["bearing"], want), area["id"])
+
+    return min(areas, key=bearing_gap_then_id)
 
 
 def ensure(state) -> dict:

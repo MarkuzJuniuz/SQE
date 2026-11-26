@@ -87,12 +87,16 @@ def blue_sources(state, aircraft_table, fighter_roles, committed: dict, px, py) 
     out = []
     for sq in state.squadrons.values():
         spec = aircraft_table.get(sq.aircraft)
-        if spec is None or not (set(spec.roles) & fighter_roles) or sq.role == "havcap":          # Phase 9b: a HAVCAP squadron flies guards only
+        if spec is None or not (set(spec.roles) & fighter_roles) or sq.role == "hvaacap":          # Phase 9b: an HVAACAP squadron flies guards only
             continue
         b = state.bases[sq.base_id]
         nm = math.hypot(b.x - px, b.y - py) / NM
         free = sq.available - committed.get(sq.id, 0)
         if free >= 2 and nm <= min(0.6 * spec.combat_radius_nm, BLUE_DISPATCH_NM.get(sq.aircraft, BLUE_DISPATCH_DEFAULT_NM)):
             out.append((sq, b, nm, free))
-    out.sort(key=lambda c: c[2])
+    # Nearest base first.
+    def distance_nm(candidate):
+        return candidate[2]
+
+    out.sort(key=distance_nm)
     return out

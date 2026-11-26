@@ -22,7 +22,7 @@ Pure planning, no pydcs.
 from __future__ import annotations
 import math
 import random
-from . import barcap, clock, refit, reserve, runways
+from . import barcap, clock, fraction, patrol_threat, refit, reserve, runways
 from .loadouts import ENEMY_FIGHTERS
 from .models import AssetKind, BaseKind
 from .routes import NM, bearing, dist, offset
@@ -38,6 +38,11 @@ DAY_TURNS = clock.DAY_MIN // clock.TURN_MIN - len(clock.NIGHT_START_HOURS)     #
 # night values are the plan's own (section 4 Phase 5). Seeded per turn. Judgment call (plan sections 4 and 6; XO tunes it in Phase 13).
 RED_CAP_SHARE = {1: (0.20, 0.05), 2: (0.40, 0.15), 3: (0.55, 0.20)}
 SWEEP_START_SPREAD_MIN = 30                                    # a sweep goes up this soon (random, steps of 10) after its wave opens (judgment call)
+
+
+# S150: the sort keys this module uses (they were lambdas)
+def _wing_field_id(wing):
+    return wing.base_asset_id
 
 
 def _level(d) -> int:
@@ -84,7 +89,9 @@ def take_ready(state, wing, types, n: int) -> list:
     `state.red_air["free"]` (and `["left"]` for fighters), so a second raid, a patrol or an escort does not take them again; the day's sortie cap is `spend`'s job."""
     ra = getattr(state, "red_air", None) or {}
     free = ra.get("free") if ra.get("turn") == state.turn else None
-    pool = sorted((q for q in wing.sqns if q.aircraft in types), key=lambda q: (-(int(free.get(q.id, 0)) if free is not None else q.available), q.id))
+    def most_free_then_id(q):
+        return (-(int(free.get(q.id, 0)) if free is not None else q.available), q.id)
+    pool = sorted((q for q in wing.sqns if q.aircraft in types), key=most_free_then_id)
     out, left_n = [], int(n)
     for q in pool:
         k = min(left_n, int(free.get(q.id, 0)) if free is not None else int(q.available))
@@ -128,7 +135,7 @@ def red_ledger(state, level: int, t_abs: int):
     from .packages import Ledger
     led = Ledger.blank()
     units = []
-    for w in sorted(state.enemy_air, key=lambda w: w.base_asset_id):
+    for w in sorted(state.enemy_air, key=_wing_field_id):
         a = state.assets.get(w.base_asset_id)
         if a is None or a.destroyed or runways.is_closed(state, w.base_asset_id):      # v0.41.254: a cratered field flies no patrols
             continue
@@ -165,18 +172,22 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
     led, held = red_ledger(state, lvl, clock.minute(turn))
     bc = barcap.ensure(state)
     from . import bombers
-    gb = bombers.guard_base(state, lvl)                                    # S116: the quiet day before a carrier raid: no ordinary patrol from the bomber field, fighters from other fields cover it
+    gb = bombers.guard_base(state, lvl)                                    # S116: the quiet day before a carrier raid: no ordinary patrol from the bomber field, fighters from other fields cover it (B1: [(field, pairs)], one per bomber field that is up)
+    gids = {g_[0] for g_ in gb}
     flights, cands = [], []
-    for w in sorted(state.enemy_air, key=lambda w: w.base_asset_id):
+    for w in sorted(state.enemy_air, key=_wing_field_id):
         sqs = [q for q in w.sqns if q.id in led.free]
-        if gb and w.base_asset_id == gb[0]:
+        if w.base_asset_id in gids:
             continue
         if sqs:
             cands += [(w, ar, sqs) for ar in bc["red"] if ar["asset"] == w.base_asset_id]
     want = RED_CAP_SHARE[lvl][1 if night else 0] * len(cands)
-    want = int(want) + (1 if rng.random() < want - int(want) else 0)        # a share of the areas that can be up, a fraction is a seeded chance of one more
-    order = list(range(len(cands)))
-    rng.shuffle(order)
+    want = fraction.whole_units(state, "red_cap", turn, want)               # S207e: a share of the areas that can be up; the fraction is carried, not rolled
+    # S208: the most threatened station first (the CAP sits between the threat and the asset), not a shuffle; equal threats: the seeded draw.
+    def threat_to_station(index):
+        _wing, area, _squadrons = cands[index]
+        return (patrol_threat.blue_on(state, area["ax"], area["ay"]), rng.random())
+    order = sorted(range(len(cands)), key=threat_to_station, reverse=True)
     up = 0
     for i in order:
         if up >= want:
@@ -187,16 +198,18 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
             flights.append({"id": f"rf{turn}-{ar['id']}.{j}", "kind": "CAP", "wing": w.base_asset_id, "type": sq.aircraft, "size": 2, "start": lo, "end": hi, "x": ar["x"], "y": ar["y"],
                             "area": ar["id"], "bearing": ar["bearing"], "ax": ar["ax"], "ay": ar["ay"], "turn": turn, "wave": wave, "squadron": sq.id})
         up += 1 if got else 0
-    if gb:                                                                 # S116: the guard: gb[1] pairs over the bomber field, by day and night, from the nearest fields that have fighters ready
-        base = state.assets[gb[0]]
-        areas = [ar for ar in bc["red"] if ar["asset"] == gb[0]]
+    for gid_, gpairs_ in gb:                                               # S116: the guard: gpairs_ pairs over each bomber field, by day and night, from the nearest fields that have fighters ready (B1: a bomber field's fighters do not guard another one: they are held too)
+        base = state.assets[gid_]
+        areas = [ar for ar in bc["red"] if ar["asset"] == gid_]
         if areas:
             ar = areas[0]
-            src = sorted((w for w in state.enemy_air if w.base_asset_id != gb[0] and dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y) <= bombers.GUARD_FROM_NM * NM),
-                         key=lambda w: (dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y), w.base_asset_id))
+            def wing_distance_then_id(w):
+                return (dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y), w.base_asset_id)
+            src = sorted((w for w in state.enemy_air if w.base_asset_id not in gids and dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y) <= bombers.GUARD_FROM_NM * NM),
+                         key=wing_distance_then_id)
             made = 0
             for w in src:
-                if made >= gb[1]:
+                if made >= gpairs_:
                     break
                 sqs = [q for q in w.sqns if q.id in led.free]
                 got = blue_barcap._pairs(led, sqs, t0, t1, 0) if sqs else []
@@ -207,14 +220,18 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
     g = state.ground or {}
     contested = [i for i, (r, b) in enumerate(zip(g.get("red", []), g.get("blue", []))) if r >= 15 and b >= 15]
     sw_p = 0.0 if night else SWEEPS_PER_DAY[lvl] / max(1, DAY_TURNS)         # the day's sweeps spread over its day turns by a seeded chance (judgment call)
-    if contested and rng.random() < sw_p:
+    if contested and sw_p > 0 and fraction.whole_units(state, "red_sweep", turn, sw_p) >= 1:      # S207e: the day's sweeps come round by the carried fraction
         owner = {q.id: (w, q) for w in state.enemy_air for q in w.sqns}
         spare = [owner[sid] for sid in sorted(led.free) if led.room(sid, NWAVES) >= 2]
         if spare:
-            w, sq = spare[rng.randrange(len(spare))]
+            def most_free_jets(pair):
+                return (led.room(pair[1].id, NWAVES), rng.random())
+            w, sq = max(spare, key=most_free_jets)                    # S207e: the squadron with the most jets free
             wave = next(k for k in range(1, NWAVES + 1) if led.room(sq.id, k) >= 2)         # the first wave with a free pair
             led.take(sq.id, 2, wave)
-            c = g["centers"][rng.choice(contested)]
+            def size_of_fight(index):
+                return (min(g["red"][index], g["blue"][index]), rng.random())
+            c = g["centers"][max(contested, key=size_of_fight)]       # S207e: the sector where the most is being fought over
             lo = t0 + wave_open(wave) + rng.randrange(0, SWEEP_START_SPREAD_MIN + 1, 10)
             flights.append({"id": f"rf{turn}-{w.base_asset_id}-s", "kind": "SWEEP", "wing": w.base_asset_id, "type": sq.aircraft, "size": 2, "start": lo, "end": min(t1, lo + SWEEP_MIN),
                             "x": float(c[0]), "y": float(c[1]), "turn": turn, "wave": wave, "squadron": sq.id})
@@ -236,10 +253,7 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
     return flights
 
 
-GUARD_NM = 150                 # v0.41.11: a patrol guards a SAM site within this of its own field (was 60: the big rear wings guarded only their own
-                               # local sites and the front, Sukhumi and Gudauta, went unguarded in the v0.41.10 run)
 CALLIN_LINK_NM = 40            # v0.41.73: a patrol is linked to (and called in to) the best-rated SAM site within this of its BARCAP station (judgment call)
-GUARD_FWD_NM = 10              # ...from a station this far in front of the site, toward the nearest friendly (blue) field
 GUARD_VALUE = {"SA-10": 4.0, "SA-5": 3.5, "SA-9": 1.0, "SA-11": 3.0, "SA-6": 2.5, "SA-15": 2.0, "SA-19": 1.5, "SA-8": 1.5, "SA-3": 1.5, "SA-2": 1.2}
 # v0.41.20: no needless banzai, red's side. "commit": red fighters go after blue only with at least this quality-weighted edge (red : blue), except
 # over their own field or a SAM site blue is attacking (then at any odds). "soft": how much a raid's pick shies from a target under a full Patriot
@@ -306,7 +320,9 @@ def assign_guards(state, d, objectives) -> None:
             continue
         reads = rng.random() < GUARD_READ[lvl]
         exp = tgt_xy if reads else []
-        ranked = sorted(cands, key=lambda s: (-guard_score(state, s, blue_af, attacked, exp), s.id))
+        def best_guard_score_then_id(s):
+            return (-guard_score(state, s, blue_af, attacked, exp), s.id)
+        ranked = sorted(cands, key=best_guard_score_then_id)
         site = ranked[0]
         f["guard"], f["gx"], f["gy"], f["read"] = site.id, site.x, site.y, reads
 
@@ -335,7 +351,9 @@ def pick(state, tot_min: float, pts: list, tx: float, ty: float, limit: int) -> 
     A wing never supplies more pairs than it has aircraft for right now."""
     out, used = [], {}
     t = tot_min % 1440
-    for f in sorted((state.red_air or {}).get("flights", []), key=lambda f: dist(f["x"], f["y"], tx, ty)):
+    def flight_distance_to_target(f):
+        return dist(f["x"], f["y"], tx, ty)
+    for f in sorted((state.red_air or {}).get("flights", []), key=flight_distance_to_target):
         if len(out) >= limit:
             break
         if not (f["start"] <= t <= f["end"] or f["start"] <= t + 1440 <= f["end"]):

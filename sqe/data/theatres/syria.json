@@ -159,7 +159,8 @@
    "id": "hatay",
    "name": "Hatay",
    "airport": "Hatay",
-   "divert": true
+   "divert": true,
+   "patriot": true
   }
  ],
  "support_base": "paphos",
@@ -450,7 +451,8 @@
    "ab_bassel",
    "ab_duhur",
    "ab_hama",
-   "ab_shayrat"
+   "ab_shayrat",
+   "ab_mouawad"
   ]
  },
  "red_fill": {
@@ -461,41 +463,41 @@
    "ab_shayrat": 42
   },
   "2": {
-   "ab_bassel": 23,
-   "ab_duhur": 11,
-   "ab_hama": 13,
-   "ab_shayrat": 39,
-   "ab_tiyas": 20,
-   "ab_palmyra": 4,
-   "ab_sayqal": 41,
-   "ab_damascus": 30,
-   "ab_dumayr": 43,
-   "ab_nasiriyah": 14
+   "ab_bassel": 27,
+   "ab_duhur": 13,
+   "ab_hama": 15,
+   "ab_shayrat": 46,
+   "ab_tiyas": 23,
+   "ab_palmyra": 5,
+   "ab_sayqal": 48,
+   "ab_damascus": 45,
+   "ab_dumayr": 51,
+   "ab_nasiriyah": 16
   },
   "3": {
-   "ab_bassel": 23,
-   "ab_duhur": 11,
-   "ab_hama": 13,
-   "ab_shayrat": 39,
-   "ab_tiyas": 20,
-   "ab_palmyra": 4,
-   "ab_sayqal": 41,
-   "ab_damascus": 30,
-   "ab_dumayr": 43,
-   "ab_nasiriyah": 14
+   "ab_bassel": 27,
+   "ab_duhur": 13,
+   "ab_hama": 15,
+   "ab_shayrat": 46,
+   "ab_tiyas": 23,
+   "ab_palmyra": 5,
+   "ab_sayqal": 48,
+   "ab_damascus": 45,
+   "ab_dumayr": 51,
+   "ab_nasiriyah": 16
   }
  },
  "wing_weight": {
-  "ab_bassel": 23,
-  "ab_duhur": 11,
-  "ab_hama": 13,
-  "ab_shayrat": 39,
-  "ab_tiyas": 20,
-  "ab_palmyra": 4,
-  "ab_sayqal": 41,
-  "ab_damascus": 30,
-  "ab_dumayr": 43,
-  "ab_nasiriyah": 14
+  "ab_bassel": 27,
+  "ab_duhur": 13,
+  "ab_hama": 15,
+  "ab_shayrat": 46,
+  "ab_tiyas": 23,
+  "ab_palmyra": 5,
+  "ab_sayqal": 48,
+  "ab_damascus": 45,
+  "ab_dumayr": 51,
+  "ab_nasiriyah": 16
  },
  "field_tier": {
   "ab_bassel": 2,
@@ -511,6 +513,10 @@
   "ab_nasiriyah": 4
  },
  "bomber_base": "ab_damascus",
+ "bomber_bases": [
+  "ab_damascus",
+  "ab_bassel"
+ ],
  "squadrons": [
   {
    "id": "vf_11",
@@ -631,7 +637,7 @@
    "base": "larnaca",
    "count": 8,
    "callsign": "Colt",
-   "role": "havcap"
+   "role": "hvaacap"
   },
   {
    "id": "fs_389",
@@ -847,7 +853,9 @@
   "rear_zones": 1,
   "stages": {
    "1": [
-    "ab_bassel"
+    "ab_bassel",
+    "ab_mouawad",
+    "ab_shayrat"
    ],
    "2": [
     "ab_bassel",
@@ -861,7 +869,9 @@
   },
   "victory": {
    "1": [
-    "ab_bassel"
+    "ab_bassel",
+    "ab_mouawad",
+    "ab_shayrat"
    ]
   },
   "counter": {},
@@ -913,12 +923,16 @@
   "levels": {
    "2": {
     "push": 2.0,
+    "hold_days": 11,
     "rebuild_days": 30,
+    "teams": 2,
     "supply_total": 25
    },
    "3": {
     "push": 4.75,
+    "hold_days": 12,
     "rebuild_days": 30,
+    "teams": 2,
     "supply_total": 25
    }
   },
@@ -996,7 +1010,8 @@
  "level_overrides": {
   "1": {
    "bomber_wing": 0,
-   "bomber_escort_wing": 0
+   "bomber_escort_wing": 0,
+   "takeover_days": 1
   },
   "2": {
    "bomber_wing": 0,
@@ -1005,7 +1020,7 @@
    "road_sites_red": 20
   },
   "3": {
-   "bomber_wing": 16,
+   "bomber_wing": 20,
    "bomber_escort_wing": 12,
    "road_sites_red": 20
   }
@@ -1018,22 +1033,20 @@
    "Su_24M": 10
   },
   "2": {
-   "MiG_21Bis": 40,
-   "MiG_23MLD": 58,
-   "MiG_29A": 25,
+   "MiG_21Bis": 44,
+   "MiG_23MLD": 66,
+   "MiG_29A": 36,
    "MiG_25PD": 21,
-   "Su_17M4": 67,
-   "Su_24M": 27
+   "Su_17M4": 50,
+   "Su_24M": 53
   },
   "3": {
-   "MiG_23MLD": 36,
-   "MiG_29A": 16,
-   "MiG_29S": 26,
-   "MiG_25PD": 12,
-   "Su_27": 36,
+   "MiG_29A": 52,
+   "MiG_29S": 58,
+   "Su_27": 60,
    "MiG_31": 8,
-   "Su_17M4": 64,
-   "Su_24M": 40
+   "Su_17M4": 58,
+   "Su_24M": 48
   }
  },
  "extra_sams": [
@@ -1176,16 +1189,16 @@
    "enemy": "the NCC",
    "enemy_long": "the Northern Coastal Command",
    "background": [
-    "Units of Syria's northern coast, calling themselves the Northern Coastal Command (NCC), have refused Damascus's orders and crossed toward the Hatay border. They hold the coast around Latakia and Bassel Al-Assad with the aircraft that came with them: old MiG-21s and MiG-23s, Su-17 strike jets and a few Su-24s, under SA-2 and SA-3 batteries, guns and shoulder-fired missiles. Damascus says it cannot control them; the border commanders say they are protecting Syrian land. Neither is believed.",
-    "Turkey has asked for help and a US-led coalition has answered. The carrier USS Dwight D. Eisenhower and her air wing operate from the eastern Mediterranean; Coalition squadrons fly from Incirlik and the fields behind the Turkish front. You fly with the Navy's carrier air wing or with the Air Force, as your squadron is. The aim is limited: push the NCC back from the border and take Bassel Al-Assad, so a buffer zone opens and the crisis ends in days, not months."
+    "Units of Syria's northern coast, calling themselves the Northern Coastal Command (NCC), have refused Damascus's orders and crossed toward the Hatay border. They hold the coast around Latakia and Bassel Al-Assad, the coast road south and the Homs gap with the aircraft that came with them: old MiG-21s and MiG-23s, Su-17 strike jets and a few Su-24s, under SA-2 and SA-3 batteries, guns and shoulder-fired missiles. Damascus says it cannot control them; the border commanders say they are protecting Syrian land. Neither is believed.",
+    "Turkey has asked for help and a US-led coalition has answered. The carrier USS Dwight D. Eisenhower and her air wing operate from the eastern Mediterranean; Coalition squadrons fly from Incirlik and the fields behind the Turkish front. You fly with the Navy's carrier air wing or with the Air Force, as your squadron is. The aim is to free the cities of the coast and the road south: push the NCC back from the border, take Bassel Al-Assad and the Latakia coast, then Rene Mouawad, then Shayrat and the Homs gap, so the NCC loses the road to Damascus and the crisis ends in weeks, not months."
    ],
-   "intent": "Coalition command's intent: keep the NCC's supply and air defences under pressure and support the ground force as it pushes the line back. Bassel Al-Assad is the objective. Hold Hatay on the way. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
+   "intent": "Coalition command's intent: keep the NCC's supply and air defences under pressure and support the ground force as it pushes the line back. The cities fall in order: Bassel Al-Assad, Rene Mouawad, Shayrat. Hold Hatay on the way. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
    "now": {
     "Offensive": "The advance is moving. Our ground force at the front outweighs the NCC's here, and the air campaign is keeping it that way.",
     "Consolidating": "We hold what we took. The next push waits for the takeover to finish; use the time to hit supply and air defence.",
     "Holding": "The front is not moving. Close air support and supply strikes decide the next move.",
     "Under pressure": "The NCC is gaining ground on our side of the line. Hold the sector in front of our airfields.",
-    "Last stand": "The final objective is next. Take Bassel Al-Assad and the crisis is over.",
+    "Last stand": "The final objective is next. Take it and the crisis is over.",
     "Defeat": "Hatay has fallen and the Coalition has no foothold left on the front. The campaign is lost."
    },
    "beats": {
@@ -1193,9 +1206,11 @@
     "retake": "{base} has been retaken by the Northern Coastal Command.",
     "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. If Hatay falls, the front collapses.",
     "back_blue": "{base} is ours again, though its defences are gone.",
-    "win": "Bassel Al-Assad is ours. The Northern Coastal Command has lost the coast and its air base, Damascus has taken back control and the crisis is over.",
+    "win": "Shayrat is ours. The Northern Coastal Command has lost the coast, the coast road and the Homs gap, Damascus has taken back control and the crisis is over.",
     "lose": "Hatay has fallen. The Coalition withdraws and the campaign is lost.",
-    "fall_ab_bassel": "Bassel Al-Assad is ours. The coast is open and the buffer zone is taking shape."
+    "fall_ab_bassel": "Bassel Al-Assad is ours. The coast is open and the first city is free.",
+    "fall_ab_mouawad": "Rene Mouawad is ours. The coast road as far as the Lebanese border is in coalition hands.",
+    "fall_ab_shayrat": "Shayrat is ours. The Homs gap is open and the NCC's road to Damascus is cut."
    }
   },
   "2": {
@@ -1272,8 +1287,8 @@
   "y0": -580000,
   "y1": 580000
  },
- "max_raid": {
-  "3": 12
+ "land_tu": {
+  "3": 4
  },
  "raid_from_base": 12,
  "raid_grace_days": 7

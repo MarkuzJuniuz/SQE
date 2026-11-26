@@ -16,7 +16,7 @@ from .aircraft import AIRCRAFT
 from .loadouts import JSOW_PER_JET, JDAM_JETS, PEN_PER_JET, gbu_count
 from . import profiles
 from .models import SEAD_AIMS, AssetKind, ObjectiveType, Role
-from .routes import AVOID_NM, FT, AGM88_LAUNCH_NM, JDAM_ALT_FT, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
+from .routes import AVOID_NM, FT, AGM88_AI_REACH_NM, AGM88_LAUNCH_NM, JDAM_ALT_FT, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
 
 JSOW_ATTACK_S = 240           # a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home. Was 120 (v0.41.46; XO's run: releases came 25-60 s before the point). v0.41.362: 240 (judgment call): same marshal-exit lateness as the SLAM-ER (XO's run 2026-11-10 22-33-46, about 95 s late), plus margin
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
@@ -25,8 +25,6 @@ AIR_GATE_KM = 100              # v0.41.214 (XO): was 70, the hold sits outside t
 AIR_HOLD_STRIKE_S = 900        # v0.41.235 (XO 2026-11-03): was 360; 15 min, the air fight takes time on every level. ...and holds at most this long (old judgment call: the Day-2 fight of XO's 2026-10-30 run lasted about that), then goes home (v0.41.205: it used to go in all the same and was shot down)
 AIR_HOLD_CAS_S = 900           # v0.41.235 (XO 2026-11-03): was 240, the same 15 min as strikers now (XO overrides the old 'troops are waiting' shorter hold)
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
-SA10_GATE_KM = samtier.get("SA-10", "gate_km")              # (S90 P4: per umbrella system in samtier.SYSTEMS) ...but never inside an SA-10's reach (55 km): against an SA-10 target, or under an SA-10 umbrella, the gate (and so the hold
-                               # orbit) is this far from the SA-10. v0.39.21 run: Hornet 1 held 40 km from the Sukhumi SA-6, 26 km from the SA-10, and was shot down there
 SEAD_WAVE_KM = 60              # SEAD packages in one mission whose targets are this close together reach their HARM points at the same moment (the builder's sync)
 TRACK_RADARS = {"SNR_75V", "snr s-125 tr", "Kub 1S91 str", "S-300PS 40B6M tr", "Tor 9A331", "RPC_5N62V"}          # fire-control / track radars (unit type names as DCS stores them).
 # The Tor carries its radar on the launcher: the vehicle IS the radar, so a Tor battery is blind only when its vehicles are down.
@@ -35,6 +33,28 @@ TOR_COVER_KM = 12.0           # a Tor this close to a SEAD/DEAD target, or to th
 SEARCH_RADARS = {"p-19 s-125 sr", "SA-11 Buk SR 9S18M1", "S-300PS 64H6E sr", "1L13 EWR", "55G6 EWR", "RLS_19J6"}      # S90 P3b: + the SA-5's ST-68U "Tin Shield"
 CAS_ZONE_M = 9000              # the AI CAS engage circle around TGT (m): the column stays within about 2 km of the point (CAS_ENEMY_ADVANCE_M, CAS_PATROL_MAX_M); S92 tried 18000 and put it back (a wider circle only adds neighbouring air defence)
 KPH = 1.852
+
+
+def own_target_keep(target):
+    """S153: the keep-out circle (x, y, nm) a SEAD flight's HARM point keeps from its OWN target, or None.
+
+    Only for a live SA-10 target: before this, the HARM point sat 35 nm from it, exactly at its reach, and the T1 test's S-300 killed the SEAD flight there.
+    Not for an SA-5: its harm_nm (71) is beyond what the AI's HARMs reach (AGM88_AI_REACH_NM), so the flight would have to fly in anyway.
+    """
+    if target is None or target.destroyed:
+        return None
+    if target.variant not in tm.UMBRELLA_VARIANTS:
+        return None
+    keep_nm = samtier.get(target.variant, "harm_nm")
+    if keep_nm > AGM88_AI_REACH_NM:
+        return None
+    return (target.x, target.y, keep_nm)
+
+
+def harm_reaches(point_x, point_y, site) -> bool:
+    """S153: True when `site` is within the AI's HARM reach (AGM88_AI_REACH_NM) of the HARM point. A HARM task on a site farther away
+    makes the AI fly toward it, through whatever stands in between (test T1: the Gudauta umbrella pulled the SEAD flight across the Sukhumi S-300)."""
+    return dist(point_x, point_y, site.x, site.y) <= AGM88_AI_REACH_NM * NM
 
 
 def _expend_for(each):
@@ -81,7 +101,7 @@ class StrikeTasks:
             # window (one HARM went at it), lit up a minute later and killed the whole JSOW flight; a second flight still holding HARMs for it covers that.
             um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
             ug_ = self.groups_by_asset.get(um_.id) if um_ else None
-            if ug_ is not None and um_.id != package.objective.target_id:
+            if ug_ is not None and um_.id != package.objective.target_id and harm_reaches(w.x, w.y, um_):      # S153: only an umbrella its HARMs reach from the HARM point
                 ctu = task.ControlledTask(task.AttackGroup(ug_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 ctu.stop_after_time(int(w.eta_s) + 420); wp.tasks.append(ctu)
             # v0.41.22: no clear JSOW axis: the neighbouring sites that still reach the JSOW launch point get this flight's HARMs as well
@@ -94,7 +114,7 @@ class StrikeTasks:
             # the first HARM flight opens on the umbrella (the SA-10 covering this target): it reaches every jet in the wave, so it goes first
             um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
             ug_ = self.groups_by_asset.get(um_.id) if um_ else None
-            if ug_ is not None:
+            if ug_ is not None and harm_reaches(w.x, w.y, um_):      # S153: only an umbrella its HARMs reach from the HARM point
                 ctu = task.ControlledTask(task.AttackGroup(ug_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 ctu.stop_after_time(int(w.eta_s) + 180); wp.tasks.append(ctu)
         ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.ARM, group_attack=True))
@@ -145,7 +165,22 @@ class StrikeTasks:
                     "ux": um_.x if um_ else None, "uz": um_.y if um_ else None, "um": samtier.get(um_.variant, "gate_km") * 1000 if um_ else None,
                     "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role in (Role.STRIKE, Role.CAS), "you": bool(f.is_player), "pkg": package.id,
                     "acap": AIR_HOLD_CAS_S if f.role == Role.CAS else AIR_HOLD_STRIKE_S, "tx": tga_.x if tga_ is not None else None, "tz": tga_.y if tga_ is not None else None}
+            if (ai_ and not fol_ and obj_.type in (ObjectiveType.STRIKE, ObjectiveType.CAS) and f.role in (Role.STRIKE, Role.CAS)
+                    and any(x_.role == Role.SEAD and not x_.tag for x_ in package.flights)):
+                gate["more"] = self._gate_cover_ids(package, tga_, um_)           # S86b: the strikers also wait for the radars of the sites that cover the target (the ones the package's SEAD is tasked on)
         return gate
+
+    def _gate_cover_ids(self, package, tga, um) -> list:
+        """S86b: the ids of the SAM sites a plain STRIKE / CAS package's SEAD is tasked on (`war.covering_sams` of the target, the same call and `short` as `_sead_attack_tasks`) plus the
+        umbrella site that covers the target, those that have a group in this mission. The airfield (or depot, or fuel farm) the strikers fly to has no radars of its own: the gate reads these."""
+        if tga is None:
+            return []
+        from .war import covering_sams
+        obj_ = package.objective
+        ids = [x.id for x in covering_sams(self.state, tga, short=obj_.type == ObjectiveType.CAS or bool((package.extra or {}).get("tor_escort")))]
+        if um is not None and not um.destroyed and um.id not in ids:
+            ids.append(um.id)
+        return [i for i in ids if i != tga.id and i in self.groups_by_asset]
 
     def _cas_tasks(self, wp, w, armor, tot_s, floor_ft=0, per_unit=False):
         """AI CAS: look at the fight, attack the column, then keep working the zone. Time-boxed so they eventually go home.
@@ -202,9 +237,13 @@ class StrikeTasks:
             return None
         out = []
         if package.objective.type == ObjectiveType.DEAD:
-            um = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
+            target = self.state.assets.get(package.objective.target_id)
+            um = tm.umbrella_site(self.state, target)
             if um:
                 out.append((um.x, um.y, samtier.get(um.variant, "harm_nm")))
+            own_keep = own_target_keep(target)
+            if own_keep is not None:
+                out.append(own_keep)
         out += self._zone_sams(package)
         return out or None
 
@@ -326,7 +365,9 @@ class StrikeTasks:
                 near = tm.poly_dist(a.x, a.y, leg) <= TOR_COVER_KM * 1000
             if near:
                 out.append((a, g))
-        return sorted(out, key=lambda ag: dist(ag[0].x, ag[0].y, t.x, t.y))
+        def distance_to_target(entry):
+            return dist(entry[0].x, entry[0].y, t.x, t.y)
+        return sorted(out, key=distance_to_target)
 
     def _jsow_ramp_tasks(self, wp, f, package, eta_s=None) -> None:
         """v0.41.313 (XO 2026-11-06): the JSOW-As of a Standoff Counter-Air, one per aim point: the first parked jet and the one furthest from it (the JSOW's cluster
@@ -338,7 +379,14 @@ class StrikeTasks:
         n_ = max(1, JSOW_PER_JET.get(f.aircraft, 2))
         aims = [pts[0]]
         if len(pts) > 1 and n_ > 1:
-            aims.append(max(pts, key=lambda q: math.hypot(q[0] - pts[0][0], q[1] - pts[0][1])))
+            farthest_aim = None
+            farthest_aim_gap = None
+            for aim_point in pts:
+                aim_gap = math.hypot(aim_point[0] - pts[0][0], aim_point[1] - pts[0][1])
+                if farthest_aim_gap is None or aim_gap > farthest_aim_gap:
+                    farthest_aim = aim_point
+                    farthest_aim_gap = aim_gap
+            aims.append(farthest_aim)
         each = max(1, n_ // len(aims))
         exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))   # v0.41.327 (XO): designated points only, no hunting
@@ -498,7 +546,14 @@ class StrikeTasks:
         """The attack heading along the line of parked jets (the bearing between the two furthest apart), or None when the ramp is shorter than `RAMP_AXIS_MIN_M`."""
         from .mission_builder import RAMP_AXIS_MIN_M                # the builder's module imports this one, so it is imported here, when called
         if pts and span >= RAMP_AXIS_MIN_M:
-            p1_, p2_ = max(((p, q) for p in pts for q in pts), key=lambda pq: dist(pq[0][0], pq[0][1], pq[1][0], pq[1][1]))
+            p1_, p2_ = None, None
+            widest_gap = None
+            for first_point in pts:
+                for second_point in pts:
+                    pair_gap = dist(first_point[0], first_point[1], second_point[0], second_point[1])
+                    if widest_gap is None or pair_gap > widest_gap:
+                        p1_, p2_ = first_point, second_point
+                        widest_gap = pair_gap
             return int(round(math.degrees(math.atan2(p2_[1] - p1_[1], p2_[0] - p1_[0])))) % 360
         return None
 
@@ -528,7 +583,13 @@ class StrikeTasks:
             return [(us_[0].position.x, us_[0].position.y)] * SLAM_AIMS if us_ else [aim] * SLAM_AIMS
         spots = list(self._bld_xy.get(package.objective.target_id) or [])
         if len(spots) > SLAM_AIMS:
-            far = max(spots[1:], key=lambda s_: dist(s_[0], s_[1], spots[0][0], spots[0][1]))
+            far = None
+            far_gap = None
+            for other_spot in spots[1:]:
+                other_gap = dist(other_spot[0], other_spot[1], spots[0][0], spots[0][1])
+                if far_gap is None or other_gap > far_gap:
+                    far = other_spot
+                    far_gap = other_gap
             spots = [spots[0], far][:SLAM_AIMS]
         return spots or [aim]
 
@@ -565,10 +626,29 @@ class StrikeTasks:
         if k_ < 2:
             return None
         cen_ = (sum(s_[0] for s_ in spots) / len(spots), sum(s_[1] for s_ in spots) / len(spots))
-        chosen = [min(spots, key=lambda s_: dist(s_[0], s_[1], cen_[0], cen_[1]))]
+        central_spot = None
+        central_gap = None
+        for spot in spots:
+            spot_gap = dist(spot[0], spot[1], cen_[0], cen_[1])
+            if central_gap is None or spot_gap < central_gap:
+                central_spot = spot
+                central_gap = spot_gap
+        chosen = [central_spot]
         while len(chosen) < k_:
             rest = [s_ for s_ in spots if s_ not in chosen]
-            chosen.append(max(rest, key=lambda s_: min(dist(s_[0], s_[1], c_[0], c_[1]) for c_ in chosen)))
+            # the spot farthest from the ones already chosen (its distance to the nearest chosen spot is the largest)
+            farthest_spot = None
+            farthest_gap = None
+            for rest_spot in rest:
+                nearest_chosen = None
+                for chosen_spot in chosen:
+                    chosen_gap = dist(rest_spot[0], rest_spot[1], chosen_spot[0], chosen_spot[1])
+                    if nearest_chosen is None or chosen_gap < nearest_chosen:
+                        nearest_chosen = chosen_gap
+                if farthest_gap is None or nearest_chosen > farthest_gap:
+                    farthest_spot = rest_spot
+                    farthest_gap = nearest_chosen
+            chosen.append(farthest_spot)
         each = n_ // k_
         exp = _expend_for(each)
         out = []
@@ -594,7 +674,7 @@ class StrikeTasks:
         cx_, cy_ = ap_.position.x, ap_.position.y
         n_ = self._gbu_total(f) if f.aircraft in JDAM_JETS else 0
         # S138b (XO run 2026-11-21, Syria L3 sortie 11: GBUs at t 1001-1004, then a second pass 150 s later and all four jets shot down): DCS flies each Bombing task as its own run, so
-        # several aim points meant several passes over the field. ONE aim point at the reference point, every GBU on it (`Expend.All`): one pass. `runways.HITS_TO_CLOSE` is 1.
+        # several aim points meant several passes over the field. ONE aim point at the reference point, every GBU on it (`Expend.All`): one pass. `runways.HITS_TO_CLOSE` is 4 (S148): one pass still fits, the jets carry the bombs (every GBU on the one aim point: a 2-jet Viper / Tomcat flight 4, a 4-jet flight 8).
         k_ = 1
         offs_ = [(i_ - (k_ - 1) / 2.0) * RUNWAY_AIM_STEP_M for i_ in range(k_)]
         each_ = n_ // k_ if n_ else 0

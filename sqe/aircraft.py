@@ -9,6 +9,12 @@ from dcs import planes
 from .models import Role, BaseKind, RefuelMethod
 
 
+# Default cruise altitude per role for a new RouteProfile (a dataclass default must be built by a function, so each profile gets its own dict).
+def _default_alt_ft() -> dict:
+    return {Role.STRIKE: 20000, Role.SEAD: 25000, Role.TARCAP: 24000,
+            Role.ESCORT: 26000, Role.SWEEP: 26000, Role.CAS: 9000}
+
+
 @dataclass
 class RouteProfile:
     """Altitudes (ft) and ground speeds (kts) for the route planner. Waypoint speeds are ground speed."""
@@ -21,9 +27,9 @@ class RouteProfile:
     marshal_kts: int = 380
     cap_alt_ft: int = 25000
     cap_kts: int = 380
+    cover_kts: int = 0               # S157: the TARCAP / escort / sweep station speed (0 = cap_kts); the BARCAP / support orbits keep cap_kts
     cap_leg_nm: int = 25
-    alt_ft: dict = field(default_factory=lambda: {Role.STRIKE: 20000, Role.SEAD: 25000, Role.TARCAP: 24000,
-                                                  Role.ESCORT: 26000, Role.SWEEP: 26000, Role.CAS: 9000})
+    alt_ft: dict = field(default_factory=_default_alt_ft)
     push_kts: int = 500
     ip_kts: int = 510
     attack_kts: int = 510
@@ -82,7 +88,7 @@ AIRCRAFT: dict[str, AircraftSpec] = {
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.TARCAP, _R.STRIKE}), RefuelMethod.BASKET, 2, 300, 450, True,
         RouteProfile(depart_alt_ft=6000, depart_kts=330, aar_alt_ft=20000, aar_kts=350,
                      marshal_alt_ft=24000, marshal_kts=380, cap_alt_ft=25000, cap_kts=400,
-                     alt_ft={_R.STRIKE: 25000, _R.TARCAP: 26000, _R.ESCORT: 28000, _R.SWEEP: 28000, _R.SEAD: 25000, _R.CAS: 12000},
+                     alt_ft={_R.STRIKE: 25000, _R.TARCAP: 33000, _R.ESCORT: 33000, _R.SWEEP: 33000, _R.SEAD: 25000, _R.CAS: 12000}, cover_kts=440,
                      push_kts=510, ip_kts=510, attack_kts=510, egress_kts=540, push_nm=70, ip_nm=25, egress_nm=30,
                      tgt_note="JDAM target. Release", special_points=("IP", "ST")),
         first_wp_label="0", bingo_lbs=3000, joker_lbs=4500),
@@ -94,7 +100,7 @@ AIRCRAFT: dict[str, AircraftSpec] = {
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.TARCAP, _R.STRIKE}), RefuelMethod.BASKET, 2, 300, 450, True,
         RouteProfile(depart_alt_ft=6000, depart_kts=330, aar_alt_ft=20000, aar_kts=350,
                      marshal_alt_ft=24000, marshal_kts=380, cap_alt_ft=25000, cap_kts=400,
-                     alt_ft={_R.STRIKE: 25000, _R.TARCAP: 26000, _R.ESCORT: 28000, _R.SWEEP: 28000, _R.SEAD: 25000, _R.CAS: 12000},
+                     alt_ft={_R.STRIKE: 25000, _R.TARCAP: 33000, _R.ESCORT: 33000, _R.SWEEP: 33000, _R.SEAD: 25000, _R.CAS: 12000}, cover_kts=440,
                      push_kts=510, ip_kts=510, attack_kts=510, egress_kts=540, push_nm=70, ip_nm=25, egress_nm=30,
                      tgt_note="Laser-guided target. Release", special_points=("IP", "ST")),
         first_wp_label="0", bingo_lbs=3000, joker_lbs=4500),
@@ -111,7 +117,7 @@ AIRCRAFT: dict[str, AircraftSpec] = {
         "F-15C", "F-15C Eagle", "F_15C", BaseKind.AIRFIELD,
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.TARCAP}), RefuelMethod.BOOM, 1, 400, 480, True,
         RouteProfile(no_low=True, aar_alt_ft=22000, aar_kts=350, marshal_alt_ft=27000, cap_alt_ft=28000, cap_kts=400,
-                     alt_ft={_R.TARCAP: 27000, _R.ESCORT: 30000, _R.SWEEP: 30000, _R.STRIKE: 25000, _R.SEAD: 25000, _R.CAS: 12000},
+                     alt_ft={_R.TARCAP: 33000, _R.ESCORT: 33000, _R.SWEEP: 33000, _R.STRIKE: 25000, _R.SEAD: 25000, _R.CAS: 12000}, cover_kts=460,
                      push_kts=520, ip_kts=520, attack_kts=520, egress_kts=550, push_nm=80),
         first_wp_label="0", fc3=True, bingo_lbs=3500, joker_lbs=5000),
     # v0.41.358 (F-15E phase, XO 2026-11-10): AI-only strike squadrons on the OLD AI model F_15E (not the RAZBAM F-15ESE module, so nobody needs to own it; pydcs gives it the callsigns Dude ... Tahoe).

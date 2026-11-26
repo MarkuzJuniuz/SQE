@@ -123,7 +123,12 @@ def setpiece_text(state, pkg, yours: bool, aircraft: str = "") -> list:
     cv = state.bases.get(pkg.objective.target_id)
     site = cv.name if cv is not None else "the task force"
     ba_ = state.assets.get(ex.get("bomber_wing") or "")                           # S90 J8: the bomber wing's field (Mozdok in the Caucasus, Damascus in Syria)
-    first = (f"Radar and the E-2 have a raid forming up out of {ba_.name if ba_ is not None else 'Mozdok'}: {bomb} Backfires with {esc} Flankers on their wing, bearing {ex.get('brg', 0):.0f} degrees onto {site}. "
+    out_ = [ba_.name] if ba_ is not None else ["Mozdok"]
+    for p_ in ex.get("pool") or []:                                               # B1: a raid drawn from two bomber fields forms up out of both
+        a_ = state.assets.get(p_.get("wing") or "")
+        if a_ is not None and a_.name not in out_:
+            out_.append(a_.name)
+    first = (f"Radar and the E-2 have a raid forming up out of {' and '.join(out_)}: {bomb} Backfires with {esc} Flankers on their wing, bearing {ex.get('brg', 0):.0f} degrees onto {site}. "
              f"Every fighter that can reach the task force is being launched to meet it.")
     if yours:
         return [first, "Kill the bombers before they reach launch range, then the escorts. One of these flights is yours; the others fly with you."]
@@ -171,8 +176,10 @@ _PLAYER = {"recovered": [""],                         # v0.41.414 (XO): nothing 
            "ejected": ["You ejected and are being recovered.", "You punched out. Search-and-rescue is on the way."],
            "lost": ["Your aircraft was lost. The squadron will write to your family if you are not found.",
                     "You did not return."],
+           "captured": ["You landed at an enemy field and were taken prisoner. The jet is lost.", "You put down at a field the enemy holds. You and your jet are captured."],
+           "interned": ["You landed at a neutral field and were interned. The jet is lost.", "You put down at a neutral field: you are interned and the jet stays there."],
            "airborne": [""]}
-_FOLLOW = {"great": ["Command wants more of the same tomorrow.", "The enemy will feel this for days."],
+_FOLLOW = {"great": ["Command wants more of the same tomorrow.", "That one will hurt them."],
            "good": ["The picture is improving.", "It was enough. Rest, and get ready for tomorrow."],
            "mixed": ["Intel will reassess before the next tasking.", "We take the gain and plan around the cost."],
            "bad": ["Command will rethink the approach.", "Get some rest. We will try again."]}

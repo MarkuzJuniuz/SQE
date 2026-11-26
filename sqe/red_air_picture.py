@@ -10,7 +10,7 @@ from dcs import action, condition, mapping, planes, task, triggers
 from dcs.translation import String
 from dcs.unit import Skill
 
-from . import reactive, redair, runways, scramble
+from . import blue_commit, reactive, redair, runways, scramble
 from . import reserve as _res
 from . import threatmap as tm
 from .difficulty import ai_skill
@@ -82,13 +82,15 @@ class RedAirPicture:
         st = self.state
         wings = [(w, st.assets[w.base_asset_id]) for w in st.enemy_air if w.available > 0 and not st.assets[w.base_asset_id].destroyed and not runways.is_closed(st, w.base_asset_id)
                  and w.fighter_types()]
-        wings.sort(key=lambda p: dist(p[1].x, p[1].y, tx, ty))
+        def wing_distance_to_target(wing_entry):
+            return dist(wing_entry[1].x, wing_entry[1].y, tx, ty)
+        wings.sort(key=wing_distance_to_target)
         return wings
 
     def _plan_cap_stations(self, package, tx, ty, geom, keepout) -> list:
         """Known enemy CAP stations: the enemy's own air plan for the day (redair.py) decides which patrol pairs are up at the time on target near the
         target or the route, and where (20-25 nm in front of their own base, or over the contested sector for a sweep). The stations here are only moved
-        clear of the tanker, AWACS, HAVCAP and the fleet. How many enemy fighters there are overall is still the package's threat size; patrols
+        clear of the tanker, AWACS, HVAACAP and the fleet. How many enemy fighters there are overall is still the package's threat size; patrols
         fill the first places, the rest are alert aircraft."""
         self._red_sel = []
         n_fl = package.n_def // 2
@@ -120,8 +122,10 @@ class RedAirPicture:
         runway when called) and a timed trigger calls it so it reaches the station when its window opens. The pair on station stays until its own window
         ends, so the station is never empty. Not flown when the wing has no second pair, the airfield is gone, or the unit limit is reached."""
         st = self.state
+        def start_of_flight(flight):
+            return flight["start"]
         nxt = min((f for f in (st.red_air or {}).get("flights", []) if f.get("area") and f["area"] == pf.get("area") and f["kind"] == "CAP"
-                   and f["id"] != pf["id"] and pf["start"] < f["start"] <= pf["end"]), key=lambda f: f["start"], default=None)
+                   and f["id"] != pf["id"] and pf["start"] < f["start"] <= pf["end"]), key=start_of_flight, default=None)
         if nxt is None:
             return
         t_arr = (nxt["start"] - self._start_min) * 60
@@ -138,7 +142,8 @@ class RedAirPicture:
             return
         tname = sq.aircraft
         load = enemy_cap_loadout(tname)
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         sx, sy = cp["x"], cp["y"]
         g, _how = self._alert_group(self.red, f"Relief {i + 1}", getattr(planes, tname), ap, task.CAP, None, 2, (sx, sy))
         self._alerts[-1]["sq"] = sq.id
@@ -162,6 +167,7 @@ class RedAirPicture:
         if self.o.enemy_unlimited_fuel:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
         manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
+        self._commit_register("red", g, blue_commit.red_reach_nm(tname), 0, int(max(t_arr + 300, (nxt["end"] - self._start_min) * 60)))      # S160
         self._red_intel.append(f"Relief for that patrol: a pair of {tname.replace('_', '-')} from {self._short(a.name)} on station {redair.hhmm(nxt['start'])}.")
 
     def _spawn_red_standby(self, pf, cp, i, gname, bf, wings, manifest, skill, tot_s, tx, ty, alt, spd) -> None:
@@ -173,7 +179,9 @@ class RedAirPicture:
         end_s = int(max(tot_s + 300, (pf["end"] - self._start_min) * 60))
         ent = {"g": gname, "n": 2, "bf": bf, "rf": 0, "u": float(end_s)}
         self._cover.append(ent)
-        cands = sorted(((dist(a_.x, a_.y, sx, sy), w_, a_) for w_, a_ in wings if _res.red_hold_left(self.state, w_, self._hold_drawn, ENEMY_FIGHTERS) >= 2 and a_.airport), key=lambda c_: c_[0])
+        def first_field_of(candidate):
+            return candidate[0]
+        cands = sorted(((dist(a_.x, a_.y, sx, sy), w_, a_) for w_, a_ in wings if _res.red_hold_left(self.state, w_, self._hold_drawn, ENEMY_FIGHTERS) >= 2 and a_.airport), key=first_field_of)
         if not cands or cands[0][0] > ALERT_REACH_NM * NM or 2 > self._units_room():
             return
         _d, w, a = cands[0]
@@ -185,7 +193,8 @@ class RedAirPicture:
             return
         tname = sq.aircraft
         load = enemy_cap_loadout(tname)
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         g, _how = self._alert_group(self.red, f"Standby {i + 1}", getattr(planes, tname), ap, task.CAP, None, 2, (sx, sy))
         self._alerts[-1]["sq"] = sq.id
         ent["rf"] = self._alerts[-1]["f"]
@@ -203,13 +212,15 @@ class RedAirPicture:
         if self.o.enemy_unlimited_fuel:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
         manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
+        self._commit_register("red", g, blue_commit.red_reach_nm(tname), 0, end_s + 900)      # S160: a standby pair commits once airborne
 
     def _arm_callin(self, g, ap, st_xy, hot_xy, zone_nm, alt, spd, end_s, tot_s, bf_, cp, tx, ty, cap2=None, land=None) -> None:
         """v0.41.111: adds the hotspot leg AFTER the landing point of a patrol route: HOTSPOT (orbit, engages inside its own circle), BACK (orbit on the
         station until the shift ends), the racetrack leg and a second landing. Nothing flies it unless a SwitchWaypoint (SQE_CALLIN) jumps the pair onto
         it. A pair sent home by the hook (bf_) ends both orbits at once and goes home. v0.41.112 (blue): `cap2` is the racetrack leg's end point and
         `land` the way home, when the caller has its own (a carrier deck, a staggered recovery point)."""
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         sx, sy = st_xy
         hx, hy = hot_xy
         w_h = g.add_waypoint(pt(hx, hy), alt, spd, "HOTSPOT")
@@ -234,7 +245,14 @@ class RedAirPicture:
     def _red_threat(self, package, geom, x, y):
         """v0.41.119: the blue shooters' launch point nearest (x, y) (the points the TARCAP / escort use), else None."""
         lps = (getattr(self, "_launch_pts", None) or {}).get(package.id) or self._launch_points(package, geom)
-        return min(lps, key=lambda q: dist(x, y, q[0], q[1])) if lps else None
+        nearest_launch_point = None
+        nearest_launch_m = None
+        for launch_point in lps:
+            launch_m = dist(x, y, launch_point[0], launch_point[1])
+            if nearest_launch_m is None or launch_m < nearest_launch_m:
+                nearest_launch_point = launch_point
+                nearest_launch_m = launch_m
+        return nearest_launch_point
 
     def _contested(self, site_xy, tx, ty, package, geom) -> bool:
         """v0.41.119: is the SAM site a red patrol guards within CONTEST_NM of blue's shooters' launch points or of the target?"""
@@ -264,7 +282,13 @@ class RedAirPicture:
         if self._hot_flag:
             t1.add_condition(condition.FlagIsTrue(self._hot_flag))
         else:
-            wa = min(wings, key=lambda w_: dist(w_[1].x, w_[1].y, tx, ty))
+            wa = None
+            wing_nearest_m = None
+            for wing_entry in wings:
+                wing_m = dist(wing_entry[1].x, wing_entry[1].y, tx, ty)
+                if wing_nearest_m is None or wing_m < wing_nearest_m:
+                    wa = wing_entry
+                    wing_nearest_m = wing_m
             zx_, zy_, zr_ = self._field_zone(wa[1], tx, ty)
             zone = self.m.triggers.add_triggerzone(mapping.Point(zx_, zy_, self.t), zr_ * NM, True, f"callin {wa[1].id}")
             t1.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
@@ -294,13 +318,27 @@ class RedAirPicture:
         if not cvs:
             return 90
         h = bearing(sx, sy, tx, ty)
-        far = lambda sd: min(dist(*offset(sx, sy, h + sd, 20 * NM), cx, cy) for cx, cy in cvs)
+        def far(sd):
+            # how far the point 20 nm out on this side is from the nearest carrier group
+            side_x, side_y = offset(sx, sy, h + sd, 20 * NM)
+            nearest_m = None
+            for carrier_x, carrier_y in cvs:
+                carrier_m = dist(side_x, side_y, carrier_x, carrier_y)
+                if nearest_m is None or carrier_m < nearest_m:
+                    nearest_m = carrier_m
+            return nearest_m
         return 90 if far(90) >= far(-90) else -90
 
     def _spawn_air_picture(self, package, tx, ty, tot_s, geom, manifest, keepout):
         """Known CAP flights are airborne from t=0 on briefed stations. The rest of the defenders are alert aircraft sitting on real
         enemy airfields; they take off (scramble) when the package is detected inside the field's detection zone."""
         if package.objective.type == ObjectiveType.FLEET_DEFENSE:
+            raid_extra = package.extra or {}
+            first_wave = raid_extra.get("layer_of") or raid_extra.get("flank_after")
+            if first_wave and first_wave in getattr(self, "_layer_present", ()) and first_wave != package.objective.id and first_wave not in self._layer_impact and first_wave not in self._layer_gone:
+                # S183 / S186: this raid goes in behind another raid of the mission (a second SEAD wave, a flank raid): it is built after the mission's other packages, when that raid's missile time is known (`MissionBuilder.build`)
+                self._deferred_raid = (package, tx, ty, tot_s, geom, manifest)
+                return
             return self._spawn_raid(package, tx, ty, tot_s, geom, manifest)
         st, d, r = self.state, self.d, self.vrng
         n_fl = package.n_def // 2
@@ -310,7 +348,8 @@ class RedAirPicture:
         if not wings:
             return
         skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
         n_cap = len(self._cap_plan)                         # the planned patrol pairs that are up (redair.py); the rest of the defenders are alert aircraft
         alt, spd = 22000 * FT, 400 * KPH
         # v0.41.20: no needless banzai for red. Blue air-to-air jets in this fight (escorts, sweeps, support CAP) against red's doctrine (redair.commits)
@@ -349,7 +388,7 @@ class RedAirPicture:
             if i < n_cap:                                   # known CAP, on station from the start
                 cp = self._cap_plan[i]
                 sx, sy = cp["x"], cp["y"]
-                for kx, ky, knm in keepout:                 # tanker / AWACS / HAVCAP stay well clear as well
+                for kx, ky, knm in keepout:                 # tanker / AWACS / HVAACAP stay well clear as well
                     if dist(sx, sy, kx, ky) < knm * NM:
                         sx, sy = offset(kx, ky, bearing(kx, ky, sx, sy), knm * NM)
                 self._bandit_stations.append((sx, sy))       # S89 B1: a known CAP station is a wake detector (`_wire_dormant`)
@@ -466,6 +505,12 @@ class RedAirPicture:
             if not load:
                 self.warns.append(f"{tname}: no air-to-air loadout found; spawned unarmed")
             manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
+            # S160: a red patrol / sweep commits until its planned window ends, an alert pair until it flies home
+            if i < n_cap:
+                commit_end_ = int(max(tot_s + 300, (pf_["end"] - self._start_min) * 60))
+            else:
+                commit_end_ = int(tot_s + ALERT_STAY_AFTER_TOT_S)
+            self._commit_register("red", g, blue_commit.red_reach_nm(tname), 0, commit_end_)
             if i < n_cap and pf_["kind"] == "CAP" and getattr(self, "_detect_full", True):     # v0.41.346: an unseen package draws no standby or relief pair either
                 self._spawn_red_relief(pf_, self._cap_plan[i], i, manifest, skill, tot_s, tx, ty, alt, spd)
                 self._spawn_red_standby(pf_, self._cap_plan[i], i, g.name, bf_, wings, manifest, skill, tot_s, tx, ty, alt, spd)

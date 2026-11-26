@@ -51,7 +51,10 @@ def field_side(th: dict, x: float, y: float) -> str:
     """The side of the airfield nearest a point: blue if it is one of the theatre's blue-side airports (`road_blue_airports`), else red (the same rule as before v0.41.258)."""
     ap = airports(th)
     blue = set(th.get("road_blue_airports") or [])
-    near = min(ap, key=lambda n: math.hypot(ap[n][0] - x, ap[n][1] - y))
+    def distance_to_airport(name):
+        return math.hypot(ap[name][0] - x, ap[name][1] - y)
+
+    near = min(ap, key=distance_to_airport)
     return "blue" if near in blue else "red"
 
 

@@ -26,13 +26,18 @@ from __future__ import annotations
 import math
 from .models import AssetKind, EnemyAsset
 from .words import strength_word
-from . import story
+from . import fraction, story
 from . import clock
 
 NM = 1852.0
 MIN_FORCE = 3.0               # below this a side has no organised force in the zone
 MAX_FORCE = 100.0
 SUPPLY_KINDS = (AssetKind.FUEL, AssetKind.DEPOT)
+
+
+# S150: the sort keys this module uses (they were lambdas)
+def _asset_id(asset):
+    return asset.id
 
 
 def fi_site(state, a) -> bool:
@@ -83,7 +88,6 @@ CLOCK_DAYS = 9                # takeover clock: days after a base falls before o
 REAR_FRAC = 0.7               # red strength in the sectors behind its first line, as a share of its first sector's start strength (judgment call)
 BLUE_ATTACK_MIN = 30.0        # our force in a sector must be at least this before we attack (toy model "THR"; judgment call)
 BLUE_ATTACK_RATIO = 0.9       # ...and not weaker than this share of the enemy's strength there (supply-weighted)
-BLUE_ATTACK_CHANCE = 0.7      # daily chance that a ready force attacks
 SURGE_GRACE_TURNS = 12        # S25: was 24 (the same 48 hours); v0.41.337 (XO 2026-11-09, plan OPEN 3; was SURGE_GRACE_DAYS 2): flyable turns your squadron can skip, with no sortie in between, before red's surge starts (judgment call). A stand-down turn (nothing flyable) does not count
 TURNS_PER_DAY = clock.DAY_MIN // clock.TURN_MIN            # S25: derived (was a literal 12); the surge step (`red_surge`) is still per day: idle turns past the grace count 1/TURNS_PER_DAY of a day each
 SURGE_CAP = 2.0               # ...and the most it adds (x2 at the top)
@@ -156,10 +160,13 @@ def build(state, th, d, rng, ap) -> None:
         a_, b_ = nodes[k]["name"], nodes[k + 1]["name"]
         names += [f"{a_} - {b_}" if cnt == 1 else f"{a_} - {b_} {j + 1}/{cnt}" for j in range(cnt)]
     red0, blue0 = _initial(d, n, int(th["front"].get("rear_zones", 0) or 0))
-    off = lambda k: sum(legs[:k])
+    def off(k):
+        return sum(legs[:k])
     rbases = [{"id": nd["red"], "name": nd["name"], "zone": off(k), "x": axis[k][0], "y": axis[k][1]} for k, nd in enumerate(nodes) if nd.get("red")]
     order = {sid: i for i, sid in enumerate(stages)}
-    rbases.sort(key=lambda r: order.get(r["id"], 99))                      # in the order we take them
+    def take_order(r):
+        return order.get(r["id"], 99)
+    rbases.sort(key=take_order)                      # in the order we take them
     fall = {str(off(k) - 1): nd["blue"] for k, nd in enumerate(nodes) if nd.get("blue") and off(k) >= 1}
     fr = th["front"]
     state.ground = {"v": GROUND_V, "axis": axis, "legs": legs, "centers": centers, "names": names, "red": red0, "blue": blue0,
@@ -185,7 +192,7 @@ def _initial(d, n, tail: int = 0) -> tuple:
     strength, REAR_FRAC of the first start value, and none of ours. `tail` (pack key `front.rear_zones`, Phase 9a: the Kutaisi - Kobuleti sector) is the number of
     sectors behind the old front: they start quiet, no red and the last blue value, so adding a base at the back does not move the front."""
     red_t = [float(x) for x in getattr(d, "ground_red", (70, 55, 15, 0, 0))]
-    blue_t = [float(x) for x in getattr(d, "ground_blue", (0, 15, 60, 70, 50))]
+    blue_t = [float(x) for x in getattr(d, "ground_blue", (0, 0, 60, 70, 50))]
     tail = max(0, min(tail, n - 1))
     m = n - tail
     rear = max(0, m - len(red_t))
@@ -368,7 +375,7 @@ def rebuild_blue(state, d, rng) -> list:
     out = []
     sup = supply(state, "blue")
     fallen = set((state.ground or {}).get("fallen", []))
-    for a in sorted(state.blue_assets.values(), key=lambda a: a.id):
+    for a in sorted(state.blue_assets.values(), key=_asset_id):
         if a.health > 0.05 or (a.guards and a.guards in fallen):
             continue
         if rng.random() < d.blue_rebuild * sup:
@@ -391,7 +398,9 @@ def ensure(state) -> bool:
             return False
         t = theatres.terrain()
         d = get_difficulty(state.level)
-        build(state, th, d, random.Random(state.campaign_id), lambda n: t.airports[n].position)
+        def airport_position(n):
+            return t.airports[n].position
+        build(state, th, d, random.Random(state.campaign_id), airport_position)
         return True
     except Exception:
         state.ground = {}
@@ -459,11 +468,6 @@ def push(state) -> None:
         if a is not None:
             r = g["red"][i]
             a.health = 0.0 if r < MIN_FORCE else min(1.0, r / MAX_FORCE)
-
-
-def facility_health(assets, kinds):
-    hs = [a.health for a in assets if a.kind in kinds]
-    return sum(hs) / len(hs) if hs else None
 
 
 def set_supply_counts(state) -> None:
@@ -554,20 +558,24 @@ def supply_round(state, d, rng) -> list:
         for _ in range(attempts):
             if not sites:
                 return
-            cands = []
+            # S208: the best remaining target (value x health; equal ones: the seeded draw), not a lottery
+            best = None
             for a in sites:
                 cov = covering_sams(state, a) if who == "blue" else []
                 if any(x.variant not in ESCORTABLE for x in cov):
                     continue
-                cands.append((a, SUPPLY_ROUND_P["escorted" if cov else "open"], a.value))
-            if not cands:
+                score = (a.value * a.health, rng.random())
+                if best is None or score > best[0]:
+                    best = (score, a, SUPPLY_ROUND_P["escorted" if cov else "open"])
+            if best is None:
                 return
-            a, p, _v = rng.choices(cands, weights=[c[2] for c in cands])[0]
+            _score, a, p = best
             if rng.random() < p * p_scale:
                 a.health = max(0.0, a.health - SUPPLY_ROUND_HIT)
                 lines.append(f"{'Our' if who == 'red' else 'Enemy'} {a.name} was hit in the background supply strikes ({strength_word(a.health)})")
     pick(list(state.assets.values()), SUPPLY_ROUND_BLUE, "blue")
-    pick(list(getattr(state, "blue_assets", {}).values()), int(getattr(d, "red_supply_strikes", 1)) + int(rng.random() < min(1.0, getattr(d, "raid_rate", 0.3))), "red")
+    extra = fraction.whole_units(state, "red_supply_extra", state.turn, min(1.0, getattr(d, "raid_rate", 0.3)))      # S208: the extra strike comes round by the carried fraction
+    pick(list(getattr(state, "blue_assets", {}).values()), int(getattr(d, "red_supply_strikes", 1)) + extra, "red")
     return lines
 
 
@@ -664,9 +672,10 @@ def surge(state, d) -> float:
     """v0.41.155 (XO 2026-10-27, "red needs a chance to win if I do not fly"): 1.0 while your squadron flies; then it grows by the level's `red_surge` for every day beyond
     SURGE_GRACE_TURNS skipped flyable turns since the last flown sortie (`g["idle_turns"]`: Session.skip_turn adds one per flyable turn skipped, a flown sortie resets it; a turn with
     nothing for you to fly does not count), up to 1 + SURGE_CAP. It multiplies red's reinforcements, attack chance and raid rate."""
+    from . import tempo
     step = float(getattr(d, "red_surge", 0.0))
     g = state.ground or {}
-    if step <= 0 or not g or not g.get("tactical_edge", True):      # v0.41.160: Tactical Edge off: no surge, your flying makes no difference here
+    if step <= 0 or not g or not tempo.edge_on(state):      # S144b: via tempo.edge_on (hidden and off); v0.41.160: Tactical Edge off: no surge, your flying makes no difference here
         return 1.0
     idle = (int(g.get("idle_turns", 0)) - SURGE_GRACE_TURNS) / TURNS_PER_DAY            # days' worth of idle past the grace
     return 1.0 + min(SURGE_CAP, max(0.0, idle) * step)
@@ -701,7 +710,9 @@ def _red_cas(state, d, rng, red, blue, n, sg) -> list:
     from . import redair, tempo
     from .loadouts import ENEMY_FIGHTERS
     out = []
-    face = lambda: [i for i in range(n) if blue[i] >= MIN_FORCE and (red[i] >= MIN_FORCE or (i > 0 and red[i - 1] >= MIN_FORCE))]      # blue sectors facing red
+    def face():
+        return [i for i in range(n) if blue[i] >= MIN_FORCE and (red[i] >= MIN_FORCE or (i > 0 and red[i - 1] >= MIN_FORCE))]
+    # blue sectors facing red
     if not face() or not getattr(state, "enemy_air", None):
         return out
     wings = [w for w in state.enemy_air if w.base_asset_id in state.assets]
@@ -711,7 +722,8 @@ def _red_cas(state, d, rng, red, blue, n, sg) -> list:
             break
         i = min(fc)                                                     # the front-most blue sector facing red
         cx, cy = state.ground["centers"][i]
-        dist = lambda w, cx=cx, cy=cy: ((state.assets[w.base_asset_id].x - cx) ** 2 + (state.assets[w.base_asset_id].y - cy) ** 2) ** 0.5
+        def dist(w, cx=cx, cy=cy):
+            return ((state.assets[w.base_asset_id].x - cx) ** 2 + (state.assets[w.base_asset_id].y - cy) ** 2) ** 0.5
         at = [w for w in sorted(wings, key=dist) if w.available_of(RED_ATTACK_TYPES) >= 2 and redair.can(state, w.base_asset_id, 2)]
         if not at:
             continue
@@ -744,6 +756,14 @@ def push_factor(state, d) -> float:
     """Red's surge factor times the push the works add (S111, `works.edge`): what multiplies red's reinforcements, attack chance and raid rate."""
     from . import works
     return surge(state, d) * works.edge(state, d)
+
+
+def red_attack_ratio(d, push: float) -> float:
+    """S208 (XO 2026-11-25: no dice): red attacks a sector when its supplied strength is this many times blue's there. Derived from the old odds: red attacked with chance
+    `red_attack` x push x (its strength / blue's), so the ratio at which that chance came to 0.5 is 0.5 / (`red_attack` x push). Levels 1, 2, 3 (red_attack 0.15, 0.45, 0.8, push 1):
+    3.33, 1.11, 0.63; the works' push lowers it. Background, not the source of the figure: US Army planning ratios are about 3:1 for a deliberate attack and 2.5:1 for a hasty one
+    (secondary sources: Dupuy Institute, https://dupuyinstitute.org/2018/05/30/dupuys-verities-the-power-of-defense/ ; current FM not checked). Judgment call."""
+    return 0.5 / max(0.01, getattr(d, "red_attack", 0.3) * push)
 
 
 def resolve_day(state, d, rng) -> list:
@@ -789,9 +809,9 @@ def resolve_day(state, d, rng) -> list:
         att = None
         if forced == ri and not quiet:                                                  # the enemy's last counter-force presses every day
             att = "red"
-        elif state.day >= g.get("red_clock", 0) and rng.random() < getattr(d, "red_attack", 0.3) * sg * _clamp(pR / max(pB, 1.0), 0.4, 1.6):
+        elif state.day >= g.get("red_clock", 0) and pR >= red_attack_ratio(d, sg) * max(pB, 1.0):
             att = "red"
-        elif state.day >= g.get("clock", 0) and B >= BLUE_ATTACK_MIN and pB >= BLUE_ATTACK_RATIO * pR and rng.random() < BLUE_ATTACK_CHANCE:
+        elif state.day >= g.get("clock", 0) and B >= BLUE_ATTACK_MIN and pB >= BLUE_ATTACK_RATIO * pR:
             att = "blue"                                                                # v0.41.143: our force is ready (takeover clock over, enough strength)
         if quiet and not att:
             continue
@@ -1056,6 +1076,13 @@ def taken_field_lose(state, rid: str) -> list:
     return lines
 
 
+def _takeover_days(state) -> int:
+    """S172: the takeover clock after a base falls, for this campaign's level (`Difficulty.takeover_days`, default `CLOCK_DAYS` 9; a pack's `level_overrides` can shorten it for one level)."""
+    from . import difficulty
+    value = getattr(difficulty.get(int(getattr(state, "level", 2))), "takeover_days", CLOCK_DAYS)
+    return max(1, int(value))
+
+
 def _check_red_bases(state) -> list:
     """A red base falls while we hold the sector on our side of it and the enemy has nothing there; it is retaken when the enemy holds that sector again."""
     g, lines = state.ground, []
@@ -1066,9 +1093,10 @@ def _check_red_bases(state) -> list:
         if rid not in g["taken"] and ours:
             g["taken"].append(rid)
             g["taken_day"][rid] = state.day
-            g["clock"] = state.day + CLOCK_DAYS
+            takeover_days = _takeover_days(state)
+            g["clock"] = state.day + takeover_days
             g["red_clock"] = state.day + RED_CLOCK_DAYS
-            lines.append(f"{rb['name'].upper()} HAS FALLEN: our forces hold it. The next push waits for the takeover ({CLOCK_DAYS} days)")
+            lines.append(f"{rb['name'].upper()} HAS FALLEN: our forces hold it. The next push waits for the takeover ({takeover_days} day{'s' if takeover_days != 1 else ''})")
             lines += apply_red_fall(state, rb)
             lines += taken_field_start(state, rid)
             lines += story.beat(state, "fall_" + rid)
@@ -1152,6 +1180,52 @@ def supply_collapse_word(state):
     return "distant" if m >= SUPPLY_COLLAPSE_BANDS[0] else "approaching" if m >= SUPPLY_COLLAPSE_BANDS[1] else "close"
 
 
+def supply_lose_rule(state):
+    """S213 (XO 2026-11-26): the mirror of `supply_win_rule`: the active pack's `lose_supply` rule for this level, {"below": 0..1, "days": n}, or None (no such defeat)."""
+    from . import theatres
+    rules = theatres.active().get("lose_supply") or {}
+    level = str(getattr(state, "level", 2))
+    return rules.get(level) or None
+
+
+def update_supply_loss(state) -> list:
+    """Nightly (`war.end_day`, after the sites mended, like `update_supply_win`): the coalition's Force Index at or below `below` on `days` consecutive day checks loses the war
+    (`g["supply_lost"]`, read by `war.update_status`); a day above it resets the count (`g["supply_low_blue"]`, saved with the campaign). -> the war-log lines."""
+    g = state.ground
+    rule = supply_lose_rule(state)
+    if not g or not rule or g.get("supply_lost"):
+        return []
+    if supply(state, "blue") <= float(rule["below"]):
+        g["supply_low_blue"] = int(g.get("supply_low_blue", 0)) + 1
+    else:
+        g["supply_low_blue"] = 0
+    if g["supply_low_blue"] < int(rule["days"]):
+        return []
+    g["supply_lost"] = True
+    lines = ["The coalition's supply has collapsed: Washington has lost its appetite for the war and the coalition is pulling out"]
+    return lines + story.beat(state, "lose_supply")
+
+
+def supply_loss_warning(state) -> str:
+    """The Overview's line while the coalition's Force Index is at or below the `lose_supply` line, with the days counted. "" otherwise."""
+    rule = supply_lose_rule(state)
+    if rule is None or state.status != "ACTIVE":
+        return ""
+    if supply(state, "blue") > float(rule["below"]):
+        return ""
+    days = int(rule["days"])
+    counted = int((state.ground or {}).get("supply_low_blue", 0))
+    left = max(1, days - counted)
+    line = round(100 * float(rule["below"]))
+    if counted == 0:                                    # under the line today, no night counted yet
+        return "Coalition Force Index at or under %d%%: %d days of it and the coalition pulls out" % (line, days)
+    if left == 1:
+        rest = "one more and the coalition pulls out"
+    else:
+        rest = "%d more and the coalition pulls out" % left
+    return "Coalition Force Index at or under %d%% for %d of %d days: %s" % (line, counted, days, rest)
+
+
 def apply_red_fall(state, rb) -> list:
     """A red base falls to us: the field and everything dug in round it go down for good, and its jets withdraw to the nearest standing red field
     (FALL_LOSS of them lost on the way), the way our own squadrons do when one of our fields falls. Its depots and fuel farms change sides with their
@@ -1172,7 +1246,9 @@ def apply_red_fall(state, rb) -> list:
     if w is not None and w.sqns:
         dests = [x for x in state.enemy_air if x is not w and not state.assets[x.base_asset_id].destroyed]
         fx, fy = rb["x"], rb["y"]
-        dest = min(dests, key=lambda x: (state.assets[x.base_asset_id].x - fx) ** 2 + (state.assets[x.base_asset_id].y - fy) ** 2) if dests else None
+        def wing_distance_squared(x):
+            return (state.assets[x.base_asset_id].x - fx) ** 2 + (state.assets[x.base_asset_id].y - fy) ** 2
+        dest = min(dests, key=wing_distance_squared) if dests else None
         total = sum(q.available + q.reserve for q in w.sqns)
         if dest is None:
             w.sqns.clear(); w.squadrons = 0
@@ -1183,7 +1259,7 @@ def apply_red_fall(state, rb) -> list:
                 k = int(round(q.available * FALL_LOSS))
                 q.available = max(0, q.available - k); lost += k
                 w.sqns.remove(q); dest.sqns.append(q)
-                if q.available > 0 and q.reserve == 0 and "Tu_22M3" not in w.types:        # v0.41.243: red squadrons are out of the line while they move too
+                if q.available > 0 and q.reserve == 0 and q.aircraft != "Tu_22M3" and q.role != "escort":        # v0.41.243: red squadrons are out of the line while they move too (B1: not the bomber wing's own squadrons; per squadron, a bomber field is also a normal red wing in Syria)
                     q.reserve, q.available, q.rest_days = q.available, 0, 0
                     q.move_until = state.turn + (FALL_MOVE_TURNS[0] if math.hypot(state.assets[dest.base_asset_id].x - fx, state.assets[dest.base_asset_id].y - fy) / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_TURNS[1])
             w.squadrons = len(w.sqns); dest.squadrons = len(dest.sqns)
@@ -1205,8 +1281,10 @@ def apply_fall(state, bid: str) -> list:
             continue
         lost = int(round(sq.available * FALL_LOSS))
         sq.available = max(0, sq.available - lost)
+        def field_distance_squared(x):
+            return (x.x - b.x) ** 2 + (x.y - b.y) ** 2
         dest = (landing_field(state, b.x, b.y, sq, sq.available + sq.reserve, others, diverts)
-                or min(others or diverts, key=lambda x: (x.x - b.x) ** 2 + (x.y - b.y) ** 2))       # the nearest standing field with room, a divert field only as the last resort (Phase 9b, XO 2026-11-10); none has room: the nearest (as before)
+                or min(others or diverts, key=field_distance_squared))       # the nearest standing field with room, a divert field only as the last resort (Phase 9b, XO 2026-11-10); none has room: the nearest (as before)
         sq.home_id = sq.home_id or bid                                      # v0.41.243: remembered, so it flies back when this field is retaken
         sq.base_id = dest.id
         lines.append(f"   {sq.name} withdraws to {dest.name}, {lost} aircraft lost" + _settle(state, sq, math.hypot(dest.x - b.x, dest.y - b.y)))
@@ -1221,7 +1299,9 @@ def field_with_room(state, x: float, y: float, sq, jets: int, fields) -> object:
     for q in state.squadrons.values():
         if q is not sq:
             held[q.base_id] = held.get(q.base_id, 0) + q.authorized
-    for f in sorted(fields, key=lambda f: (math.hypot(f.x - x, f.y - y), f.id)):
+    def distance_then_id(f):
+        return (math.hypot(f.x - x, f.y - y), f.id)
+    for f in sorted(fields, key=distance_then_id):
         cap = _parking(f.airport, sq.aircraft) if f.airport else None
         if cap is None or cap - held.get(f.id, 0) >= jets:
             return f

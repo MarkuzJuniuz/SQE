@@ -25,6 +25,7 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 
 # S90 J5 (the theatre hooks): OPTIONAL pack keys. Each is read in ONE place and a pack without it gets today's Caucasus constant, so the Caucasus is byte-identical:
 #   red_roster {level: {type: jets}}      -> redroster.allocate(roster=...)           (default redroster.ROSTERS[level])
+#   wing_weight_level {level: {field: w}} -> scenario.py, the allocation weights of that level (S195; default `wing_weight`; the random draws keep `wing_weight`)
 #   level_overrides {level: {field: v}}   -> difficulty.get(level) for this theatre   (default: the level as it is)
 #   front.air_fields [field key, ...]     -> war.mountain_fields()                    (default war.MOUNTAIN_FIELDS)
 #   front.defeat_bases N                  -> ground.defeat_bases()                    (default ground.DEFEAT_BASES)
@@ -32,14 +33,18 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   ils_runway {airport: runway number}   -> runways.ils_runways()                    (default runways.ILS_RUNWAY)
 #   mag_var_deg number                    -> runways.mag_var_deg()                    (default runways.MAG_VAR_DEG)
 #   win_supply {level: {below, days}}     -> ground.update_supply_win / war.update_status (default none: red's Force Index at or below `below` on `days` consecutive days wins the level)
-#   works {label, damage, levels {level: {push, rebuild_days, supply_total?}}, sites [{id wks_.., name, x, y}]} -> works.build / war / ground.push_factor (S111: Lutorin's works, special blue targets; the win when all are destroyed. Default none: the Caucasus)
+#   lose_supply {level: {below, days}}    -> ground.update_supply_loss / war.update_status (default none: the coalition's Force Index at or below `below` on `days` consecutive days loses the level)
+#   works {label, damage, levels {level: {push, rebuild_days, supply_total?, teams?, hold_days?}}, sites [{id wks_.., name, x, y}]} -> works.build / war / ground.push_factor (S111: Lutorin's works, special blue targets; the win when all are destroyed. Default none: the Caucasus)
 #   start_hour 0|4|8|12|16|20             -> CampaignState.start_hour, clock.use()    (default 8: Day 1 / turn 0 starts at 08:00; Syria 0)
 #   opening_strike {levels, kill, text?, fill?}  -> scenario._opening_strike          (default none: every red site of the variant `kill` starts the campaign destroyed, rebuilt by the normal rule; `fill`: what the F-117A pairs left over hit, S104d)
 #   raid_attack_types [type, ...]         -> raids.attack_types()                     (default ("Su_25",): leads raids on troops, garrisons, supply sites)
 #   raid_bomber_types [type, ...]         -> raids.bomber_types()                     (default loadouts.BOMBER_TYPES = ("Su_24M",): field raids, SEAD and Kh-59M raids only)
 #   extra_sams [{id, site, x/y or near+bearing+dist_m, levels, ...}] -> scenario.new_campaign (fixed extra SAM sites; default none)
 #   raid_bearing_deg [lo, hi]             -> bombers.raid_bearing_range()             (default (20, 40): the bearing from the carrier the Tu-22M3 raid arrives on; Syria 200 to 220, out of the open sea)
-#   max_raid {level: n}                   -> bombers.max_raid()                       (default bombers.MAX_RAID {2: 8, 3: 16}: the full Tu-22M3 carrier raid; Syria L3 12)
+#   max_raid {level: n}                   -> bombers.max_raid()                       (default bombers.MAX_RAID {2: 8, 3: 16}: the full Tu-22M3 carrier raid; Syria has none since B1: its 20-jet wing fields the 16)
+#   blue_fields[].patriot bool             -> sams.site_keys()                          (S143: a divert field still gets its Patriot; Syria: Hatay)
+#   bomber_bases [red field id, ...]      -> scenario.new_campaign / bombers.bomber_base_ids()   (B1: the Tu-22M3 wing's fields, the first is the lead: the level's `bomber_wing` and `bomber_escort_wing` are split between them; default [bomber_base] (the Caucasus: Mozdok). Syria: Damascus and Bassel Al-Assad; each field's Tu-22M3 share is capped at its DCS stand count, the overflow goes to the next field)
+#   land_tu {level: n}                    -> bombers.land_tu()                        (B1: Tu-22M3 in one land strike; default bombers.LAND_TU 2; Syria L3 4)
 #   raid_from_base J                      -> bombers.raid_bearing()                   (default none: the raid's bearing is drawn in raid_bearing_deg; J degrees = it comes along the line from the carrier through the bomber field, plus or minus J: Syria 4)
 #   raid_grace_days N                     -> bombers.grace_days()                     (default 0: red stages no carrier raid while the day is at most N, the surprise opening; Syria 7)
 #   map_box {x0, x1, y0, y1}              -> raid_spawns._map_edges()                 (default the terrain's own bounds: the edge of the map the raid spawns on; Syria: pydcs's bounds are wrong)
@@ -106,6 +111,14 @@ def _check_hooks(d: dict, src) -> None:
             for t, n in roster.items():
                 if not isinstance(t, str) or isinstance(n, bool) or not isinstance(n, int) or n < 0:
                     bad(f"red_roster level {lv}: {t!r}: {n!r} must be an aircraft type and a whole number of jets, 0 or more")
+    if "wing_weight_level" in d:
+        levels_of("wing_weight_level", d["wing_weight_level"])
+        for lv, weights in d["wing_weight_level"].items():
+            if not isinstance(weights, dict) or not weights:
+                bad(f"wing_weight_level level {lv} must be a non-empty {{field id: weight}} object")
+            for field_id, w in weights.items():
+                if field_id not in d["wing_weight"] or isinstance(w, bool) or not isinstance(w, (int, float)) or w <= 0:
+                    bad(f"wing_weight_level level {lv}: {field_id!r}: {w!r} must be a field of wing_weight and a weight above 0")
     if "level_overrides" in d:
         levels_of("level_overrides", d["level_overrides"])
         import dataclasses
@@ -138,15 +151,21 @@ def _check_hooks(d: dict, src) -> None:
                     bad(f"{k}: {t!r} is not a pydcs aircraft")
     if set(d.get("raid_attack_types") or ()) & set(d.get("raid_bomber_types") or ()):
         bad("raid_attack_types and raid_bomber_types must not share a type (the bomber list alone flies the SEAD and Kh-59M raids)")
-    if "win_supply" in d:
-        levels_of("win_supply", d["win_supply"])
-        for lv, r in d["win_supply"].items():
+    # S90 / S213: the two Force Index rules have the same shape.
+    for rule_key in ("win_supply", "lose_supply"):
+        if rule_key not in d:
+            continue
+        levels_of(rule_key, d[rule_key])
+        for lv, r in d[rule_key].items():
             if (not isinstance(r, dict) or set(r) != {"below", "days"} or isinstance(r["below"], bool) or not isinstance(r["below"], (int, float)) or not 0.0 < r["below"] <= 1.0
                     or isinstance(r["days"], bool) or not isinstance(r["days"], int) or r["days"] < 1):
-                bad(f"win_supply level {lv} must be {{\"below\": a number above 0 and up to 1, \"days\": a whole number of days, 1 or more}}")
+                bad(f"{rule_key} level {lv} must be {{\"below\": a number above 0 and up to 1, \"days\": a whole number of days, 1 or more}}")
     if "works" in d:                                                  # S111: Lutorin's works (works.py)
         w = d["works"]
-        num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+        # A real number (a bool is not one here).
+        def num(v):
+            return isinstance(v, (int, float)) and not isinstance(v, bool)
+
         if not isinstance(w, dict) or set(w) - {"label", "damage", "levels", "sites"}:
             bad("works takes only label, damage, levels and sites")
         if "label" in w and not isinstance(w["label"], str):
@@ -155,9 +174,9 @@ def _check_hooks(d: dict, src) -> None:
             bad("works.damage must be a number above 0 and up to 1 (the share of a depot's strike damage a works takes)")
         levels_of("works.levels", w.get("levels"))
         for lv, r in w["levels"].items():
-            if (not isinstance(r, dict) or not {"push", "rebuild_days"} <= set(r) or set(r) - {"push", "rebuild_days", "damage", "supply_total"} or not num(r["push"]) or r["push"] < 0
-                    or not num(r["rebuild_days"]) or r["rebuild_days"] <= 0 or ("damage" in r and (not num(r["damage"]) or not 0.0 < r["damage"] <= 1.0)) or ("supply_total" in r and (not isinstance(r["supply_total"], int) or isinstance(r["supply_total"], bool) or r["supply_total"] < 1))):
-                bad(f"works.levels {lv} must be {{\"push\": a number, 0 or more, \"rebuild_days\": a number above 0, \"damage\": optional, a number above 0 and up to 1, \"supply_total\": optional, a whole number, red's supply sites counted for the Force Index with the works}}")
+            if (not isinstance(r, dict) or not {"push", "rebuild_days"} <= set(r) or set(r) - {"push", "rebuild_days", "damage", "supply_total", "teams", "hold_days"} or not num(r["push"]) or r["push"] < 0
+                    or not num(r["rebuild_days"]) or r["rebuild_days"] <= 0 or ("damage" in r and (not num(r["damage"]) or not 0.0 < r["damage"] <= 1.0)) or ("supply_total" in r and (not isinstance(r["supply_total"], int) or isinstance(r["supply_total"], bool) or r["supply_total"] < 1)) or ("teams" in r and (not isinstance(r["teams"], int) or isinstance(r["teams"], bool) or r["teams"] < 1)) or ("hold_days" in r and (not isinstance(r["hold_days"], int) or isinstance(r["hold_days"], bool) or r["hold_days"] < 0))):
+                bad(f"works.levels {lv} must be {{\"push\": a number, 0 or more, \"rebuild_days\": a number above 0, \"damage\": optional, a number above 0 and up to 1, \"supply_total\": optional, a whole number, red's supply sites counted for the Force Index with the works, \"teams\": optional, a whole number, 1 or more: how many destroyed works are rebuilt at once, default 1, \"hold_days\": optional, a whole number, 0 or more: days every works must STAY destroyed before the win, default 0}}")
             if "works_win" not in (((d.get("stories") or {}).get(lv) or {}).get("beats") or {}):
                 bad(f"works.levels {lv}: the level's story needs the beat works_win (the text of the win)")
         sites = w.get("sites")
@@ -195,6 +214,18 @@ def _check_hooks(d: dict, src) -> None:
         levels_of("max_raid", d["max_raid"])
         if not all(isinstance(n_, int) and not isinstance(n_, bool) and 4 <= n_ <= 40 for n_ in d["max_raid"].values()):
             bad("max_raid values must be whole numbers of bombers, 4 to 40")
+    for f_ in d.get("blue_fields", []):
+        if "patriot" in f_ and not isinstance(f_["patriot"], bool):
+            bad(f"blue field {f_.get('id')!r}: patriot must be true or false (a divert field that still gets its Patriot)")
+    if "bomber_bases" in d:
+        ids_ = [f["id"] for f in d.get("red_fields", [])]
+        if (not isinstance(d["bomber_bases"], list) or not d["bomber_bases"] or len(set(d["bomber_bases"])) != len(d["bomber_bases"])
+                or not all(isinstance(b_, str) and b_ in ids_ for b_ in d["bomber_bases"])):
+            bad("bomber_bases must be a list of different red field ids (an id from red_fields, e.g. ab_damascus), the lead first")
+    if "land_tu" in d:
+        levels_of("land_tu", d["land_tu"])
+        if not all(isinstance(n_, int) and not isinstance(n_, bool) and 2 <= n_ <= 8 for n_ in d["land_tu"].values()):
+            bad("land_tu values must be whole numbers of Tu-22M3, 2 to 8")
     if "map_box" in d:
         v = d["map_box"]
         if (not isinstance(v, dict) or set(v) != {"x0", "x1", "y0", "y1"} or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v.values()) or v["x0"] >= v["x1"] or v["y0"] >= v["y1"]):
@@ -297,6 +328,25 @@ def terrain():
     if cls is None:
         raise ValueError(f"this pydcs has no terrain {name!r}")
     return cls()
+
+
+_EDGES_CACHE = {}
+
+
+def map_edges(terrain_object=None) -> tuple:
+    """(top, bottom, left, right) of the map in DCS metres (x runs north, y east): the active pack's `map_box` {x0, x1, y0, y1} (S90 J8: pydcs's Syria bounds have top below bottom and stop short of Jordan),
+    else the terrain's own bounds with top the larger x (the Caucasus). S191: lives here so code that has only the state (the AWACS station) can ask without a mission builder; the mission builder
+    passes the terrain it already holds. Without one, the answer is worked out once per theatre."""
+    box = hook("map_box")
+    if box is not None:
+        return float(box["x1"]), float(box["x0"]), float(box["y0"]), float(box["y1"])
+    if terrain_object is None:
+        theatre_id = active()["id"]
+        if theatre_id not in _EDGES_CACHE:
+            _EDGES_CACHE[theatre_id] = map_edges(terrain())
+        return _EDGES_CACHE[theatre_id]
+    bounds = terrain_object.bounds
+    return max(bounds.top, bounds.bottom), min(bounds.top, bounds.bottom), bounds.left, bounds.right
 
 
 def geo() -> dict:

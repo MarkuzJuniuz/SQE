@@ -22,7 +22,7 @@ and sites.
 
 There are two maps: the Caucasus (this page's numbers, unless it says otherwise) and Syria 2001 (section 10, which lists what differs). On the Caucasus the coalition (blue) holds the south-east (Senaki, Kutaisi, Kobuleti, a carrier group at sea and
 the rear support base at Kutaisi); red holds the north and the Black Sea coast (Sukhumi, Gudauta, Sochi, Gelendzhik,
-Krymsk, and the northern fields such as Mozdok, Beslan, Nalchik, Maykop and Mineralnye Vody). On Syria blue holds Incirlik and the Cyprus fields and fights down the Hatay coast road.
+Krymsk, Anapa-Vityazevo and Krasnodar-Center behind it, and the northern fields such as Mozdok, Beslan, Nalchik, Maykop and Mineralnye Vody). On Syria blue holds Incirlik and the Cyprus fields and fights down the Hatay coast road.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -33,16 +33,16 @@ You pick the level when you start a campaign. It sets how strong red is and how 
 | | Level 1, Insurgent | Level 2, Regional power | Level 3, Near-peer |
 |---|---|---|---|
 | Red airfields | 4: Sukhumi, Gudauta, Sochi, Gelendzhik | 10, the whole red coast and the north | 10, the whole red coast and the north |
-| Red aircraft at the start | 94, old types kept supplied by a sponsor (MiG-21, MiG-23, Su-25, Su-24M) | 241, mixed (MiG-31, MiG-29, MiG-23, Su-24M, Su-25, plus the Mozdok bombers and escorts) | 254, modern (MiG-31, MiG-29S, Su-27, Su-24M, Su-25, plus the Mozdok bombers and escorts) |
+| Red aircraft at the start | 94, old types kept supplied by a sponsor (MiG-21, MiG-23, Su-25, Su-24M) | 240, mixed (MiG-31, MiG-29, MiG-23, Su-24M, Su-25), plus the Mozdok bombers and escorts | 284, modern (MiG-29S, Su-27, Su-24M, Su-25; on the Caucasus no MiG-31 or MiG-29A), plus the Mozdok bombers and escorts |
 | Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA | SA-10, SA-11, SA-6, SA-15, SA-19 |
 | Air defence integration (`iads`) | 0.15 | 0.55 | 0.90 |
 | Red AI skill | Average | Good | High |
 | Bomber wing (Tu-22M3 at Mozdok) | none | 14, raids the carrier only when red is desperate | 24, raids the carrier as a normal part of its plan |
 | Red counter-attacks on blue bases (`counterstrike`) | low (0.10) | 0.30 | 0.55 |
-| Ground war pressure (`red_attack`) | 0.15 | 0.45 | 0.80 |
+| Red attacks on the ground when its strength in a sector is (`red_attack`) | 3.3x blue's (0.15) | 1.1x (0.45) | 0.6x (0.80) |
 
 Blue is the same at every level: 18 squadrons with 284 jets in total across the coalition fields and the carrier (F-14B(U), F/A-18C, F-16C, F-15C
-and A-10C squadrons, plus F-15E and HAVCAP squadrons and the F-117A squadron that the AI flies). A person can fly the F-14B(U),
+and A-10C squadrons, plus F-15E and HVAACAP squadrons and the F-117A squadron that the AI flies). A person can fly the F-14B(U),
 F/A-18C, F-16C, F-15C and A-10C; the F-15E and F-117A are AI only. You can change the AI skill of each side in Settings.
 
 ---------------------------------------------------------------------------------------------------
@@ -72,14 +72,22 @@ At the start of each (day) turn the planner builds the turn's tasking list, in t
 2. **Blue's standing cover** is planned (section 8): BARCAP pairs over a share of the BARCAP areas and a guard pair for the
    AWACS and each tanker.
 3. **The planner picks the jobs.** It scores every target red has that can be hit (a SAM site, an EWR, a runway, a supply
-   site, a garrison, a troop column), skips ones that cannot be attacked yet, and takes a few. How many jobs a turn
+   site, a garrison, a troop column), skips ones that cannot be attacked yet or that no squadron can reach, and takes a few. How many jobs a turn
    gets follows the jets: the free strike pairs (the ones left after the standing patrols and the support) times a level share (0.6 at Levels 1 and 2,
    0.9 at Level 3), divided by the 5.7 pairs one package uses, at least 1 and at most 4, 8 and 8 on a day turn (Levels 1, 2, 3), plus two on every
    day turn of Day 1 ("day 1 is brutal"; `engine.py`: `TASK_SHARE`, `PAIRS_PER_PACKAGE`, `N_MAX`, `DAY1_EXTRA`). A night turn plans a quarter (Level 1)
-   or a third (Levels 2 and 3) of that. It takes the best-scoring job of each kind first, and no one kind may take more than 40% of the
-   list, with the SAM wave (section 5) taken out first. The F-117A's night jobs (section 5) come on top of that list.
+   or a third (Levels 2 and 3) of that. The jobs are picked in the order of blue's doctrine, with no variety rule: the SAM wave (section 5) first (control of the air),
+   then close air support for troops in contact (the best job of each engaged front sector, at most two), then everything else by how much it matters:
+   a SAM site standing in front of something, a radar, supply, and the rest. A front sector that already has a job waits behind one with none.
+   The F-117A's night jobs (section 5) come on top of that list.
+   A stand-off job is picked only while jets that carry its weapon are still free (a Standoff DEAD counts its two HARM flights too, as the same
+   Vipers and Hornets fly them); otherwise the slot goes to the next target and the stand-off job waits for a later turn.
+   What gets tasked is not rolled: equal targets aside, the better one is taken, and a fraction (of a job, a patrol, a sweep or a bomber strike) is carried
+   to the next turn.
 4. **Packages are built from the jets that are free.** A package is crewed from what the ledger shows (section 7). A job
-   that cannot be crewed waits for the next turn.
+   that cannot be crewed (no stand-off jets free, a target out of reach, no SEAD seat) waits for the next turn, and the turn tries other targets
+   in its place (up to 12 tries): ones the jets left over can still reach, a strike behind a SEAD package already built among them. A turn can still end
+   short when nothing else can be flown, mostly on Syria at Level 3 where nearly every open target needs a stand-off weapon, or when the SEAD jets run out.
 5. **Start times are set in four waves, an hour apart.** The waves open with the turn and 60, 120 and 180 minutes later;
    packages start within about 25 minutes of their wave's opening. The jobs are spread over the four waves as evenly as they
    go, the earlier waves first; packages listed together (targets inside the Target Area Radius) stay together in one wave, and a carrier raid and its prep
@@ -89,7 +97,7 @@ At the start of each (day) turn the planner builds the turn's tasking list, in t
 The jobs you can be offered are listed on the Missions tab: **Strike**, **Standoff Strike**, **OCA: Runway Strike**, **SEAD**,
 **Standoff DEAD**, **Close DEAD**, **Close Air Support** (including **Troops in Contact**), **Fighter Sweep**, and **Intercept**
 jobs against red's raids ("Base Defense", "Supply Defense", and so on). BARCAP is AI only. A job is shown only if your
-squadron's jets can fly a seat in it. Each tasking can also bring extra flights: escort, TARCAP, SEAD.
+squadron's jets can fly a seat in it; you are offered the most important jobs your jet can fly, about half of the turn's list. Each tasking can also bring extra flights: escort, TARCAP, SEAD.
 
 ### What a package looks like
 
@@ -110,9 +118,15 @@ The TARCAP (up to 4 jets) is sized to the fighters red can field near the target
 gets an escort as well, or a separate Fighter Sweep is planned ahead of it. A **Standoff** job (a site under a long-range SAM such as the SA-10) uses JSOWs,
 SLAM-ERs or similar weapons released far outside the SAM's reach, with HARM shooters timed on the same minute.
 
+**Routes round the SAM rings.** An AI flight, and you, fly round every live SAM ring on the way out to the marshal point, to the IP or the station, and home. The ring is the SAM's reach plus a margin: SA-10 35 nm,
+SA-5 71, SA-2 26, SA-11 20, SA-6 16, SA-3 15 (the map draws the same rings). A flight that starts or ends inside a ring (a base near the front, an IP inside the target's ring) leaves or enters it by the nearest edge when that cuts its time inside.
+Only the attack legs (IP to target to egress) go in as the job requires; your IP on a strike or SEAD is placed outside the rings that hold the target. The planner counts reach by the length of that route, and a job no jet can fly round the rings within
+2.4 times its combat radius (1.5 times that with a tanker) is not offered, with no message; the same limit applies to each flight when the mission is built. A flight over that limit first tries a low leg straight under an SA-5 or SA-2 ring
+(500 ft below the ring's lowest engagement height; each low nm counts 1.5) in place of its detour, then a shorter hold on station, and only then is left out.
+
 **Package merging** (Settings > Mission build): when you fly, every package that starts inside the time windows (15 minutes
 before and 30 after yours by default, Later Packages up to a whole turn) flies in the same mission, wherever its target is,
-nearest to yours first, each still keeping its own time on target. The unit limit (250 by default) trades detail for
+nearest to yours first, each still keeping its own time on target. The unit limit (250 by default, up to 750 in Settings) trades detail for
 performance: over it the furthest packages are left out first, a Fighter Sweep stays while a package it covers stays, and
 your own package and the ground war round your target keep their share before the others. The **Target Area Radius** (15 nm)
 is that area: the supply sites and the ground war built round your target, the ruins of earlier strikes, and the packages the
@@ -127,13 +141,14 @@ Missions list shows together.
 The front is a chain of sectors, one per airfield from Krymsk to Kutaisi, each with a red and a blue **force strength**. The level decides how many
 are fought over: Levels 1 and 2 contest Sukhumi, Gudauta and Sochi, Level 3 adds Gelendzhik and Krymsk.
 Each night the sectors in contact exchange losses (the defender fights at ×1.25, `DEFENDER`); a side under 30% of the
-other's force in a sector withdraws from it (`BREAK_RATIO`) and nobody is hunted to the last unit. Both sides get
+other's force in a sector withdraws from it (`BREAK_RATIO`) and nobody is hunted to the last unit. A side attacks whenever it is strong enough, not by chance:
+red at the ratio in section 2's table (lower while its works feed the war), blue once its force in the sector is at least 30 and at least 0.9 times red's. Both sides get
 reinforcements, scaled by their **Force Index** (see below), and a dug-in **garrison** in each sector gives its side a bonus and a CAS target.
 
 Blue's CAS and strike work lowers red's force in a sector and lowers its Force Index; red's raids do the same to blue. When
 blue holds a sector in front of a red airfield and red has nothing organised there, **the airfield falls**: it and its
 ground units go down for good, its jets withdraw to the nearest standing red field with 30% lost, and its depots and fuel
-farms change sides with their stock. The next push then waits for the takeover (9 days) and red's own attacks wait 3.
+farms change sides with their stock. The next push then waits for the takeover (9 days; 1 day on Level 1 in Syria) and red's own attacks wait 3.
 
 ### The Force Index
 
@@ -158,7 +173,9 @@ some a parked truck only. Hitting them, and the depots and fuel farms, is how bl
 ### Air defence
 
 Red's SAM sites are **suppressed** (their radars blinded by SEAD) for two turns, then recover, or **destroyed** by DEAD. A
-destroyed site is rebuilt later, at the pace of red's Force Index, and mobile sites move after being hurt. A **belt** of overlapping long-range
+destroyed site is rebuilt later, at the pace of red's Force Index, and mobile sites move after being hurt. A strike or close air support package that goes
+in behind a SEAD and is resolved by the war (not flown by you) is held if the radars were not suppressed; if it goes in, it damages its target about nine
+times in ten and takes a little under half of the target's health (measured in DCS test missions). A **belt** of overlapping long-range
 sites protects what is behind it: a site inside an intact belt cannot be offered as a target until the belt site covering
 it falls.
 
@@ -178,11 +195,14 @@ or an airfield runway with no patrol station or ready alert pair within 40 nm. I
 safe over a covered target: each jet is lost with a small chance that grows with the SAM sites that cover it. At most 2 jobs a night turn, one runway
 strike a night, and the same target is not offered again for 7 days. It is the highest-maintenance airframe: 16 hours of refit after a sortie and one
 replacement airframe per 96 hours. Because red keeps fighters at almost every field, it flies rarely.
+In a mission, red can still scramble against the strike, but red's early-warning radars and AWACS do not point its fighters at an F-117A: a red
+fighter goes after one only once its own radar has picked it up.
 
 ### Runways
 
-A runway strike that lands its bombs **craters the field**: nothing launches from it, scrambles or lands there for 6
-turns (24 hours). A closed field's squadrons cannot fly from it and red's wings skip it.
+A runway strike that lands at least 4 of its bombs on the runway **craters the field** (fewer is damage the repair crews fix overnight): nothing launches from it, scrambles or lands there for 6
+turns (24 hours); a field that holds a Tu-22M3 squadron (Mozdok, Damascus, Bassel Al-Assad) is repaired in 2 turns (8 hours), because red's bomber fields are its
+best-repaired. A closed field's squadrons cannot fly from it and red's wings skip it.
 
 ### Red's air
 
@@ -190,22 +210,54 @@ Red flies standing **CAP pairs** over its fighter fields, **Fighter Sweeps** whe
 It holds back **25%** of each squadron's ready fighters as a **reaction reserve** that is the only source of scrambles and
 reinforcements; the rest are free for patrols and raids. Jets that fly go to refit; shot-down jets are gone until replaced.
 
-**How red's jets are laid out.** Each level gives every red field a fixed number of jets, sized to the field's parking. At Level 3 a field is filled to
-about 70% of its parking, which leaves room for squadrons that fall back from a lost field (about 30%). Level 2 has the same number of jets at each
-field as Level 3 (its types are older and weaker), and Level 1 fills its four fields to about 70% (Gelendzhik about 60%). (These are the Caucasus figures; Syria's are in section 10.) The jets are grouped into squadrons of a few types per field, up to 6 jets at
+**How red's jets are laid out.** At Levels 2 and 3 red fields about as many jets as blue (the Tu-22M3 wing not counted): on the Caucasus about 240 at Level 2 and 284 at
+Level 3, on Syria 270 and 284 (blue has 284). Level 3 is harder than Level 2 through its types, its pilots and its SAMs, not through the count. Each field has a fixed
+share of the jets, sized to its parking, and the fields have room left for squadrons that fall back from a lost field. Level 1 fills its four fields to about 70% (Gelendzhik about 60%). (These are the Caucasus figures; Syria's are in section 10.) The jets are grouped into squadrons of a few types per field, up to 6 jets at
 Level 1, and 14 at Levels 2 and 3 (about 10 to 12 is the Soviet and Russian norm, so these are big squadrons), so a field flies one or two types in full squadrons, not
 two or three jets of everything. The Forces screen lists them with in-universe names such as "Sochi-Adler MiG-21Bis Sqn #2"; a squadron that withdraws keeps its name.
+
+At Level 2 red raids your SAM sites most days of a war's first week (a few a day at the start) and its bombers follow as your cover thins.
+
+**What red goes for** follows the war, not chance. While one of your Patriots, HAWKs or the fleet's missiles covers something it would raid, red's main effort is its SEAD raids
+on those sites, then any uncovered airfield. Once that cover is down it supports its ground forces: troops in a contested sector, garrisons, then supply sites, and your
+airfields when nothing else is open. Level 1's insurgents have no SEAD: they go for troops and garrisons first, then airfields, and your
+SAM sites last. Kh-59M stand-off missiles (below) let red raid a target under cover: while cover stands, an airfield can be hit
+that way even when the anti-radiation raids cannot go.
 
 A **raid** is a package that red actually plans: a Su-24M strike on a field, a supply site, a garrison or a
 troop column, with escorts. Whether a raid goes in depends on whether red has the jets: nothing is rolled once you click
 Fly. Some raids are **unwarned** (25%, 35% and 45% at Levels 1, 2, 3) and come with no warning. Blue sees a raid when an AWACS
 (the E-3 or the E-2C) is on orbit that turn; with none up it still sees one in a quarter of cases. A raid blue does not see
 is not listed as an Intercept job and is settled by the war simulation against blue's planned patrols alone.
-Red's **SEAD raids** go after blue's Patriot and HAWK sites with anti-radiation missiles: a full Patriot is attacked
-by three packages, a HAWK by two, escorted and preceded (at Levels 2 and 3) by a fighter sweep that tries to draw
-blue's fighters away.
 
-At Levels 2 and 3 the **Tu-22M3 bomber wing at Mozdok** can raid the carrier, after a quiet day, and then not again for 8 days (5 when it is desperate). At Level 3 red sends it when it
+**What red carries.** A raid's kit follows what it attacks. A Su-24M raid on a runway carries four BetAB-500ShP (rocket-boosted
+concrete-piercing bombs, on pylons 2, 3, 6 and 7); on troops or a garrison four RBK-500U cluster bombs (126 OAB-2.5RT
+fragmentation bomblets each, same pylons); on a supply site FAB-500 bombs on those four pylons and FAB-250 on the other four. (A
+satellite-guided KAB-500S is planned for supply sites, a Lutorin pull-forward, but the Su-24M's weapon list in pydcs does not
+offer it yet, so the supply kit is still the FAB one.) On Syria the Su-17M4 carries four BetAB-500ShP on a runway, four RBK-500
+(268 PTAB-1M each) on troops and four FAB-500 on a supply site. Red's front-line strike on a blue column carries the troops kit.
+At every level a supply-site or garrison raid carries Kh-59M stand-off missiles whenever a bomber wing that has them can reach,
+under HAWK or Patriot cover too: the bombers come in on the least defended side and fire from about 55 nm, so catch them before
+that. Your fighters can also shoot the missiles down in flight, and in a mission or in the war they often do, a whole salvo at a time;
+your SAMs do not engage them. The same goes for your HAWK and Patriot sites: a Kh-59M raid goes in five minutes behind red's
+anti-radiation raid on that site, or alone when red cannot field one. Troops in contact are bombed, not fired at with it. A raid on one of your airfields does the same, with the missiles aimed along the runway: enough hits close the field (see
+Runways), and such a raid does not damage the defences or parked jets. A closed field, or one no Su-24M can reach, is bombed
+as before.
+Kh-59M raids, the Su-25's eight FAB-500 and the Tu-22M3 (three Kh-22 on the carrier raid, four racks of nine OFAB-250 on a land
+strike: DCS's Kh-22 is an anti-ship missile and the AI does not fire it at land) are as before. Red's SEAD packages fire the
+Kh-31P (50 nm), as described below; red's Tu-22M3 fields (Mozdok, Damascus, Bassel Al-Assad) are repaired in two
+turns after a runway hit, see Runways.
+Red's **SEAD raids** go after blue's Patriot and HAWK sites with anti-radiation missiles: a full Patriot is attacked
+by three packages (two at Level 3, where a raid never flies more than 16 jets), a HAWK by two, escorted by one fighter for
+every two jets (the figure from red's mass-raid doctrine) and preceded (at Levels 2 and 3) by a fighter sweep that makes up the rest,
+up to 16 aircraft (16 jets: 8 escorts and 16 sweep; 12: 6 and 12; 8: 4 and 12), and tries to draw blue's fighters away. A package is 4 jets (8 at Level 3) with two
+missiles a jet. Every package fires the **Kh-31P** from about 50 nm out, and the launch times are set so that every package's
+missiles reach the site together. Red works from the **outside in**: a SEAD raid goes only for the sites it can attack
+without another live Patriot reaching its attack point (the outermost ones); a site behind them is raided once the ones
+in front are down. At Level 3 red may also send one bomber raid at that field behind its SEAD, from an axis at least 100 degrees away: the Patriot keeps facing the SEAD raid, so the bombers meet only the rest of the field's defences. At Level 3 a raid on an outer Patriot is followed by a second wave on the Patriot behind it (the one only that outer site covers), its missiles due 5 minutes after the first wave's land; it may cross the outer site's ring, but no other live Patriot's.
+Only the **Su-24M** flies SEAD (it carries the pod its anti-radiation missiles need); the Su-17M4 does the CAS and bombing work.
+
+At Levels 2 and 3 the **Tu-22M3 bomber wing** (at Mozdok on the Caucasus, split over Damascus and Bassel Al-Assad in Syria) can raid the carrier, after a quiet day, and then not again for 8 days (5 when it is desperate). At Level 3 red sends it when it
 estimates a window it judges safe or when it is desperate; at Level 2 only when desperate (red's air arm or command structure is badly
 hurt, or Mozdok is under pressure). This raid is
 a flown set piece: the SEAD packages that clear its approach fly in the turn before.
@@ -225,13 +277,12 @@ the carrier is sunk, its aircraft are moved to land fields (any that cannot be p
 
 * **Victory** (Caucasus; Syria's is in section 10) is by the ground war only: you take **Sochi** (Levels 1 and 2) or **Sochi and Krymsk** (Level 3). At Levels 2 and
   3 the red counter-force that arrives must also be beaten. Jet counts alone do not win the war.
-* **Defeat** is either of: the coalition's air component falls below 15% of its authorised strength, or **3 of your airfields
-  have fallen**. A sunk carrier does not count as a fallen field (its aircraft land elsewhere; the carrier group sails back in after 7
+* **Defeat** is any of: the coalition's air component falls below 15% of its authorised strength, **3 of your airfields
+  have fallen**, or (Caucasus) your supply collapses: your **Force Index** is at 60% or less on **three nights running** and Washington calls the war off. The
+  Overview warns while it is that low and counts the days; one better day starts the count again. It is mostly a Level 3 danger, in the first weeks, when red's
+  raids hit your fuel and depots. A sunk carrier does not count as a fallen field (its aircraft land elsewhere; the carrier group sails back in after 7
   days).
-* **Idle surge.** If you keep skipping turns that had a flight you could have flown, red presses harder. Each such skipped
-  turn counts one; a flown sortie resets the count to zero, and a turn with nothing for you to fly (a stand-down turn) is not
-  counted. The first 12 counted turns (two days' worth) are free. Past that, red's reinforcements, attack chance and raid rate
-  grow for each further day's worth of skipped turns (`red_surge`: 3% at Level 2, 8% at Level 3, none at Level 1). The **Tactical Edge** switch of a campaign (New Campaign: "your sorties affect the war") turns this off together with the Tactical Edge itself.
+* **No idle surge, no Tactical Edge.** The war runs on its own: red does not press harder when you skip turns, and your sorties do not raise the odds of the AI's jobs. Your flying counts as part of the war through what you really destroy and defend. (The code for both is kept but switched off.)
 
 ---------------------------------------------------------------------------------------------------
 
@@ -243,7 +294,7 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
   the Tu-22M3 and E-3 take 8, the F-117A 16). A sortie lasts about 100 minutes, so a jet that flew in a turn's first wave is ready about
   40 to 65 minutes into the next turn (its second or third wave), one from the second wave 100 to 125 minutes in (third wave), one from
   the third wave 160 to 185 in (fourth wave), and one from the fourth wave not before the turn after. A jet that comes back damaged ("limping", under 90% health) takes twice as long to refit.
-  A jet that was shot down is gone.
+  A jet that was shot down is gone, and so is one that lands at a field that is not yours: it is captured at an enemy field, interned at a neutral one (the debrief says so, and the squadron loses the airframe).
 * **Replacements** arrive as a pair every 24 hours at a Force Index of 100% (slower below that, see the Force Index). The Tu-22M3 and the E-3 are replaced one airframe every
   48 hours and the F-117A one every 96 hours, regardless of the Force Index.
 * A planned turn draws its jets from the **ledger**: the jets ready now (wave 1), and for each later wave the jets whose refit
@@ -252,6 +303,8 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
   that cannot be crewed from what is left waits.
 * A squadron whose base falls moves to the nearest field with room, losing 30% of its jets, and sits out the move
   (3 or 6 turns).
+* A squadron worn down to 30% of its jets, whose field the enemy can reach (or whose runway is cratered), stands down overnight to a rear field and comes back
+  once it is at 65% and has rested two nights. This is the same for both sides; your squadron and carrier squadrons stay.
 * **Your own squadron** can be picked at any time; the planner offers you the jobs it can crew, and after a flown
   sortie your flight's losses and survivors are booked the same way as any other.
 
@@ -260,7 +313,7 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
 ## 8. Standing cover: BARCAP, the AWACS, the tankers and their guards
 
 * **BARCAP** is blue's patrol over the areas that face red's launch points. Each turn a share of the areas that a squadron can
-  reach gets a pair (Level 3: 60% by day, 20% at night; Level 2: 40% and 16%; Level 1: 20% and 10%). A station gets at most two pairs
+  reach gets a pair, the most threatened areas first (the red jets that can reach them, the nearer the heavier; red does the same with blue's); the carrier group keeps its own share. The shares are (Level 3: 60% by day, 20% at night; Level 2: 40% and 16%; Level 1: 20% and 10%). A station gets at most two pairs
   a turn: the first goes up at the turn's start; when it leaves before the turn ends (a long-legged pair after 120 minutes, a short-legged
   one after 30) the relief goes up in the first wave that opens as it leaves, the third wave for a long-legged pair and the second for a
   short-legged one. Strike packages carry the BARCAP that faces
@@ -269,13 +322,26 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
   orbit, 6 refit), 8 KC-135s (4 hours on orbit, 3 refit) and 8 S-3Bs (2 hours, 3 refit). A package gets the AWACS and a tanker
   only if one is on orbit while it flies: a jet with a boom gets a KC-135, a probe-and-drogue jet (F-14, F/A-18C) the carrier's
   S-3B. A lost airframe is replaced slowly. Today the war sim does **not** take AWACS losses on its own (`AWACS_LOSS_ON` is off).
-* **Each of them has its own guard (HAVCAP).** One pair of fighters guards the E-3, the E-2C and the tanker for as long as the
-  asset is on orbit in the turn, flown by the HAVCAP squadron where there is one and by an ordinary fighter squadron otherwise. The
+* **Each of them has its own guard (HVAACAP).** Fighters guard the E-3, the E-2C and the tanker for as long as the
+  asset is on orbit in the turn. The HVAACAP squadron (8 F-15C) guards the land-based E-3 only: a four-ship when it has four jets
+  ready (four fly one turn, the other four the next), a pair when it has fewer. The tankers and the carrier's E-2C get a guard pair
+  from the ordinary fighter squadrons, as does the E-3 when the HVAACAP squadron has no jets ready. The
   guard goes up in the last wave that opens before the asset's window starts (the first wave when the asset is up already), or in a later
   wave when no pair is ready sooner.
   Every package that carries the asset carries its guard. The pair can refuel on the orbit.
-* **The AWACS sits on one fixed safe station** (behind the front, from the rear base: Kutaisi on the Caucasus, Paphos on Syria), not near you or your target. The tanker sits
-  forward on the way home, clear of SAM rings and red's scramble circles.
+* **The AWACS sits under blue cover** (behind the front, from the rear base: Kutaisi on the Caucasus, Paphos on Syria), not near you or your target: within 30 nm of a defended
+  field or the carrier group, or within 25 nm of a blue BARCAP that has a pair flying that turn. The tanker sits forward on the way home, under the same cover where it can, clear
+  of SAM rings and red's scramble circles.
+* **Both prefer cover to distance from raids.** The tanker's track tries to stay at least 50 nm from the routes a red raid flies and 100 nm from the route of a red fighter sweep;
+  the AWACS tries to stay 40 nm from a raid's route and 100 nm from a sweep's. Cover comes first: the AWACS moves to the covered spot (up to 150 nm from its rear station, never nearer to
+  red and never off the map) with the most room from those routes, and the tanker takes a covered spot that is clear of them when there is one, else the covered spot that is least
+  inside them (at most 25 nm inside), else a clear spot with no cover; the build warns when a tanker sits inside. Only when no covered place exists does the AWACS move away from
+  red's raid routes, as before. If there is no clear spot at all while the red raids and sweeps fly, the tanker **waits on the ground and launches once they are over**: about 10 minutes
+  after the last red raid's time over its target, plus its flight to its track, and only when no red fighter is within 60 nm of the track. Its HVAACAP guard launches with it, and the
+  briefing's intelligence says when. It will often arrive after your own flight has gone home (it is there for the later packages); a tanker that could launch only more than
+  30 minutes after your planned recovery does not fly that mission. In the
+  air, either one turns away when an enemy fighter comes within 60 nm: it flies 40 nm straight away from it and orbits there, and goes back to its track after 5 quiet minutes
+  with no fighter within 80 nm. Red's sweeps do hunt them (a sweep can go 100 nm or more from its own bombers), and a tanker cannot outrun a fighter that is already close.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -300,7 +366,7 @@ The second map. You choose the map in the New Campaign dialog; a Syria campaign 
 
 ### The war
 
-It is June 2001 (the campaign starts on 12 June, at **00:00**). A US-led coalition has answered Turkey's request for help and fights its way down the **Hatay coast road** into Syria. Blue flies from **Incirlik**, from Akrotiri, Larnaca, Paphos and Muwaffaq Salti (Hatay is a recovery field only), and from the carrier **USS Dwight D. Eisenhower**, which sits south of Cyprus (it keeps at least 130 nm from every red airfield, closing in as they fall). Red holds the Syrian airfields. The front is the coast road from Hatay through **Bassel Al-Assad**, **Rene Mouawad** and **Shayrat**, and the level decides how much of it is fought over: Level 1 contests Bassel Al-Assad only, Level 2 adds Rene Mouawad, Level 3 adds Shayrat. The deep rear (Hama, Abu al-Duhur, Tiyas, Palmyra, Sayqal, Damascus, Al-Dumayr, An Nasiriyah) is where the long-range air defence and the bomber wing sit.
+It is June 2001 (the campaign starts on 12 June, at **00:00**). A US-led coalition has answered Turkey's request for help and fights its way down the **Hatay coast road** into Syria. Blue flies from **Incirlik**, from Akrotiri, Larnaca, Paphos and Muwaffaq Salti (Hatay is a recovery field only, but it has the full air defence of a blue field: Patriot, HAWK and AAA, so red's raids and SEAD packages treat it as a defended field), and from the carrier **USS Dwight D. Eisenhower**, which sits south of Cyprus (it keeps at least 130 nm from every red airfield, closing in as they fall). Red holds the Syrian airfields. The front is the coast road from Hatay through **Bassel Al-Assad**, **Rene Mouawad** and **Shayrat**, and the level decides how much of it is fought over: Level 1 contests Bassel Al-Assad only, Level 2 adds Rene Mouawad, Level 3 adds Shayrat. The deep rear (Hama, Abu al-Duhur, Tiyas, Palmyra, Sayqal, Damascus, Al-Dumayr, An Nasiriyah) is where the long-range air defence and the bomber wing sit.
 
 Who you fight depends on the level: Level 1 is **the Northern Coastal Command** (the NCC, an insurgent force), Level 2 is **Syria**, Level 3 is **Syria and its Russian backers**.
 
@@ -309,19 +375,19 @@ Who you fight depends on the level: Level 1 is **the Northern Coastal Command** 
 | | Level 1 | Level 2 | Level 3 |
 |---|---|---|---|
 | Red airfields | 4: Bassel Al-Assad, Abu al-Duhur, Hama, Shayrat | 11, the whole coast road and the interior | 11 |
-| Red aircraft at the start | 94 (MiG-21Bis, MiG-23MLD, Su-17M4, Su-24M) | 238 (adds MiG-29A and MiG-25PD) | 238, plus the bomber wing (MiG-23MLD, MiG-29A and S, MiG-25PD, Su-27, MiG-31, Su-17M4, Su-24M) |
+| Red aircraft at the start | 94 (MiG-21Bis, MiG-23MLD, Su-17M4, Su-24M) | 270 (adds MiG-29A and MiG-25PD) | 284, plus the bomber wing (all fourth-generation fighters: MiG-29A and S, Su-27, MiG-31; Su-17M4, Su-24M; no MiG-23s or MiG-25s left) |
 | Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA, two SA-5 batteries | SA-10, SA-11, SA-6, SA-15, SA-19, three SA-5 batteries |
 | Air defence integration, red counter-attacks, ground pressure | as in section 2 (0.15 / 0.10 / 0.15) | 0.55 / 0.30 / 0.45 | 0.90 / 0.55 / 0.80 |
-| Tu-22M3 bomber wing | none | none | 16 Tu-22M3 with 12 Su-27 escorts at Damascus |
+| Tu-22M3 bomber wing | none | none | 20 Tu-22M3 (14 at Damascus, 6 at Bassel Al-Assad) with 12 Su-27 escorts (6 at each) |
 | Victory | take Bassel Al-Assad | destroy all of Lutorin Works, or red's supply collapses (see below) | destroy all of Lutorin Works, or red's supply collapses |
 
-Red's jets fill each field's parking to about 75% at Level 1 (four small fields), about 70% at Levels 2 and 3 (the same jets per field; Level 2's types are older, a regional power's. Damascus is held back for the bomber wing at Level 3).
+Red's jets fill each field's parking to about 75% at Level 1 (four small fields) and about 80% at Levels 2 and 3 (270 and 284 jets; the same jets per field; Level 2's types are older, a regional power's, with fewer Su-17M4 than before. Damascus is held back for the bomber wing at Level 3).
 
-Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4** attack jet. At Level 3 the Tu-22M3 wing raids the carrier along the line from the carrier through Damascus, at most 12 bombers at a time, flown as a set piece with its SEAD in the turn before, as in section 5. The fleet's station moves and it sails out of the raid's reach on the staging day, as in section 5.
+Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4** attack jet. At Level 3 the Tu-22M3 wing raids the carrier along the line from the carrier through Damascus, at most 16 bombers at a time (drawn from both bomber fields, a closed one skipped), flown as a set piece with its SEAD in the turn before, as in section 5. The fleet's station moves and it sails out of the raid's reach on the staging day, as in section 5.
 
 ### Blue in Syria
 
-Blue has 18 squadrons and 284 jets at every level: two F-14B squadrons and two F/A-18C squadrons on the carrier, five F-16C, three F-15C (plus the AI-only HAVCAP F-15C), three F-15E (AI only), one A-10 squadron at Incirlik and the **8th FS 'Black Sheep' (12 F-117A, AI only)**. You can fly the F-14B, F/A-18C, F-16C, F-15C and A-10. The **Era Equipment** setting (New Campaign) picks the airframes of the year: Syria 2001 defaults to the A-10A, the F-14B and no Link 16 data. The weapons follow the year: the A-10A carries no JDAM and no targeting pod (Mavericks, laser and cluster bombs), the F-14B and the F-117A drop laser-guided bombs only, while the F-16C, F/A-18C and F-15E carry JDAM, JSOW and SLAM-ER, all in service by 2001 but still new, and not on every jet.
+Blue has 18 squadrons and 284 jets at every level: two F-14B squadrons and two F/A-18C squadrons on the carrier, five F-16C, three F-15C (plus the AI-only HVAACAP F-15C), three F-15E (AI only), one A-10 squadron at Incirlik and the **8th FS 'Black Sheep' (12 F-117A, AI only)**. You can fly the F-14B, F/A-18C, F-16C, F-15C and A-10. The **Era Equipment** setting (New Campaign) picks the airframes of the year: Syria 2001 defaults to the A-10A, the F-14B and no Link 16 data. The weapons follow the year: the A-10A carries no JDAM and no targeting pod (Mavericks, laser and cluster bombs), the F-14B and the F-117A drop laser-guided bombs only, while the F-16C, F/A-18C and F-15E carry JDAM, JSOW and SLAM-ER, all in service by 2001 but still new, and not on every jet.
 
 ### The opening night
 
@@ -333,7 +399,7 @@ then on the squadron flies as described in section 5. You do not fly it; you wil
 
 ### Winning and losing in Syria
 
-* **Level 1:** victory is the ground war, as in section 6: take **Bassel Al-Assad**.
+* **Level 1:** victory is the ground war, as in section 6, a march through the cities in three stages: take **Bassel Al-Assad** (the Latakia coast), then **Rene Mouawad**, then **Shayrat** (the Homs gap). After a city falls the next push waits only one day (the takeover is 9 days at the other levels). A war with nobody flying lasts about two weeks at Level 1, about 18 days at Level 2 and about two months at Level 3; flying shortens it.
 * **Levels 2 and 3:** no ground victory. The war is won in one of two ways, neither of them a conquest. **Lutorin Works** (below): all of them destroyed at the same time. Or **red's Force Index** (its supply, section 5) at or below 40% for **three nights in a row** (the Overview shows how close it is in a word: distant, approaching, close, under way); that is the depots, fuel farms and road sites, not the cities. The coalition's stated intent is to break Syria's supply and air defence. With red's air defence as strong as it is, the works are the more likely way.
 * **Defeat:** the coalition's air component below 15% of its strength (as in section 6), or **one** airfield of yours lost (the Caucasus allows three).
 
@@ -342,9 +408,9 @@ then on the squadron flies as described in section 5. You do not fly it; you wil
 At Levels 2 and 3 five special plants stand in the Syrian rear: two near Palmyra, two in the Homs gap and one at Latakia. They belong to **Lutorin** (a billionaire at Level 2, the richest man in the world at Level 3, the same story), who makes a stabilizer there that gives old Soviet-era arsenals new life. It is made from a crystal that only forms in the Palmyra phosphate beds and cannot be shipped, so it can only be made in Syria; Damascus hosts the plants and his money and arms stand behind its claim on Hatay. The Overview names them in one line ("Lutorin Works: all operational", "most of them still operational", "only a few still operational", "all destroyed"), lists them at the top of the Force Index tab with their health and state, and the red assets list pins them at the top under their own heading and the war log reports each one that falls.
 
 * **They are special targets.** The planner offers a strike on a Lutorin Works plant ahead of the ordinary supply strikes. A plant is a fixed target, so it is hit with stand-off weapons: SLAM-ER Hornets released far out and low, with no SEAD or DEAD job in front of it and without the flight route being stopped by the belt, for as long as a Hornet squadron has two jets to send. With none, the usual rules apply (behind the SEAD or DEAD on the air defence that covers it). The Palmyra plants sit under the long-range umbrella, so the odds there are the worst. A plant is hunted until it is destroyed (a damaged supply site is left alone to mend, a plant does not mend). **They are red's depots too:** each plant counts as a supply site in the Force Index (a site of the 25 red has at Levels 2 and 3: 12 fixed sites, 8 road sites and the 5 works), so a strike on a plant lowers the Force Index as much as one on a depot, and the nightly repair that mends depots does not mend them.
-* **They are very hard to rebuild.** One team rebuilds one destroyed plant at a time, and it takes weeks (about a month, at both levels). At both levels one good strike puts a works out, as it would a depot. A damaged plant never repairs.
-* **They feed the war on the front.** While the plants stand, the enemy's reinforcements, attacks and raids are stronger, so the more of them you destroy the weaker the push on Hatay. If every one of them is destroyed at the same moment the war is won ("Lutorin Works is gone"). The other ending is the one the campaign already has: if Hatay falls, the war is lost.
-* Tactical Edge and your own flying count as for any other strike: the plants are tasked like every other job, and a plant you hit yourself takes damage from the buildings you really destroy.
+* **They are very hard to rebuild.** Two teams rebuild two destroyed plants at a time (at both levels), and each takes weeks (about a month); a third destroyed plant waits for a team to finish. At both levels one good strike puts a works out, as it would a depot. A damaged plant never repairs.
+* **They feed the war on the front.** While the plants stand, the enemy's reinforcements, attacks and raids are stronger, so the more of them you destroy the weaker the push on Hatay. If every one of them is destroyed at the same moment and they all **stay** destroyed for a while (11 days at Level 2, 12 at Level 3: Lutorin's stockpile has to run out; the Overview says so) the war is won ("Lutorin Works is gone"). The other ending is the one the campaign already has: if Hatay falls, the war is lost.
+* Your own flying counts as for any other strike: the plants are tasked like every other job, and a plant you hit yourself takes damage from the buildings you really destroy.
 
 ### Long-range air defence
 

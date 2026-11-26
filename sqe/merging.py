@@ -53,13 +53,6 @@ class Merging:
             cx, cy = t[0] + (cx - t[0]) * R / d, t[1] + (cy - t[1]) * R / d
         return cx, cy
 
-    def _inside_merge(self, anchor: Package, other: Package) -> bool:
-        """Is `other`'s target inside the merge circle around `anchor`'s?"""
-        if self.settings.merge_mode != "area":
-            return False
-        c, t = self.merge_center(anchor), self._pkg_xy(other) or self._raid_xy(other)
-        return c is not None and t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= self.area_radius_m()
-
     def _raid_way(self, p: Package):
         """S39: a land raid's way in, ((x0, y0), (x1, y1)): from the bomber wing's field to the point it is going for. None for any other package (the carrier raid stays out)."""
         t = self._raid_xy(p)
@@ -87,7 +80,9 @@ class Merging:
         `unseen=True` (`fly` only) also takes the raids blue did not detect (`extra["unseen_raid"]`, not listed): they are built but never named to the player; the list and the GUI never pass it."""
         if self.settings.merge_mode != "area":
             return []
-        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        def hm(p):
+            # a package's start time "hh:mm" as minutes of the day
+            return int(p.start[:2]) * 60 + int(p.start[3:5])
         back = max(0, int(getattr(self.settings, "merge_earlier_min", 15)))
         fwd = max(0, int(getattr(self.settings, "merge_later_min", 30)))
         R = self.area_radius_m()
@@ -114,7 +109,10 @@ class Merging:
                 ok = way is not None and self._seg_dist(c, *way) <= R
             if ok:
                 out.append((d, hm(p), p.number, p))
-        out.sort(key=lambda r: (not (r[3].objective.type == ObjectiveType.COUNTER_AIR and r[3].objective.aim == "SWEEP"),) + r[:3])     # a Fighter Sweep first: the unit limit drops the strike packages before it
+        def sweep_first_then_fields(row):
+            not_a_sweep = not (row[3].objective.type == ObjectiveType.COUNTER_AIR and row[3].objective.aim == "SWEEP")
+            return (not_a_sweep,) + row[:3]
+        out.sort(key=sweep_first_then_fields)     # a Fighter Sweep first: the unit limit drops the strike packages before it
         picked = [r[3] for r in out]
         # v0.41.270 (XO 2026-11-04): the carrier raid folds into no mission: it is red aiming for the king, a setpiece of its own (v0.41.250 folded it into any mission at its time)
         return picked
@@ -131,7 +129,9 @@ class Merging:
         here = self._pkg_xy(pkg) or self._raid_xy(pkg)
         if here is None:
             return []
-        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        def hm(p):
+            # a package's start time "hh:mm" as minutes of the day
+            return int(p.start[:2]) * 60 + int(p.start[3:5])
         back = max(0, int(getattr(self.settings, "merge_earlier_min", 15)))
         fwd = max(0, int(getattr(self.settings, "merge_later_min", 30)))
         my_way = self._raid_way(pkg)
@@ -150,7 +150,8 @@ class Merging:
             if my_way is not None:
                 d = min(d, self._seg_dist(t, *my_way))
             rows.append([d, hm(p), p.number, p])
-        is_sweep = lambda p: p.objective.type == ObjectiveType.COUNTER_AIR and p.objective.aim == "SWEEP"
+        def is_sweep(p):
+            return p.objective.type == ObjectiveType.COUNTER_AIR and p.objective.aim == "SWEEP"
         dist_of = {r[2]: r[0] for r in rows}
         dist_of[pkg.number] = 0.0
         for r in rows:
@@ -158,7 +159,9 @@ class Merging:
                 cov = [dist_of[n] for n in (r[3].extra.get("covers") or []) if n in dist_of]
                 if cov:
                     r[0] = max(cov)
-        rows.sort(key=lambda r: (r[0], is_sweep(r[3]), r[1], r[2]))
+        def row_order(row):
+            return (row[0], is_sweep(row[3]), row[1], row[2])
+        rows.sort(key=row_order)
         return [r[3] for r in rows]
 
     @staticmethod
@@ -180,7 +183,9 @@ class Merging:
         at most four looked at (the builder shows at most three)."""
         if not getattr(self.settings, "ruins", True) or self.settings.merge_mode != "area":
             return []
-        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        def hm(p):
+            # a package's start time "hh:mm" as minutes of the day
+            return int(p.start[:2]) * 60 + int(p.start[3:5])
         have = {x.number for x in extras}
         R = self.area_radius_m()
         c = self.merge_center(pkg, R)
@@ -193,15 +198,21 @@ class Merging:
         out = [p for p in cands if p.number != pkg.number and p.number not in have and hm(p) < hm(pkg)
                and any(not f.tag for f in p.flights) and not p.extra.get("scrub") and inside(p)
                and not (p.objective.type == ObjectiveType.COUNTER_AIR and p.objective.aim == "SWEEP")]      # a sweep leaves nothing burning on the ground
-        out.sort(key=lambda p: (-hm(p), p.number))
+        def latest_start_then_number(package):
+            return (-hm(package), package.number)
+        out.sort(key=latest_start_then_number)
         return out[:4]
 
     def collapse(self, pkgs: list) -> list:
         """The Missions list: [(package, [packages shown inside it])]. A package that an earlier shown package folds in (it starts after it, same area)
         is listed inside that package's panel instead of as a row of its own, each with its own FLY button."""
-        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        def hm(p):
+            # a package's start time "hh:mm" as minutes of the day
+            return int(p.start[:2]) * 60 + int(p.start[3:5])
         absorbed, out = set(), []
-        for p in sorted(pkgs, key=lambda p: (hm(p), p.number)):
+        def start_then_number(package):
+            return (hm(package), package.number)
+        for p in sorted(pkgs, key=start_then_number):
             if p.number in absorbed:
                 continue
             mem = [x for x in self.merge_candidates(p) if (hm(x), x.number) > (hm(p), p.number)] if self.flyable(p) else []

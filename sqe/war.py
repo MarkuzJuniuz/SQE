@@ -21,6 +21,15 @@ JET_CAS_FACTOR = 0.7       # v0.41.188: an AI-flown F-16C / F/A-18C CAS sortie c
 ROLE_WEIGHT = {Role.STRIKE: 1.0, Role.SEAD: 0.9, Role.TARCAP: 0.6, Role.ESCORT: 0.7, Role.SWEEP: 0.7, Role.CAP: 0.6, Role.CAS: 1.0}
 
 
+# S150: the sort keys this module uses (they were lambdas)
+def _first_item(row):
+    return row[0]
+
+
+def _wing_available(wing):
+    return wing.available
+
+
 def _suppressor(f, pkg=None) -> bool:
     """A flight that works on the radars: a SEAD flight. A JSOW flight is the DEAD strike of a Standoff DEAD package (radars, launchers and
     Tors); in any other package (older saves: the SEAD package's JSOW slingers) it works on the radars."""
@@ -40,7 +49,9 @@ def long_range_site(state, site) -> bool:
     from . import threatmap as tm
     if site.variant in GATE_VARIANTS and not site.destroyed:
         return True
-    live = lambda a: a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not a.suppressed       # a suppressed SA-10 has no radars to shoot with
+    def live(a):
+        return a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not a.suppressed
+    # a suppressed SA-10 has no radars to shoot with
     return live(site) or any(live(a) and a.id != site.id and math.hypot(a.x - site.x, a.y - site.y) <= samtier.get(a.variant, "reach_km") * 1000 for a in state.assets.values())
 
 
@@ -85,11 +96,27 @@ SUPPRESS_TURNS = 2      # S25: was 3 (6 hours); 2 four-hour turns = 8 hours, the
 # picked BEFORE the variety pass and on top of `limit`. Numbers: Phase 1 probe 2026-11-11 (`.claude/tier removal plan.md`): L2 (2, 2, 1) took 15 of 16 northern sites down by day 5, L3 (2, 1, 1) 9.5 of 16 (Q_mtn 2
 # buys no more there, the belts gate); a sea quota of 3 buys nothing over 2; without the runway quota the runway job is never planned. L1 (1, 0, 0) is a judgment call (not probed; XO: Insurgent is not the focus).
 SAM_WAVE = {1: (1, 0, 0), 2: (2, 2, 1), 3: (2, 1, 1)}
+# S207a (XO 2026-11-25: "letting go of variety"): troops in contact get their air support before the score order fills the list: the best CAS job of each engaged ground sector,
+# the hardest pressed first, at most this many a turn. Judgment call (no public figure; the share of CAS against interdiction is the commander's apportionment decision, JP 3-30).
+CAS_FLOOR_MAX = 2
 RUNWAY_BELT_FACTOR = 1.5   # v0.41.375 (S20 Phase 5, XO 2026-11-11): a mountain SAM-DEAD job whose site blocks a northern runway crater ranks x1.5 in the mountain quota, so the single L3 slot goes to the belt guarding a runway first (judgment call; only reorders, the quota numbers stay)
 WAVE_NEAR_NM = 150.0       # a wave target scores up to x3 when it sits next to blue's airfields or an already dead / blind site (Phase 1 probe 2026-11-11, S20 probe 1's "B" formula; judgment call)
 # XO's list of the northern (MOUNTAIN front) fields, 2026-11-11: NOT `field_tier` (that puts Sochi, tier 3, with the north; Krymsk, Gelendzhik and Maykop are on the Kuban side, kept as XO listed them: judgment call).
 MOUNTAIN_FIELDS = ("mozdok", "beslan", "nalchik", "maykop", "minvody", "krymsk", "gelen")
 FOLLOW_GAP_MIN = 10     # a follow job starts this long after the SEAD / standoff package of its site (same gap as the Close DEAD stage)
+# S212: a strike or CAS that goes in behind a SEAD, as measured on the dedicated server (2026-11-26, all AI, Level 2 and 3): 9 of 10 damaged their target
+# (the sim's own odds said about 1 in 3), and the 9 took 0.44 of the target's health on average. Level 1 was not measured: the same figures (judgment call).
+FOLLOW_ATTACK_P = 0.8         # the least odds such a job has once it goes in (it is still held when the radars were not suppressed). The compressed dice (`chance`) turn 0.8 into about 9 successes in 10
+FOLLOW_ATTACK_DAMAGE = 0.45   # the health a successful one takes off its target, at every level
+
+
+def is_follow_attack(obj) -> bool:
+    """A bombing job behind a SEAD (no runway or standoff aim): the case the S212 server runs measured."""
+    if obj.type not in (ObjectiveType.STRIKE, ObjectiveType.CAS):
+        return False
+    if obj.aim in ("RUNWAY", "STANDOFF"):
+        return False
+    return len(after_sites(obj)) > 0
 
 
 def after_sites(obj) -> list:
@@ -175,11 +202,23 @@ class ObjectivePlanner:
                 best = bl
         return best or []
 
-    def plan(self, state: CampaignState, rng: random.Random, limit: int = 6, bomber: bool = True, skip: frozenset | set = frozenset(), waves: bool = True) -> list:
-        """The jobs of ONE turn (v0.41.338, Phase 4; `limit` = how many). `bomber`: look at the carrier raid this turn (the day's raid turn only: `Session._begin_day` picks it, so the
+    def plan(self, state: CampaignState, rng: random.Random, limit: int = 6, bomber: bool = True, skip: frozenset | set = frozenset(), waves: bool = True, fit=None, exclude: frozenset | set = frozenset()) -> list:
+        """The order of what blue tasks (S207a), which is the order of its doctrine, not a variety rule:
+        1. the SAM wave (`_wave_pass`): control of the air comes first (AFDP 3-01 Counterair: air superiority "to enable ... strategic attack, interdiction" and close air support);
+        2. the CAS floor (`_cas_floor`): the ground fight's call on the air (how air is split between interdiction and CAS is the commander's apportionment decision, JP 3-30 / JP 3-56.1);
+        3. every other job in score order, which already puts the belt first (DEAD on a site in front of something x1.8), then radars, then supply and works, then the rest.
+        The order itself is a judgment call built on those sources. No job type is capped and none is given a place for variety's sake; the one spread rule is that a ground sector with a job
+        already waits behind a sector with none (concentration is per sector). A job the turn cannot crew or reach (`fit`) is passed over for the next.
+
+        `exclude`: (objective type, target id) of jobs already named this turn: not offered again, and a follow job may wait on an excluded DEAD job's site.
+
+        `fit` (`jobfit.TurnFit`): what the turn can crew; a job it cannot is passed over and the slot goes to the next candidate (None: every candidate may be named).
+
+        The jobs of ONE turn (v0.41.338, Phase 4; `limit` = how many). `bomber`: look at the carrier raid this turn (the day's raid turn only: `Session._begin_day` picks it, so the
         raid is offered once a day and not every turn). `skip`: target ids not to plan this turn (the re-tasking rule, `Session._retask_skip`). `waves` (v0.41.367): take the SAM / EWR / runway wave of SAM_WAVE for the level (not for the player's extra-jobs call)."""
         cand = []                                  # (priority, objective, blockers); v0.41.371: no depth gate, the belt rule and covering_sams are the only blockers
-        alive = lambda aid: not state.assets[aid].destroyed
+        def alive(aid):
+            return not state.assets[aid].destroyed
         for a in state.assets.values():
             if a.destroyed or a.id in skip:
                 continue
@@ -296,7 +335,7 @@ class ObjectivePlanner:
         pool, follows = [], []
         fsites = {sid for c in cand if not c[2] for sid in after_sites(c[1])}
         for pr, o, bl in cand:
-            if bl:
+            if bl or (o.type, o.target_id) in exclude:
                 continue
             if o.type == ObjectiveType.DEAD and o.target_id in blocking:
                 pr *= 1.8                                              # clear the belt first
@@ -326,38 +365,49 @@ class ObjectivePlanner:
             auth = sum(x.authorized for x in state.enemy_air) or 1
             pr = 3.0 + 4.0 * tot / auth
             pool.append((pr, Objective("", ObjectiveType.BARCAP, fleet.id, pr, f"Combat air patrol over {fleet.name}")))
-        scored = sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in pool), key=lambda t: t[0], reverse=True)
-        picked, seen, taken = [], set(), set()
+        def score_then_tie(row):
+            return (row[0], rng.random())              # S207e: no jitter on the scores; equal scores are broken by the seeded draw
+        scored = sorted(pool, key=score_then_tie, reverse=True)
+        picked, taken = [], set()
         used = set()                                           # v0.41.345 (scaled tasking, Phase B): ground sectors that already have a job: a second job in one comes only when no unused sector has a candidate
         sec = {id(o): job_sector(state, o) for _, o in scored}
-        def take(k: int) -> None:
+        def take(k: int) -> bool:
+            # Name the candidate, unless the turn has no jets left for it.
+            objective = scored[k][1]
+            if fit is not None:
+                if not fit.fits(objective):
+                    return False
+                fit.spend(objective)
             taken.add(k); picked.append(scored[k])
             if sec[id(scored[k][1])] is not None:
                 used.add(sec[id(scored[k][1])])
-        def best(ok):                                          # the best-scored candidate of an unused sector, else of any
-            c = [k for k in range(len(scored)) if k not in taken and ok(scored[k][1])]
-            return min(c, key=lambda k: (sec[id(scored[k][1])] in used, k), default=None)      # scored is sorted best first, so the index is the score rank
+            return True
+        def best():                                            # the best-scored candidate of an unused sector, else of any
+            c = [k for k in range(len(scored)) if k not in taken]
+            def used_sector_then_rank(k):
+                return (sec[id(scored[k][1])] in used, k)
+            c.sort(key=used_sector_then_rank)                          # scored is sorted best first, so the index is the score rank
+            for k in c:
+                if fit is None or fit.fits(scored[k][1]):
+                    return k
+            return None
         if waves and self.d is not None:
             rwy_belt = {x.id for _, o_, bl_ in cand if o_.type == ObjectiveType.STRIKE and o_.aim == "RUNWAY"
                         and axis_of(state.assets[o_.target_id]) == "MOUNTAIN" for x in bl_}      # v0.41.375: the sites that stand in front of a northern runway job
             limit += self._wave_pass(state, scored, take, rwy_belt)
-        while len(picked) < limit:                             # one of each objective type first, for variety
-            k = best(lambda o: o.type not in seen)
+        floor = self._cas_floor(state, scored, take, picked, limit)       # S207a: the engaged sectors' CAS first
+        while len(picked) < limit:                             # then the score order, which is the doctrine order
+            k = best()
             if k is None:
                 break
-            take(k); seen.add(scored[k][1].type)
-        cap = max(2, math.ceil(0.4 * limit))                   # no single job type may swamp the day (DEAD packages are big)
-        per = {}
-        for _, o in picked:
-            per[o.type] = per.get(o.type, 0) + 1
-        while len(picked) < limit:
-            k = best(lambda o: per.get(o.type, 0) < cap)
-            if k is None:
-                break
-            take(k); per[scored[k][1].type] = per.get(scored[k][1].type, 0) + 1
-        picked.sort(key=lambda t: t[0], reverse=True)
-        picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=lambda t: t[0], reverse=True), limit, cap)
-        picked = self._stage_dead(state, picked, limit)
+            take(k)
+        picked.sort(key=_first_item, reverse=True)
+        named_dead = set()
+        for kind, target_id in exclude:
+            if kind == ObjectiveType.DEAD:
+                named_dead.add(target_id)
+        picked = self._add_followers(state, picked, sorted(follows, key=score_then_tie, reverse=True), limit, fit, named_dead, floor)
+        picked = self._stage_dead(state, picked, limit, floor)
         out = []
         for i, (_, o) in enumerate(picked, 1):
             o.id = f"obj-t{state.turn}-{i}"                              # v0.41.338: by the turn (a day has 12 plans now)
@@ -369,8 +419,36 @@ class ObjectivePlanner:
                 out.append(o)
         return out
 
+    def _cas_floor(self, state, scored: list, take, picked: list, limit: int) -> set:
+        """S207a: the best CAS job of each engaged ground sector (`ground.info`: troops in contact), the sector red presses hardest first, at most
+        `CAS_FLOOR_MAX`, inside `limit`. -> the objects (by id()) taken here, which the later passes must not push out of the list."""
+        taken_here: set = set()
+        if not ground.active(state):
+            return taken_here
+        sectors = []
+        for index in range(ground.n_zones(state.ground)):
+            info = ground.info(state, index)
+            if info["engaged"]:
+                sectors.append((-info["pressure"], index))
+        for _pressure, sector in sorted(sectors):
+            if len(taken_here) >= CAS_FLOOR_MAX or len(picked) >= limit:
+                break
+            for k, (_score, objective) in enumerate(scored):
+                if objective.type != ObjectiveType.CAS or cas_sector(state, objective) != sector:
+                    continue
+                already = False
+                for _s, other in picked:
+                    if other is objective:
+                        already = True
+                if already:
+                    break
+                if take(k):
+                    taken_here.add(id(objective))
+                    break
+        return taken_here
+
     def _wave_pass(self, state, scored: list, take, rwy_belt: frozenset | set = frozenset()) -> int:
-        """v0.41.367 (S20 Phase 2): take the turn's wave out of the pool BEFORE the variety pass, so the SAM work is not crowded out by it. Three quotas (SAM_WAVE): sea SAM-DEAD jobs, mountain SAM-DEAD and EWR
+        """v0.41.367 (S20 Phase 2): take the turn's wave out of the pool BEFORE the score order, so the SAM work is not crowded out by it. Three quotas (SAM_WAVE): sea SAM-DEAD jobs, mountain SAM-DEAD and EWR
         strikes, northern runway craters (a cratered field flies nothing; without a quota the runway job is never planned). Ordered by score x wave_factor (mountain: x the field's ready / authorized jets).
         -> how many were taken (the caller raises `limit` by that, so the wave is on top of the turn's jobs)."""
         q_sea, q_mtn, q_rwy = SAM_WAVE.get(int(getattr(self.d, "level", 2)), SAM_WAVE[2])
@@ -397,38 +475,43 @@ class ObjectivePlanner:
             lists[ax].append((-key, k))
         n = 0
         for ax, q in (("SEA", q_sea), ("MOUNTAIN", q_mtn), ("RUNWAY", q_rwy)):
-            for _, k in sorted(lists[ax])[:q]:
-                take(k)
-                n += 1
+            taken_here = 0
+            for _, k in sorted(lists[ax]):
+                if taken_here >= q:
+                    break
+                if take(k):                                        # (False: no jets left for it; the next of the same kind is tried)
+                    taken_here += 1
+                    n += 1
         return n
 
-    def _add_followers(self, state, picked: list, follows: list, limit: int, cap: int) -> list:
+    def _add_followers(self, state, picked: list, follows: list, limit: int, fit=None, named_dead: set | None = None, floor: set | None = None) -> list:
         """v0.41.158: a STRIKE / CAS under one or two SA-11 / SA-10 sites goes in behind their SEAD: it is offered only when today's list already has
         the DEAD job of every one of those sites (which _stage_dead turns into a SEAD / standoff package), so those sites have their radars busy
         (or blind) when it arrives. It takes a free slot, or the place of a lower-ranked job of a type that has another one. Judgment call: the
         public SEAD sources describe suppression as temporary and partial, so the job is held (turned back) when the SEAD verdict fails."""
         valve = int(getattr(self.d, 'sead_valve', SEAD_FAIL_VALVE))
         dead_sites = {o.target_id for _, o in picked if o.type == ObjectiveType.DEAD and not o.aim}
+        dead_sites |= named_dead or set()                          # (sites whose DEAD job the turn named earlier: the refill's call)
         for s, o in follows:
             sites = after_sites(o)
             if not sites or any(sid not in dead_sites or sid not in state.assets
                                 or not (long_range_site(state, state.assets[sid]) or sead_fail(state, sid) < valve) for sid in sites):
                 continue
-            if sum(1 for _, p in picked if p.type == o.type) >= cap:
-                continue
+            if fit is not None and not fit.fits(o):
+                continue                                   # nobody can get there (or no jets left for it)
             if len(picked) >= limit:
                 per = {}
                 for _, p in picked:
                     per[p.type] = per.get(p.type, 0) + 1
-                weak = [(t, p) for t, p in picked if p.type != ObjectiveType.DEAD and not p.after and per[p.type] > 1 and t < s]
+                weak = [(t, p) for t, p in picked if p.type != ObjectiveType.DEAD and not p.after and per[p.type] > 1 and t < s and id(p) not in (floor or set())]
                 if not weak:
                     continue
-                picked.remove(min(weak, key=lambda t: t[0]))
+                picked.remove(min(weak, key=_first_item))
             picked.append((s, o))
-        picked.sort(key=lambda t: t[0], reverse=True)
+        picked.sort(key=_first_item, reverse=True)
         return picked
 
-    def _stage_dead(self, state, picked: list, limit: int) -> list:
+    def _stage_dead(self, state, picked: list, limit: int, floor: set | None = None) -> list:
         """SEAD first. Each SEAD / DEAD job becomes two packages for the same site: a SEAD package that blinds the radars, and a DEAD package that
         goes in 25 minutes later and only if the radars are blind (see blinded_today). After SEAD_FAIL_VALVE failed days on the same site the
         combined package is offered again. The pair counts against the day's package limit: the lowest-priority other jobs make room."""
@@ -446,13 +529,21 @@ class ObjectivePlanner:
                 out.append((s_, o))
         while extra > 0 and len(out) > limit:
             for k in range(len(out) - 1, -1, -1):
-                if out[k][1].type != ObjectiveType.DEAD:
+                if out[k][1].type != ObjectiveType.DEAD and id(out[k][1]) not in (floor or set()):
                     del out[k]
                     break
             else:
                 break
             extra -= 1
         return out
+
+
+def cas_sector(state, o):
+    """The ground sector a CAS job supports: its front column's (`ground.zone_of`) or its forward garrison's (`ground.sector_of`); None for neither."""
+    sector = ground.zone_of(state, o.target_id)
+    if sector is None:
+        sector = ground.sector_of(state, o.target_id)
+    return sector
 
 
 def job_sector(state, o):
@@ -464,7 +555,9 @@ def job_sector(state, o):
     a = state.assets.get(o.target_id)
     if not cs or a is None:
         return None
-    return min(range(len(cs)), key=lambda i: math.hypot(a.x - cs[i][0], a.y - cs[i][1]))
+    def distance_to_centre(i):
+        return math.hypot(a.x - cs[i][0], a.y - cs[i][1])
+    return min(range(len(cs)), key=distance_to_centre)
 
 
 def chance(rng: random.Random, p: float, variance: float) -> bool:
@@ -583,7 +676,10 @@ class WarSimulator:
             p_e = max(p_s, strength / (strength + defense) if strength + defense else 0.0) if cov else (strength / (strength + defense) if strength + defense else 0.0)
             return max(0.02, min(0.98, p_e + tempo.get(state, "STRIKE"))), strength, defense
         p0 = strength / (strength + defense) if strength + defense else 0.0
-        return max(0.02, min(0.98, p0 + tempo.get(state, tempo.kind_of(obj.type)))), strength, defense
+        p = max(0.02, min(0.98, p0 + tempo.get(state, tempo.kind_of(obj.type))))
+        if is_follow_attack(obj):
+            p = max(p, FOLLOW_ATTACK_P)               # S212: measured; the losses still come from strength against defense
+        return p, strength, defense
 
     def _resolve_sweep(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         """A Fighter Sweep fights the enemy fighters near its area; the target itself is not attacked. Kills come off the nearest wings, which
@@ -591,8 +687,10 @@ class WarSimulator:
         import math
         d, rng = self.d, self.rng
         t = state.assets[pkg.objective.target_id]
+        def wing_distance_to_target(w):
+            return math.hypot(state.assets[w.base_asset_id].x - t.x, state.assets[w.base_asset_id].y - t.y)
         wings = sorted([w for w in state.enemy_air if w.available > 0 and w.base_asset_id in state.assets],
-                       key=lambda w: math.hypot(state.assets[w.base_asset_id].x - t.x, state.assets[w.base_asset_id].y - t.y))[:3]
+                       key=wing_distance_to_target)[:3]
         strength = sum(f.count * flight_weight(f) for f in pkg.flights)
         red = sum(w.available for w in wings) * (0.6 + 0.6 * d.iads) * 0.25
         p = max(0.02, min(0.98, (strength / (strength + red) if strength + red else 0.0) + tempo.get(state, "AIR")))
@@ -623,11 +721,12 @@ class WarSimulator:
         bw = state.enemy_air_at(pkg.extra.get("bomber_wing", "")) if pkg.extra else None
         strength = sum(f.count * flight_weight(f) for f in pkg.flights)
         esc = pkg.extra.get("escorts", 0)
-        kh59_ = raids.is_kh59(pkg.extra)                                    # S48: a Kh-59M raid is a standoff raid like the SEAD package
+        kh59_ = raids.is_kh59(pkg.extra)                                    # S48: a Kh-59M raid is a standoff raid like the SEAD package. S211: stopped before launch, salvo shot down, or arrived (`raids.KH59_*`)
         if pkg.extra.get("land") and not pkg.extra.get("sead") and not kh59_:           # v0.41.30: the batteries round the raid's target fight it too (sams.covering_ad, AD_RAID_WEIGHT); S36b: not a SEAD raid, which fires its Kh-31P from standoff, outside the site's reach; S48: nor a Kh-59M raid, which launches from about 50 nm, outside the point defences
             from .sams import covering_ad, AD_RAID_WEIGHT
             from .raids import aim_xy
-            strength += AD_RAID_WEIGHT * covering_ad(state, *aim_xy(state, pkg.objective.aim, state.bases[pkg.objective.target_id]))
+            ad_share = raids.SEAD_FLANK_AD_SHARE if pkg.extra.get("flank_of") else 1.0          # S186: a flank raid came in on the Patriot's blind side: the field's air defence counts less
+            strength += AD_RAID_WEIGHT * ad_share * covering_ad(state, *aim_xy(state, pkg.objective.aim, state.bases[pkg.objective.target_id]))
         up_, psq_ = False, None
         from . import blue_barcap
         if pkg.extra.get("land") and pkg.extra.get("bomber_wing"):        # v0.41.86: a base patrol on station on the side the raid comes from adds a pair
@@ -642,17 +741,35 @@ class WarSimulator:
                  and not state.assets[x].destroyed and state.assets[x].health > 0.25 and not getattr(state.assets[x], "suppressed", False)]
         if live_:                                                          # v0.41.305 (XO 2026-11-05: "the war planner takes into account what happened on those packages"): each SAM site still threatening the lane (the SEAD / DEAD packages ahead of the raid did not take it down) costs blue's fighters reach
             strength *= max(RAID_SAM_FLOOR, 1.0 - RAID_SAM_PRESSURE * len(live_))
+        layer_live = 0                                                     # S183 rule 2: wave 2 of a layered SEAD raid meets the outer Patriot too when wave 1 did not bring it down (the same pressure per live site as the prep sites)
+        for layer_id in (pkg.extra.get("layer_sites") or []):
+            layer_site = (getattr(state, "blue_sams", None) or {}).get(layer_id)
+            if layer_site is not None and not layer_site.destroyed and layer_site.health > 0.25:
+                layer_live += 1
+        if layer_live:
+            strength *= max(RAID_SAM_FLOOR, 1.0 - RAID_SAM_PRESSURE * layer_live)
         nb_ = int(pkg.extra.get("bombers", 4)) if pkg.extra else 4
         p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc + 0.25 * max(0, nb_ - 4))     # v0.41.155 (red zerg): a mass raid is harder to stop (judgment call)
-        ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
-        lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'}"]
+        # `ok` = the raid was stopped before it could strike. S211, a Kh-59M raid: it can also launch and have its salvo shot down (`shot_down`); the roll keeps both, the war sim replays rolls
+        shot_down = False
+        if force and "success" in force:
+            shot_down = bool(force.get("shot_down"))
+            ok = bool(force["success"]) and not shot_down
+        else:
+            ok = chance(rng, p, d.variance)
+            if kh59_:
+                ok = ok and rng.random() < raids.KH59_PRELAUNCH_SHARE          # the roll's result, kept this share of the time: halving the odds would cut far more through the compressed dice
+                shot_down = not ok and rng.random() < raids.KH59_SALVO_STOP
+        header = "RAID STOPPED" if ok else ("MISSILES SHOT DOWN" if shot_down else "RAID GOT THROUGH")
+        lines = [f"{pkg.objective.description}: {header}"]
         if pkg.extra.get("unseen_raid"):                                    # v0.41.348 (Phase 7b): no AWACS was up, blue's planned patrols alone met it
             lines.append("   not detected: no AWACS was on orbit, only the planned patrols met it")
             ra_ = state.raids if state.raids is not None else {}
             ra_["unseen_n"] = int(ra_.get("unseen_n", 0)) + 1
         tu_ = bool(pkg.extra.get("land")) and pkg.extra.get("raider") == raids.TU22              # v0.41.355 (Phase 10a): the Tu-22M3 land strike: a 2-ship, its own losses and hit size
         if bw is not None and ok and tu_:
-            k = bw.lose(raids.TU22, rng.randint(1, max(1, nb_)))                            # stopped: 1 or both bombers shot down (the Su-24M raid rule would take 2 to 4)
+            k_ = rng.randint(1, max(1, nb_))
+            k = raids.lose_raiders(state, pkg.extra, k_, rng) if pkg.extra.get("pool") else bw.lose(raids.TU22, k_)        # stopped: 1 or both bombers shot down (the Su-24M raid rule would take 2 to 4); B1: a strike pooled over two bomber fields loses them over both
             lines.append(f"   {k} Tu-22M3 shot down before dropping their bombs")
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
@@ -660,10 +777,14 @@ class WarSimulator:
             lines += raids.tu_hit(state, pkg.objective.target_id, bw, rng, pkg.objective.aim, nb_)
         elif bw is not None and ok:
             k = raids.lose_raiders(state, pkg.extra, (rng.randint(2, 4) if nb_ <= 4 else max(2, round(nb_ * rng.uniform(0.4, 0.7)))) if pkg.extra.get("land") else max(1, round(pkg.extra.get("bombers", 4) * rng.uniform(0.4, 0.8))), rng)          # S46: a pooled raid loses them over its wings
-            lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
+            lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") and not kh59_ else "launching their missiles"))
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
-        elif bw is not None and (pkg.extra.get("sead") or kh59_):                  # S36b: a SEAD package that was not stopped fires its Kh-31P from standoff: most of its jets launch (judgment call: 60 to 100 %), and the site takes SEAD_SITE_HIT for each. S48: a Kh-59M raid the same: the jets go home, the hit is `raids.KH59_HIT_EQUIV` per jet
+        elif bw is not None and shot_down:
+            lines.append("   the bombers launched from stand-off range; our fighters shot the missiles down")
+        elif bw is not None and kh59_:                  # S211: the salvo got through: every jet that launched fired its missiles
+            lines += raids_hit(state, pkg.objective.target_id, None, rng, nb_, pkg.objective.aim, pkg.extra.get("raider"), kh59=True)
+        elif bw is not None and (pkg.extra.get("sead")):                  # S36b: a SEAD package that was not stopped fires its Kh-31P (B2: or Kh-58U) from standoff: most of its jets launch (judgment call: 60 to 100 %), and the site takes SEAD_SITE_HIT for each. S48: a Kh-59M raid the same: the jets go home, the hit is `raids.KH59_HIT_EQUIV` per jet
             thr_ = max(2, round(nb_ * rng.uniform(0.6, 1.0)))
             lines += raids_hit(state, pkg.objective.target_id, None, rng, thr_, pkg.objective.aim, pkg.extra.get("raider"), kh59=kh59_)
         elif bw is not None and pkg.extra.get("land"):
@@ -674,7 +795,7 @@ class WarSimulator:
                 raids.lose_raiders(state, pkg.extra, max(1, thr_ // 3), rng)
                 lines += raids_hit(state, pkg.objective.target_id, None, rng, thr_, pkg.objective.aim, pkg.extra.get("raider"))
         elif bw is not None:
-            bw.lose(pkg.extra.get("raider"), 1)
+            bw.lose(raids.lose_type(pkg.extra, bw), 1)                                  # B1: a bomber field that is also a normal red wing loses a Tu-22M3 (Mozdok's wing: `lose(None)` as before)
             from . import carrier_hit
             carriers = [s for s in state.squadrons.values() if state.bases[s.base_id].kind.value == "CARRIER"]
             big_ = carrier_hit.big(state, d, rng)                        # v0.41.109: Level 3, the raid nobody flew: usually a very big deal
@@ -685,7 +806,15 @@ class WarSimulator:
                 lines.append(f"   missiles hit the fleet: {lost} aircraft lost on deck ({sq.name})")
         for ln in lines:
             state.note(ln.strip())
-        return {"success": ok, "odds": p, "lines": lines, "objective": pkg.objective.description, "roll": {"success": ok}}
+        prevented = ok or shot_down                      # for blue it is a success either way: nothing was hit
+        roll = {"success": prevented}
+        if shot_down:
+            roll["shot_down"] = True
+        odds = p
+        if kh59_:
+            stopped_odds = p * raids.KH59_PRELAUNCH_SHARE
+            odds = stopped_odds + (1.0 - stopped_odds) * raids.KH59_SALVO_STOP
+        return {"success": prevented, "odds": odds, "lines": lines, "objective": pkg.objective.description, "roll": roll}
 
     def sead_p(self, state: CampaignState, pkg: Package) -> float:
         """Odds that this package's SEAD flights blind the site's radars."""
@@ -835,7 +964,12 @@ class WarSimulator:
             if success and obj.aim == "RUNWAY":
                 lines.append("   " + runways.crater(state, t.id))             # v0.41.254: an AI-flown runway strike that succeeds craters the field
             elif success:
-                t.health = max(0.0, t.health - d.base_damage * (0.5 + p) * (ground.AIR_EFFECT if z is not None else 1.0) * works.damage_factor(state, t))
+                hit = d.base_damage * (0.5 + p)
+                if is_follow_attack(obj):
+                    hit = FOLLOW_ATTACK_DAMAGE            # S212: measured
+                if z is not None:
+                    hit = hit * ground.AIR_EFFECT
+                t.health = max(0.0, t.health - hit * works.damage_factor(state, t))
                 lines.append(f"   {t.name}: {strength_word(t.health)}")
                 if obj.type == ObjectiveType.COUNTER_AIR:
                     w = state.enemy_air_at(t.id)
@@ -846,7 +980,7 @@ class WarSimulator:
             elif obj.aim != "RUNWAY":
                 t.health = max(0.0, t.health - 0.1 * d.base_damage * works.damage_factor(state, t))
         elif success:
-            w = max(state.enemy_air, key=lambda w: w.available, default=None)
+            w = max(state.enemy_air, key=_wing_available, default=None)
             if w and w.available:
                 k = min(w.available, 1 + int(rng.random() < 0.5))
                 w.available -= k
@@ -903,6 +1037,8 @@ class WarSimulator:
                 state.note("Overnight: " + ln)
             for ln in ground.update_supply_win(state):             # S90: a pack's Force Index win, judged on the morning's figure (none in the Caucasus)
                 state.note("Overnight: " + ln)
+            for ln in ground.update_supply_loss(state):            # S213: the mirror: a pack's Force Index defeat
+                state.note("Overnight: " + ln)
             for bid in state.ground.get("fallen", []):
                 if bid in state.bases:
                     sams.set_field(state, state.bases[bid], 0.0)
@@ -950,4 +1086,7 @@ def update_status(state: CampaignState) -> str:
             state.status = "DEFEAT"; state.note(f"DEFEAT: the front has collapsed; {ground.defeat_bases()} of our airfields are lost.")
             for ln in story.beat(state, "lose"):
                 state.note(ln)
+        elif (state.ground or {}).get("supply_lost"):                   # S213: a pack's Force Index defeat (`ground.update_supply_loss`)
+            state.ground["pulled_out"] = True                           # the ending's text is the pull-out's, not the fallen front's
+            state.status = "DEFEAT"; state.note("DEFEAT: the coalition's supply has collapsed and Washington has called the war off.")
     return state.status

@@ -7,9 +7,10 @@ from dataclasses import dataclass, field, asdict
 from . import f117
 from . import runways, threat, works
 from . import threatmap as tm
-from .loadouts import CBU_JETS, ENEMY_FIGHTERS, ENEMY_RADIUS_NM, EWR_KIT_ORDER, JSOW_PER_JET, PEN_PER_JET, PEN_REACH, SLAM_PER_JET
+from .loadouts import CBU_JETS, JSOW_FLIGHT_KITS, ENEMY_FIGHTERS, ENEMY_RADIUS_NM, EWR_KIT_ORDER, JSOW_PER_JET, PEN_PER_JET, PEN_REACH, SLAM_PER_JET
 from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER, STRIKE_CONDITIONAL, HOG_KEYS
 from .models import AssetKind, Objective, ObjectiveType, Role, BaseKind, RefuelMethod
+from .routes import AVOID_NM, JSOW_LAUNCH_NM, SLAM_LAUNCH_NM, routed_nm
 from .state import CampaignState
 
 NM = 1852.0
@@ -84,8 +85,7 @@ _CA_JSOW_TASK = "Standoff Counter-Air: AGM-154A JSOW on the jets parked on the r
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
 _TASK[Role.ESCORT] = _ESC_TASK
-_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TKR_HAVCAP": "HAVCAP (guards the tanker)", "BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP (guards the carrier group)"}
-BASE_BARCAP_ENEMY_NM = 130     # v0.41.7: a land base gets a base BARCAP when an enemy fighter field is within this (an alert pair reaches it)
+_TAG_TASK = {"HVAACAP": "HVAACAP (guards the AWACS)", "TKR_HVAACAP": "HVAACAP (guards the tanker)", "BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP (guards the carrier group)"}
 
 
 @dataclass
@@ -265,7 +265,7 @@ class Ledger:
     (`refit.ready_by`; tier 2 counts against `available`). A sortie of wave w draws `free` and the tiers 2 to w (`room`) and spends the LATEST tier first (w, then w - 1 ... then `free`), so the earlier
     waves keep the jets they can use. `late` = the tiers added up per squadron, read-only. `view(wave)` hands the builder a throw-away Ledger for one wave, and `settle` books what the builder spent in it.
     `t_abs=None` (the plain `Ledger(state)`) means no later tiers."""
-    hfree = None                 # v0.41.353 (Phase 9b): the jets of the HAVCAP squadrons (`Squadron.role`), kept apart: only the AWACS / tanker guards draw them (`hroom` / `htake`); every other reader sees 0 in `free` / `tier`
+    hfree = None                 # v0.41.353 (Phase 9b): the jets of the HVAACAP squadrons (`Squadron.role`), kept apart: only the AWACS / tanker guards draw them (`hroom` / `htake`); every other reader sees 0 in `free` / `tier`
     htier = None
 
     def __init__(self, state: CampaignState, t_abs: int | None = None):
@@ -277,7 +277,7 @@ class Ledger:
                     self.tier[sid] = self.tiers_of(s, t_abs)
         self.hfree, self.htier = {}, {}
         for sid, s in state.squadrons.items():
-            if s.role == "havcap":                                                     # guards only: out of the pools the packages, patrols and scrambles read
+            if s.role == "hvaacap":                                                     # guards only: out of the pools the packages, patrols and scrambles read
                 self.hfree[sid], self.htier[sid] = self.free[sid], self.tier[sid]
                 self.free[sid], self.tier[sid] = 0, self.no_tiers()
 
@@ -333,11 +333,11 @@ class Ledger:
         return True
 
     def hroom(self, sid: str, wave: int) -> int:
-        """Jets of a HAVCAP squadron a guard of this wave can still draw (0 for any other squadron)."""
+        """Jets of an HVAACAP squadron a guard of this wave can still draw (0 for any other squadron)."""
         return _tier_room(self.hfree or {}, self.htier or {}, sid, wave)
 
     def htake(self, sid: str, n: int, wave: int) -> bool:
-        """`take` for a HAVCAP squadron's guard pair: the latest tier goes first."""
+        """`take` for an HVAACAP squadron's guard pair: the latest tier goes first."""
         if self.hroom(sid, wave) < n:
             return False
         _tier_spend(self.hfree, self.htier, sid, n, wave)
@@ -367,6 +367,7 @@ class PackageBuilder:
     def __init__(self, state: CampaignState, d=None):
         self.state, self.d = state, d
         self._tk, self._ctx = {}, (None, None)
+        self._rt, self._rings = {}, None                  # S140d1: routed reach per (base, target), and the live rings it goes round
         self.short = []                                  # v0.41.247: (role, x, y) of every slot of the day that no squadron could fill (ground.note_shortfall)
         self.missing = 0                                 # v0.41.338: the jets the REQUIRED slots of the last `build` are short of (the turn planner moves a package with some to a later wave)
 
@@ -390,6 +391,26 @@ class PackageBuilder:
             self._tk[key] = tm.tanker_station(self.state, base_xy, target_xy) is not None
         return self._tk[key]
 
+    def _routed_nm(self, base_xy, target_xy, end_nm: float = 0.0):
+        """S140d1: the length in nm of the safe path base -> target round every live SAM ring (`routes.routed_nm`) except the rings that hold the target (the attack leg goes in by design); a base inside a ring leaves it by
+        the ring's edge. The path ends `end_nm` short of the target, on the line from the base (the IP, or the launch point of a stand-off job: the attack leg after it goes in as it is, so a target behind a wall of
+        overlapping rings is not "out of reach" for the part of the route the rules cover; the first run without it dropped 13 % of the Syrian stand-off pairs), then straight on to the target.
+        Cached per (base, target, end) for this planning pass; None = no way round (not in range)."""
+        key = (round(base_xy[0]), round(base_xy[1]), round(target_xy[0]), round(target_xy[1]), round(end_nm))
+        if key not in self._rt:
+            if self._rings is None:
+                self._rings = [(a.x, a.y, AVOID_NM[a.variant]) for a in self.state.assets.values()
+                               if a.kind == AssetKind.SAM and a.variant in AVOID_NM and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)]
+            rings = [r for r in self._rings if math.hypot(target_xy[0] - r[0], target_xy[1] - r[1]) >= r[2] * NM]
+            d = math.hypot(base_xy[0] - target_xy[0], base_xy[1] - target_xy[1])
+            if 0 < end_nm * NM < d:
+                e = (target_xy[0] + (base_xy[0] - target_xy[0]) * end_nm * NM / d, target_xy[1] + (base_xy[1] - target_xy[1]) * end_nm * NM / d)
+                n = routed_nm(base_xy, e, rings)
+                self._rt[key] = None if n is None else n + end_nm
+            else:
+                self._rt[key] = routed_nm(base_xy, target_xy, rings)
+        return self._rt[key]
+
     def _in_range(self, sq_id, tx, ty, kit: str = "") -> bool:
         """Reach counts tanker support (x1.5) only when a safe tanker track exists, and the route must not cross a SAM belt
         in front of the target (the FLOT rule). S51: the PEN kit (no wing tanks) reaches `PEN_REACH` of the jet's combat radius."""
@@ -398,6 +419,11 @@ class PackageBuilder:
         spec = AIRCRAFT[sq.aircraft]
         reach = spec.combat_radius_nm * (PEN_REACH if kit == "PEN" else 1.0) * (1.5 if self._tanker_ok((b.x, b.y), (tx, ty)) else 1.0)
         if math.hypot(tx - b.x, ty - b.y) / NM > reach:
+            return False
+        obj_, _a = self._ctx
+        end_ = (SLAM_LAUNCH_NM if (kit == "SLAM" or (obj_ is not None and obj_.aim == "STANDOFF" and kit not in JSOW_FLIGHT_KITS)) else JSOW_LAUNCH_NM if kit in JSOW_FLIGHT_KITS else spec.profile.ip_nm)
+        rn = self._routed_nm((b.x, b.y), (tx, ty), end_)          # S140d1: the reach is the SAFE path's length to the IP / launch point, not the straight line (a flight never goes straight through SAM cover)
+        if rn is None or rn > reach:
             return False
         obj, asset = self._ctx
         if obj is not None and obj.type not in _FLEET and not f117.is_job(obj) and not (obj.aim == "STANDOFF" and works.is_works(asset)) and tm.blockers(self.state, (b.x, b.y), (tx, ty), asset):      # S111: a standoff strike on a works flies low under the umbrella and is not stopped by the belt in front of it (judgment call)
@@ -544,7 +570,11 @@ class PackageBuilder:
             # S60 (XO 2026-11-12: EWR strikes are stand-off only): the strike slot takes the kit of the first airframe in EWR_KIT_ORDER that has a squadron with 2+ free jets in range for it (the PEN kit's
             # reach is shorter). None: the package cannot be built, the EWR waits (no GBU fallback). S68: a player's build gets the kit of his own airframe (F-16C JSOW-A, Hornet SLAM-ER); an airframe with no kit gets no EWR strike (NoPlayerSlot below).
             pac_ = st.squadrons[st.player.squadron_id].aircraft if (for_player and st.player) else None        # S68 (XO 2026-11-12: the mission is the same for a person): a player's own airframe is tried first, so he flies the kit slot too
-            for ac_, kit_ in sorted(EWR_KIT_ORDER, key=lambda e_: e_[0] != pac_):
+            # The player's own airframe is tried first; the others keep the EWR_KIT_ORDER order.
+            def not_players_airframe(entry):
+                return entry[0] != pac_
+
+            for ac_, kit_ in sorted(EWR_KIT_ORDER, key=not_players_airframe):
                 if any(sq_.aircraft == ac_ and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty, kit_) for sq_ in st.squadrons.values()):
                     s_ = next(s_ for s_ in slots if s_.role == Role.STRIKE)
                     s_.kit, s_.only = kit_, ac_
@@ -575,7 +605,10 @@ class PackageBuilder:
                     ok = [i for i in ok if slots[i].role != Role.CAS]
             if not ok:
                 raise NoPlayerSlot(f"{psq.name} cannot fly any role in: {obj.description}")
-            player_idx = max(ok, key=lambda i: PLAYER_ROLE_PREFERENCE[slots[i].role])
+            def slot_preference(slot_index):
+                return PLAYER_ROLE_PREFERENCE[slots[slot_index].role]
+
+            player_idx = max(ok, key=slot_preference)
             if obj.type == ObjectiveType.CAS and psq.aircraft not in HOG_KEYS:      # v0.41.188: a Hornet / Viper pilot picking a CAS job flies the Maverick slot, not the escort
                 cas_ = [i for i in ok if slots[i].role == Role.CAS]
                 player_idx = cas_[0] if cas_ else player_idx
@@ -625,7 +658,7 @@ class PackageBuilder:
                 ledger.free[sq_.id] += n_
             raise NoPlayerSlot("no SEAD flight free to escort the " + ("CAS" if obj.type == ObjectiveType.CAS else "strike") + " today")
 
-        # support CAP: all four kinds (TKR_HAVCAP, HAVCAP, BASE_BARCAP, CARRIER_BARCAP) are planned in blue_barcap.py (per turn, per asset / area) and attached once the start times are known
+        # support CAP: all four kinds (TKR_HVAACAP, HVAACAP, BASE_BARCAP, CARRIER_BARCAP) are planned in blue_barcap.py (per turn, per asset / area) and attached once the start times are known
 
         used, n = (names if names is not None else {}), 0     # names: the day's callsign counter, shared by every package that day
         for slot, sq, count, is_pl in chosen:
@@ -661,12 +694,16 @@ class PackageBuilder:
         rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:raid")
         stg_ = (st.raids or {}).get("bomber_stage") or {}
         brg_ = round(float(stg_["brg"]), 1) if (stg_.get("launch") == st.day and stg_.get("brg") is not None) else None      # v0.41.356 (Phase 10b part 1): the bearing is fixed when the raid is staged (the prep of the turn before needs it); an older stage keeps the seed by the raid's index
-        bw_id = next(w.base_asset_id for w in st.enemy_air if "Tu_22M3" in w.types)
+        bw_id = dec.get("tu_wing") or next(w.base_asset_id for w in st.enemy_air if "Tu_22M3" in w.types)      # B1: the lead bomber field of the raid (`bombers.decide`); a raid drawn from several fields names the partners in `pool` / `esc_pool`
         # v0.41.279 (XO 2026-11-04): back to a random 8 to 40 degrees. v0.41.275 pointed it at the bombers' field, but Mozdok lies ~213 nm from the carrier, just outside the
         # X-22's 208 nm reach: on the straight line only 30 to 50 nm of way in is left outside the ring, the SAM circles cover it, and the interceptors find no intercept point.
         # The dogleg is what gives blue the room. Probed (seed 3, L3): bearing 20 gives a lane for every interceptor, bearing 60 none.
-        return {"brg": brg_ if brg_ is not None else bombers.raid_bearing(st, rnd), "bombers": dec["n"], "bomber_wing": bw_id,
+        plan = {"brg": brg_ if brg_ is not None else bombers.raid_bearing(st, rnd), "bombers": dec["n"], "bomber_wing": bw_id,
                 "escort_wing": dec["wing"], "escort_type": dec["type"], "escorts": dec["escorts"], "mode": dec["mode"]}
+        for k_ in ("pool", "esc_pool"):                                  # B1 (S46 keys): only when the raid is drawn from more than one bomber field
+            if dec.get(k_):
+                plan[k_] = dec[k_]
+        return plan
 
     def _pick_squadron(self, slot: Slot, tx, ty, ledger: Ledger, lead_service):
         """Prefer the lead's service; cross over only when sound (same-service option missing, or the other base is >=30% closer)."""
@@ -717,7 +754,11 @@ class PackageBuilder:
         from . import support_assets as sa_
         out = [SupportPlan("AWACS", awacs.dcs_class, awacs.label, awacs.altitude_ft, awacs.speed_kts)]
         methods: list = []
-        for f in sorted((f for f in pkg.flights if not f.tag), key=lambda f: f is not lead):
+        # The lead flight first, the others keep their order.
+        def not_lead(flight):
+            return flight is not lead
+
+        for f in sorted((f for f in pkg.flights if not f.tag), key=not_lead):
             m = AIRCRAFT[f.aircraft].refuel
             if m not in methods:
                 methods.append(m)
@@ -746,7 +787,10 @@ class PackageBuilder:
         opts = pkg.player_options(pp.aircraft)
         if not opts:
             raise NoPlayerSlot("package has no flight your aircraft can fly")
-        chosen = (max(opts, key=lambda f: PLAYER_ROLE_PREFERENCE[f.role]) if flight_id is None
+        def flight_preference(flight):
+            return PLAYER_ROLE_PREFERENCE[flight.role]
+
+        chosen = (max(opts, key=flight_preference) if flight_id is None
                   else next((f for f in opts if f.id == flight_id), None))
         if chosen is None:
             raise NoPlayerSlot(f"{flight_id} is not a flight you can fly in this package")

@@ -17,6 +17,10 @@ local SOUND_YOU = "__SOUND_YOU__"
 local AITEST = __AITEST__            -- all-AI test: nobody sits in a flight, so calls go to everyone
 local CALLS = { __CALLS__ }
 local UFLT = { __UFLT__ }
+local SAMNUM = { __SAMNUM__ }      -- S184: { part of a DCS type name, the SA number as spoken }, first match wins: the system in a MAGNUM call
+local MAGVAR = __MAGVAR__          -- S184: the theatre's magnetic variation, degrees east: bullseye bearings are magnetic (brevity: BULLSEYE)
+local BTGT = { __BTGT__ }            -- S149: unit name -> the target point of a striker (bomb) flight; a bomb leaving farther than BOMB_FAR_M from it is a jettison, not a release
+local BOMB_FAR_M = __BOMBFAR__ * 1000
 local ENEMYAIR = { __ENEMYAIR__ }
 -- v0.41.217: declared up here, before the event handler that reads them (a local further down the file is invisible to it: "attempt to index global DMGL")
 local AWUNIT = "__AWUNIT__"
@@ -29,7 +33,8 @@ local RUINS = { __RUINS__ }
 local GATES = { __GATES__ }
 local pl = { takeoff = nil, landed = nil, ka = 0, kg = 0, ks = 0 }
 local dead, ejected, landed, ended = {}, {}, {}, false
-local landAt = {}                -- unit name -> {t, p}: the time and the place (airbase or ship) of its landing
+local landAt = {}                -- unit name -> {t, p, c}: the time, the place (airbase or ship) and that place's coalition (0 neutral, 1 red, 2 blue, -1 unknown) of its landing
+local BLUEPLACES = { __BLUEPLACES__ }   -- S130b: the names of blue's own airfields and ships, used only when the game cannot tell a place's coalition
 -- v0.41.334 (campaign rules plan, Phase 1): declared up here, before the event handler that writes them (the v0.41.217 "DMGL" rule: a local further down is invisible to it)
 local limped = {}                -- unit name -> hit points left, percent, of every aircraft that landed below LIMP_LIFE: it limps, its refit is doubled (refit.py)
 local LIMP_LIFE = 0.90           -- landed with less than this share of its hit points = limping (judgment call, plan section 7)
@@ -71,7 +76,8 @@ local function shotsJson()
     local more = ""
     if k.km then more = string.format(',"km":%.1f,"alt":%d', k.km, math.floor(k.alt or 0)) end        -- shooter-to-target range (km) and shooter altitude (m) at launch
     if k.tx and k.tz then more = more .. string.format(',"tx":%d,"tz":%d', math.floor(k.tx), math.floor(k.tz)) end        -- the target's map position: its last known spot
-    if k.left then more = more .. string.format(',"left":%d', k.left) end        -- v0.41.122: air-to-air missiles still on the shooter
+    if k.left then more = more .. string.format(',"left":%d', k.left) end
+    if k.rk then more = more .. string.format(',"rk":%.1f', k.rk) end        -- S149: a bomb's distance from its flight's target point (km)        -- v0.41.122: air-to-air missiles still on the shooter
     o[#o + 1] = string.format('{"t":%d,"ev":"%s","by":"%s","bt":"%s","w":"%s","tg":"%s","tt":"%s"%s}', k.t, k.ev, esc(k.by), esc(k.bt), esc(k.w), esc(k.tg), esc(k.tt), more)
   end
   return "[" .. table.concat(o, ",") .. "]"
@@ -170,7 +176,7 @@ if #CRATERS > 0 then
 end
 local function landJson()
   local o = {}
-  for n, v in pairs(landAt) do o[#o + 1] = string.format('"%s":{"t":%d,"p":"%s"}', esc(n), math.floor(v.t or 0), esc(v.p or "")) end
+  for n, v in pairs(landAt) do o[#o + 1] = string.format('"%s":{"t":%d,"p":"%s","c":%d}', esc(n), math.floor(v.t or 0), esc(v.p or ""), v.c or -1) end
   return "{" .. table.concat(o, ",") .. "}"
 end
 local function limpJson()
@@ -246,6 +252,15 @@ local function siteDead(n)
     say(who .. ": target destroyed, " .. s.label .. ".")
   end
 end
+-- S149: the distance (m) from a striker's bomb to its flight's target point when it leaves, nil for anything but a bomb of a unit with a target point (BTGT).
+local function bombRange(e, n)
+  local bt = BTGT[n]
+  if not (bt and e.weapon and e.initiator) then return nil end
+  local okp, sp = pcall(function() return e.initiator:getPoint() end)
+  local okd, wd = pcall(function() return e.weapon:getDesc() end)
+  if okp and sp and okd and wd and wd.category == 3 then return math.sqrt((sp.x - bt.x) ^ 2 + (sp.z - bt.z) ^ 2) end
+  return nil
+end
 local function shotCall(e)
   local ok, d = pcall(function() return e.weapon:getDesc() end)
   if not ok or not d then return nil end
@@ -261,6 +276,88 @@ local function shotCall(e)
     return "Bombs away"
   end
   return nil
+end
+-- S184: the shot call by the book. Air Control Communication (ATP 3-52.4, 2024): "Fighters should communicate GROUP BULLSEYE, altitude, and HOSTILE in the
+-- shot transmission", example "RAPTOR 1, FOX 3 LEAD GROUP BULLSEYE 1-2-5/27, TWENTY-NINE THOUSAND, HOSTILE."; SEAD example "STORM 2, MAGNUM ELEVEN
+-- BULLSEYE 3-6-0/32." (the system by its SA number). Brevity (ATP 1-02.1, 2023): BULLSEYE = bearing (magnetic) and range (nautical miles).
+-- The bearing is spoken digit by digit. SQE has no group names (LEAD, WEST ...): the call says "group". Anything missing: the plain word.
+local function bullseyeOf(p)
+  local ok, ref = pcall(function() return coalition.getMainRefPoint(coalition.side.BLUE) end)
+  if not ok or not ref then return nil end
+  local dx = p.x - ref.x
+  local dz = p.z - ref.z
+  local bearing = math.deg(math.atan2(dz, dx)) - MAGVAR
+  bearing = math.floor(bearing + 0.5) % 360
+  if bearing == 0 then bearing = 360 end
+  local range_nm = math.floor(math.sqrt(dx * dx + dz * dz) / 1852 + 0.5)
+  local digits = string.format("%03d", bearing)
+  return "bullseye " .. string.sub(digits, 1, 1) .. "-" .. string.sub(digits, 2, 2) .. "-" .. string.sub(digits, 3, 3) .. "/" .. range_nm
+end
+-- S190 (XO 2026-11-24): "Bombs away" by the brevity manual. ATP 1-02.1 (25 April 2025): "[number, weapon type] AWAY ... At minimum, number or weapon type required. NOTE: Include
+-- launch location in BULLSEYE format and weapons track direction when appropriate." The call says the launch location (the shooter's bullseye) and the weapon's track as a magnetic
+-- heading, digit by digit ("heading 2-7-0"): the weapon's own velocity at the release, else the line from the shooter to the weapon's target. Anything missing: what is known, else the plain word.
+local function headingWord(dx, dz)
+  local heading = math.deg(math.atan2(dz, dx)) - MAGVAR
+  heading = math.floor(heading + 0.5) % 360
+  if heading == 0 then heading = 360 end
+  local digits = string.format("%03d", heading)
+  return string.sub(digits, 1, 1) .. "-" .. string.sub(digits, 2, 2) .. "-" .. string.sub(digits, 3, 3)
+end
+local function bombsAwayDetail(e, call)
+  local oks, shooter_point = pcall(function() return e.initiator:getPoint() end)
+  if not oks or not shooter_point then return call end
+  local where = bullseyeOf(shooter_point)
+  if not where then return call end
+  local text = call .. ", " .. where
+  local track_x = nil
+  local track_z = nil
+  local okv, velocity = pcall(function() return e.weapon:getVelocity() end)
+  if okv and velocity and (math.abs(velocity.x) + math.abs(velocity.z)) > 1 then
+    track_x = velocity.x
+    track_z = velocity.z
+  else
+    local okt, target = pcall(function() return e.weapon:getTarget() end)
+    if okt and target then
+      local okp, target_point = pcall(function() return target:getPoint() end)
+      if okp and target_point then
+        track_x = target_point.x - shooter_point.x
+        track_z = target_point.z - shooter_point.z
+      end
+    end
+  end
+  if track_x ~= nil then
+    text = text .. ", heading " .. headingWord(track_x, track_z)
+  end
+  return text
+end
+local function shotDetail(e, call)
+  if call == "Bombs away" then return bombsAwayDetail(e, call) end
+  local okt, target = pcall(function() return e.weapon:getTarget() end)
+  if not okt or not target then return call end
+  local okp, tp = pcall(function() return target:getPoint() end)
+  if not okp or not tp then return call end
+  local where = bullseyeOf(tp)
+  if not where then return call end
+  if string.sub(call, 1, 3) == "Fox" then
+    local thousands = math.floor(tp.y * 3.28084 / 1000 + 0.5)
+    local height = thousands .. " thousand"
+    if thousands < 1 then height = "low" end
+    return call .. ", group " .. where .. ", " .. height .. ", hostile"
+  end
+  if call == "Magnum" then
+    local system = ""
+    local okn, type_name = pcall(function() return target:getTypeName() end)
+    if okn and type_name then
+      for _, row in ipairs(SAMNUM) do
+        if string.find(type_name, row[1], 1, true) then
+          system = " " .. row[2]
+          break
+        end
+      end
+    end
+    return call .. system .. " " .. where
+  end
+  return call
 end
 local function logShot(ev, e, by)
   local function tname(o) local ok, t = pcall(function() return o:getTypeName() end); if ok and t then return t end return "?" end
@@ -303,7 +400,7 @@ local function logShot(ev, e, by)
   shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt, tx = tx, tz = tz, left = left }
 end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
--- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp, written four times a second by sqe/data/sqe_ecm_export.lua (Export.lua) to
+-- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp or the A-10C II's jammer window, written four times a second by sqe/data/sqe_ecm_export.lua (Export.lua) to
 -- Logs\SQE_ecm.flag as "<0|1> <model time>"; a missing or stale file falls back to the attack-leg window below. ECMP "f10": an FC3 jet (nothing readable in its
 -- cockpit): F10 > Other > SQE ECM Switch toggles the flag and SQE ECM OFF forces it off (re-sync) (starts off); engine shutdown / death clears the flag (v0.41.226: the item stays).
 local ECMP = "__ECMP__"
@@ -390,7 +487,7 @@ if ECMP == "live" and ECMMSG then                              -- v0.41.212 (XO)
     if v ~= nil and v ~= last then
       local g = Group.getByName(PGROUP)
       if g then
-        trigger.action.outTextForGroup(g:getID(), (last == nil and "SQE sees your ECM lamp: " or "ECM ") .. (v and "on" or "off"), 6)
+        trigger.action.outTextForGroup(g:getID(), (last == nil and "SQE sees your jammer: " or "ECM ") .. (v and "on" or "off"), 6)
       end
       last = v
     end
@@ -512,7 +609,10 @@ function H:onEvent(e)
       landed[n] = true
       local pn = nil
       if e.place and e.place.getName then local okp, pv = pcall(function() return e.place:getName() end); if okp then pn = pv end end
-      landAt[n] = { t = timer.getTime(), p = pn }                    -- v0.41.257: when and where (a sunk carrier takes what landed on it before it went down)
+      local pc = -1                                                  -- S130b: whose place was it? the game's own answer first, our list of blue places as the fallback
+      if e.place and e.place.getCoalition then local okc, cv = pcall(function() return e.place:getCoalition() end); if okc and type(cv) == "number" then pc = cv end end
+      if pc < 0 and pn and BLUEPLACES[pn] then pc = 2 end
+      landAt[n] = { t = timer.getTime(), p = pn, c = pc }            -- v0.41.257: when and where (a sunk carrier takes what landed on it before it went down)
       pcall(function()                                               -- v0.41.334: it landed hurt? (tested here, before any despawn below; every call in a pcall)
         local u = e.initiator
         local l, l0 = u:getLife(), u:getLife0()
@@ -549,9 +649,18 @@ function H:onEvent(e)
     pcall(jamCheck, e, n)
     pcall(splashTrack, e, n)
     local lab = UFLT[n]
-    if lab and e.weapon then
-      local call = shotCall(e)
-      if call and throttle("shot:" .. lab .. call, 6) then say(lab .. ": " .. call .. ".") end
+    local call = (lab and e.weapon) and shotCall(e) or nil
+    local dm = bombRange(e, n)                    -- S149: how far from its target point the bomb left (km, kept in the shot log); far = a jettison (a jet jumped on its run dumps its load): no "Bombs away"
+    if dm then
+      local last = shots[#shots]
+      if last and last.ev == "shot" and last.by == n then last.rk = dm / 1000 end
+      if dm > BOMB_FAR_M then call = nil end
+    end
+    if lab and call and throttle("shot:" .. lab .. call, 6) then
+      local text = call
+      local okd, detail = pcall(shotDetail, e, call)      -- S184: what and where, by the book; any error: the plain word
+      if okd and detail then text = detail end
+      say(lab .. ": " .. text .. ".")
     end
   elseif id == world.event.S_EVENT_HIT then
     logShot("hit", e, n)
@@ -606,7 +715,13 @@ function H:onEvent(e)
 end
 -- S51: the weapons the two followers below track. A bomb (Weapon.Category.BOMB) and the AGM-154 JSOW: S50 (DCS, both the A and the C) showed the JSOW reports
 -- getCategory() = ROCKET (2), not BOMB, so a category test alone saw no JSOW at all. Matched by type name, never widened to every missile (a HARM, a SLAM-ER or an AIM is not a crater).
+-- S209: red's Kh-59M (type name "X_59M") craters runways. It is a missile, so the bomb test below does not see it.
+local function isCruise(w)
+  local okn, tn = pcall(function() return w:getTypeName() end)
+  return okn and tn ~= nil and string.find(tn, "X_59M", 1, true) ~= nil
+end
 local function isBombLike(w)
+  if isCruise(w) then return true end
   local okd, d = pcall(function() return w:getDesc() end)
   if okd and d and d.category == 3 then return true end          -- v0.41.423: Weapon.Category.BOMB, from the descriptor (like the rest of this hook); w:getCategory() is the OBJECT category (2, WEAPON) for every weapon, so the old test never matched a bomb and `imp` / `rwy` stayed empty
   local ok, cat = pcall(function() return w:getCategory() end)
@@ -641,7 +756,8 @@ if #RWYS > 0 then
   local H4 = {}
   function H4:onEvent(e)
     if e.id == world.event.S_EVENT_SHOT and e.weapon then
-      if isBombLike(e.weapon) then RWYW[#RWYW + 1] = { w = e.weapon } end
+      local dj = bombRange(e, nameOf(e.initiator))
+      if isBombLike(e.weapon) and not (dj and dj > BOMB_FAR_M) then RWYW[#RWYW + 1] = { w = e.weapon, cruise = isCruise(e.weapon) } end      -- S149: a jettisoned bomb is no runway hit (it is not followed)
     end
   end
   world.addEventHandler(H4)
@@ -654,7 +770,13 @@ if #RWYS > 0 then
         keep[#keep + 1] = s
       elseif s.p then
         local v = s.v or { x = 0, y = 0, z = 0 }
-        pcall(rwyTest, { x = s.p.x + v.x * RWY_DT, y = s.p.y + v.y * RWY_DT, z = s.p.z + v.z * RWY_DT })
+        local last = { x = s.p.x + v.x * RWY_DT, y = s.p.y + v.y * RWY_DT, z = s.p.z + v.z * RWY_DT }
+        local in_the_air = false
+        if s.cruise then                                -- S209: a missile shot down over the field vanishes high up: only one that reached the ground is a hit
+          local okh, ground = pcall(function() return land.getHeight({ x = last.x, y = last.z }) end)
+          in_the_air = okh and (s.p.y - ground) > 150
+        end
+        if not in_the_air then pcall(rwyTest, last) end
       end
     end
     RWYW = keep
@@ -756,6 +878,23 @@ timer.scheduleFunction(function(_, t)
       end
     end)
   end
+  -- S160c: blue's ships too (the carrier group), every 30 s, at most 120 points a group, so a test can measure how far the BARCAP fought from the fleet
+  pcall(function()
+    for _, g in ipairs(coalition.getGroups(coalition.side.BLUE, Group.Category.SHIP) or {}) do
+      local gn = g:getName()
+      for _, u0 in ipairs(g:getUnits() or {}) do
+        if u0:isExist() then
+          local p0 = u0:getPoint()
+          local tr = TRACK[gn] or {}
+          TRACK[gn] = tr
+          if #tr < 120 then
+            tr[#tr + 1] = { math.floor(timer.getTime()), math.floor(p0.x), math.floor(p0.z), 0, -1, -1 }
+          end
+          break
+        end
+      end
+    end
+  end)
   dump(); return t + 30
 end, nil, timer.getTime() + 30)
 -- call-outs for the player's flight: scheduled radio calls from the other flights and the support aircraft, plus weapon and result calls
@@ -854,7 +993,7 @@ if #ALERTS > 0 then
     return t + 10
   end, nil, timer.getTime() + 10)
 end
--- v0.41.79: CAP replacement. A covered pair (a red patrol, a blue base / carrier / HAVCAP / tanker CAP) is watched: if a jet of it is down, or its air-to-air
+-- v0.41.79: CAP replacement. A covered pair (a red patrol, a blue base / carrier / HVAACAP / tanker CAP) is watched: if a jet of it is down, or its air-to-air
 -- missiles are all gone (winchester), or a jet is at bingo fuel, the whole pair leaves (its orbit stops on the bf flag: a pair does not stay one jet short,
 -- XO: "if one is shot down they bug out") and COVER_DELAY_S later the replacement is called (the rf flag; the nearest field's pair, or a pair that appears
 -- behind the station). Nothing is called when the sortie is nearly over anyway (COVER_MIN_LEFT_S).
@@ -1124,7 +1263,21 @@ local function siteBlind(id)
   return true
 end
 local function gateBlind(gs)
-  return siteBlind(gs.site)      -- the target's own radars only: a Tor still up on the run-in no longer holds the strike (v0.39.22); the go call names it
+  -- the target's own radars, and (S86b) the radars of the sites that cover it (gt.more: the sites the package's SEAD is tasked on; an airfield has no radars of its own);
+  -- a Tor still up on the run-in (gt.also) no longer holds the strike (v0.39.22); the go call names it
+  if not siteBlind(gs.site) then return false end
+  for _, gt in ipairs(gs.gates) do
+    for _, a in ipairs(gt.more or {}) do if not siteBlind(a) then return false end end
+  end
+  return true
+end
+local function radarLabel(gs, fallback)
+  for _, gt in ipairs(gs.gates) do
+    for _, a in ipairs(gt.more or {}) do
+      if not siteBlind(a) then for _, x in ipairs(SITES) do if x.id == a then return x.label or a end end end
+    end
+  end
+  return fallback
 end
 local function torsUp(gs)
   for _, gt in ipairs(gs.gates) do
@@ -1143,7 +1296,7 @@ local function breakOff(gs, why)
   if not aborted[gs.site] then
     aborted[gs.site] = true
     if why == "air-abort" then say(whoOf(s) .. ": abort, abort. " .. labelOf(s, gs) .. ", red fighters still up, flight break off.", gs.gates[1].you)
-    else say(whoOf(s) .. ": abort, abort. " .. labelOf(s, gs) .. " radars still up, DEAD flight break off.", gs.gates[1].you) end
+    else say(whoOf(s) .. ": abort, abort. " .. radarLabel(gs, labelOf(s, gs)) .. " radars still up, DEAD flight break off.", gs.gates[1].you) end
   end
   for _, gt in ipairs(gs.gates) do
     if gt.dead then
@@ -1209,7 +1362,7 @@ local function holdGroups(gs)
   for _, gt in ipairs(gs.gates) do
     if gt.dead then
       if gs.holdWhy == "air" then say(whoOf(s) .. ": " .. labelOf(s, gs) .. ", red fighters still up ahead. Hold outside, rechecking.", gt.you)
-      else say(whoOf(s) .. ": " .. labelOf(s, gs) .. " radars still up. Hold outside, rechecking.", gt.you) end
+      else say(whoOf(s) .. ": " .. radarLabel(gs, labelOf(s, gs)) .. " radars still up. Hold outside, rechecking.", gt.you) end
     end
   end
   for _, gt in ipairs(gs.gates) do
@@ -1541,7 +1694,8 @@ local function casGo(d, why, alive)
     if not c then error("no group") end
     c:resetTask()
     pcall(function() c:setOption(AI.Option.Air.id.ROE, AI.Option.Air.val.ROE.RETURN_FIRE) end)
-    c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = 1, goToWaypointIndex = d.to } })
+    -- S102: the leg is the one INTO the EGR point (from the point before it), not from waypoint 1: with from = 1 the run 2026-11-16_19-54-36 flew a straight line home, 43 km from EGR (judgment, untested in DCS)
+    c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = math.max(1, d.to - 1), goToWaypointIndex = d.to } })
   end)
   for _, gs in ipairs(gorder) do
     local all = #gs.gates > 0

@@ -26,11 +26,6 @@ def held_back(ready: int, level: int) -> int:
     return min(int(ready), 2 * max(1, int(k / 2 + 0.5)))
 
 
-def free_for_tasking(q, level: int) -> int:
-    """Ready jets of one squadron (blue Squadron or RedSquadron) that the planner may use this turn: `available` less its hold."""
-    return max(0, int(q.available) - held_back(q.available, level))
-
-
 def apply(ledger, squadrons, level: int) -> dict:
     """Take the hold of each squadron off the ledger's ready pool (`ledger.free`; the later tiers, jets ready only by a later wave, are not held). -> {squadron id: jets held}."""
     out = {}
@@ -113,7 +108,11 @@ def reaction_draw(state, side: str, package, rng=None) -> list:
             wings.append((nm, w.base_asset_id, w, types))
     out = []
     for _ in range(REACTION_PAIRS):
-        for nm, _b, w, types in sorted(wings, key=lambda x: (x[0], x[1])):
+        # Wing name, then base id.
+        def name_then_base(row):
+            return (row[0], row[1])
+
+        for nm, _b, w, types in sorted(wings, key=name_then_base):
             sq = pick_red_hold(state, w, drawn, types)
             if sq is not None:
                 out.append((sq, 2))

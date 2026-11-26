@@ -76,13 +76,6 @@ class NewCampaignDialog(QDialog):
         self.day = StepSpin(); self.day.setRange(1, 28); self.day.setValue(12)
         row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(self.year_lbl)
         form.addRow("Campaign starts", row)
-        self.edge = QCheckBox("Tactical Edge: your sorties affect the war")
-        self.edge.setChecked(bool(tactical_edge)); self.edge.setToolTip(TACTICAL_EDGE_TEXT)
-        form.addRow("", self.edge)                      # the starting value for this campaign (S88 R3): Settings > Campaign changes it for the open campaign later
-        self.edge_decay = QCheckBox("Enable Tactical Edge Decay")
-        self.edge_decay.setChecked(bool(edge_decay)); self.edge_decay.setToolTip(EDGE_DECAY_TEXT); self.edge_decay.setEnabled(bool(tactical_edge))
-        self.edge.toggled.connect(self.edge_decay.setEnabled); self.edge_decay.setStyleSheet("margin-left:22px;")      # a sub-option of Tactical Edge
-        form.addRow("", self.edge_decay)
         from .. import weather as _wxn
         self.wx = QComboBox()
         for k, val in _wxn.MODES.items():
@@ -163,14 +156,14 @@ class NewCampaignDialog(QDialog):
 
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
-                "start_date": f"{self.year}-{self.month.currentData():02d}-{self.day.value():02d}", "tactical_edge": self.edge.isChecked(), "tactical_edge_decay": self.edge.isChecked() and self.edge_decay.isChecked(),
+                "start_date": f"{self.year}-{self.month.currentData():02d}-{self.day.value():02d}",
                 "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData()),
                 "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level"),
                 "a10_variant": self.a10.currentData(), "f14_variant": self.f14.currentData(), "link16": bool(self.l16.currentData())}
 
 
 class SettingsDialog(QDialog):
-    """Four tabs: General (takeoff buffer, marshal slack, AI fuel, splash damage), Campaign (weather, Tactical Edge, AI skill),
+    """Four tabs: General (takeoff buffer, marshal slack, AI fuel, splash damage), Campaign (weather, AI skill),
     Mission Build (merging and limits, the hot-start, dormant-site, ILS, AWACS-radio and damage-call switches, then AI landings, ruins and carcasses) and DCS Integration (paths,
     the scripting patch, the ECM script). A new experimental feature gets its own "Experimental" tab (added last) while it is being tried out.
     Labels are in title case, hints stay sentences. Every setting keeps the key it always had; the two hot-runway keys are one radio group."""
@@ -211,10 +204,11 @@ class SettingsDialog(QDialog):
                 "natural pace (afterburner time). AI flights adjust automatically.")
         self.fuel = QCheckBox("AI Fuel Management (Unlimited Until the Push, Real Fuel in the Fight, Unlimited Again From Egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); v.addWidget(self.fuel)
-        self.splash = QCheckBox("Splash Damage: Blast Damage Around Bomb and Missile Impacts (On by Default)")
+        self.splash = QCheckBox("Blast Wave: Blast Damage Around Bomb and Missile Impacts (On by Default)")
         self.splash.setChecked(bool(getattr(settings, "splash_damage", True))); v.addWidget(self.splash)
         hint(v, "DCS often leaves a vehicle a few metres from a bomb untouched. On: ground units near an air-to-ground weapon's impact take a blast "
-                "of their own, scaled to the warhead and weaker with distance. Kills it causes count for the shooter.")
+                "of their own, scaled to the warhead and weaker with distance. Kills it causes count for the shooter. The idea comes from the community Splash Damage scripts for DCS; "
+                "SQE's version is its own code.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -228,20 +222,7 @@ class SettingsDialog(QDialog):
         hint(v, "Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
                 "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
                 "that cannot attack at all (or meets fog) is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
-        # v0.41.165: Tactical Edge goes AFTER the whole Weather block (combo + its description), never between them
-        # S88 R3 (XO 2026-11-18): the pair belongs to the OPEN campaign (`state.ground`), not to the app: greyed out when no campaign is open
-        g_ = (getattr(state, "ground", None) or {}) if state is not None else {}
-        self.edge_rows = bool(g_)
-        self.edge = QCheckBox("Tactical Edge (Your Sorties Affect the War)"); self.edge.setChecked(bool(g_.get("tactical_edge", True)))
-        row(v, "Tactical Edge", self.edge)
-        hint(v, TACTICAL_EDGE_TEXT)
-        self.edge_decay = QCheckBox("Enable Tactical Edge Decay"); self.edge_decay.setChecked(bool(g_.get("tactical_edge_decay", False)))
-        row(v, "", self.edge_decay)
-        hint(v, EDGE_DECAY_TEXT)
-        self.edge.setEnabled(self.edge_rows); self.edge_decay.setEnabled(self.edge_rows and self.edge.isChecked())
-        self.edge.toggled.connect(lambda on: self.edge_decay.setEnabled(self.edge_rows and on)); self.edge_decay.setStyleSheet("margin-left:22px;")
-        if not self.edge_rows:
-            hint(v, "Open a campaign to change this; it is saved with each campaign.")
+        # S144b (XO 2026-11-22): the Tactical Edge rows are hidden (tempo.EDGE_ENABLED is off); TACTICAL_EDGE_TEXT / EDGE_DECAY_TEXT stay for a revival
         from ..difficulty import SKILL_CHOICES as _SK
         self.skr, self.skb = QComboBox(), QComboBox()
         for cb_, key_ in ((self.skr, "ai_skill_red"), (self.skb, "ai_skill_blue")):
@@ -259,7 +240,7 @@ class SettingsDialog(QDialog):
         v = page("Mission Build")
         self.merge = QComboBox(); self.merge.addItem("Off (One Package per Mission)", "off"); self.merge.addItem("On (Nearest First, Up to the Unit Limit)", "area")
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
-        self.mmax = StepSpin(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.max_units))
+        self.mmax = StepSpin(); self.mmax.setRange(60, 750); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.max_units))
         row(v, "Package Merging", self.merge, self.mmax)
         hint(v, "Packages that start inside the time windows below fly in the same mission (AI-flown, one shared ground world and support), wherever their target is, "
                 "nearest to your target first. The unit limit counts the whole mission: over it, the furthest packages are left out first (a Fighter Sweep stays while a package it "
@@ -349,7 +330,11 @@ class SettingsDialog(QDialog):
                 ("DCS", self.inst, "Select the DCS World Install Folder", "Install folder (only needed for the MissionScripting.lua patch)"),
                 ("DCS Saves", self.saves, "Select Your DCS Saved Games Folder", r"e.g. C:\Users\You\Saved Games\DCS  or  ...\DCS_Server")):
             r = QHBoxLayout(); lb = QLabel(label); lb.setMinimumWidth(80); b = QPushButton("Browse")
-            b.clicked.connect(lambda _=0, l=line, t_=ttl: _browse(self, l, t_))
+            # The defaults bind THIS row's field and title now (a plain closure would see the last row's); `_` takes the `checked` flag Qt sends.
+            def browse_this_folder(_=0, l=line, t_=ttl):
+                _browse(self, l, t_)
+
+            b.clicked.connect(browse_this_folder)
             r.addWidget(lb); r.addWidget(line, 1); r.addWidget(b); v.addLayout(r)
             hint(v, h_)
         self.ms = QLabel(); v.addWidget(self.ms)
@@ -358,23 +343,71 @@ class SettingsDialog(QDialog):
         hint(v, "Results need io/lfs enabled in MissionScripting.lua. A backup is saved next to the file. "
                 "If SQE is closed before the mission ends, DCS can no longer write the results file.")
         v.addSpacing(10)
-        self.ecm = QCheckBox("ECM Script (SQE's Own Jamming)")
+        self.ecm = QCheckBox("Jammer Model (SQE's Own Jamming)")
         self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
-        hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
-                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
-        self.ecm_msg = QCheckBox("Show ECM Status")                      # v0.41.213 (XO): a sub-option of the ECM script
+        self.ecm_msg = QCheckBox("Show Jammer Status")                      # v0.41.213 (XO): a sub-option of the ECM script; v0.41.647: right under its parent
         self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
         self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")
-        self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and \"Cockpit: ECM On\" / \"Cockpit: ECM Off\" for the F10 SQE ECM Switch / SQE ECM OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
+        self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's or A-10C II's jammer (\"ECM on\" / \"ECM off\") and \"Cockpit: ECM On\" / \"Cockpit: ECM Off\" for the F10 SQE ECM Switch / SQE ECM OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
         v.addWidget(self.ecm_msg)
+        hint(v, "SQE's own jamming effect; off by default. Off: jammers use DCS's own ECM; AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
+                "and switch it on over the attack leg only when a radar locks them. On: they keep it on over the whole attack leg, and a radar-guided missile fired at a jet with a jammer may be fooled: "
+                "SQE rolls a chance (higher with an ECM pod, highest for shots from far away, none inside about 12 km) and removes a fooled missile in flight. "
+                "A jammer cannot really destroy a missile; this is the closest a mission script can get. Both sides, your own jet included.")
         v.addSpacing(10)
         self.ecm_state = QLabel(); v.addWidget(self.ecm_state)
-        self.ecm_inst = QPushButton("Install ECM Script"); self.ecm_rem = QPushButton("Remove")
-        self.ecm_inst.clicked.connect(lambda: self._ecm_do(S.install_ecm_script)); self.ecm_rem.clicked.connect(lambda: self._ecm_do(S.remove_ecm_script))
+        self.ecm_inst = QPushButton("Install Jammer Script"); self.ecm_rem = QPushButton("Remove")
+        # Fixed width: the label changes between "Install Jammer Script" and "Update Jammer Script", and the button must not resize and push Remove sideways.
+        self.ecm_inst.ensurePolished()                       # so the sizes below include the app stylesheet (padding, font)
+        widest_label = 0
+        for label_text in ("Install Jammer Script", "Update Jammer Script"):
+            self.ecm_inst.setText(label_text)
+            widest_label = max(widest_label, self.ecm_inst.sizeHint().width())
+        self.ecm_inst.setText("Install Jammer Script")
+        self.ecm_inst.setFixedWidth(widest_label)
+        def install_ecm():
+            self._ecm_do(S.install_ecm_script)
+
+        def remove_ecm():
+            self._ecm_do(S.remove_ecm_script)
+
+        self.ecm_inst.clicked.connect(install_ecm); self.ecm_rem.clicked.connect(remove_ecm)
         r = QHBoxLayout(); r.addWidget(self.ecm_inst); r.addWidget(self.ecm_rem); r.addStretch(1); v.addLayout(r)
-        hint(v, "Lets SQE read your F-16C's ECM lamp (about four times a second) so its jamming model knows when your jammer is on. It copies sqe_ecm_export.lua into "
+        hint(v, "Lets SQE read your jammer (the F-16C's ECM lamp, the A-10C II's jammer window; about four times a second) so its jamming model knows when it is on. It copies sqe_ecm_export.lua into "
                 "Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there (a backup, Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. "
                 "Without it SQE counts your jammer as on over the attack leg. Takes effect when DCS starts.")
+        # F-14 RIO Navigation (S210; was the F-14B Turnpoints script): installed or not is the whole setting (no checkbox).
+        v.addSpacing(10)
+        v.addWidget(QLabel("F-14 RIO Navigation (Experimental)"))
+        self.tp_state = QLabel(); v.addWidget(self.tp_state)
+        self.tp_inst = QPushButton("Install RIO Navigation"); self.tp_rem = QPushButton("Remove")
+        # Fixed width, for the same reason as the jammer button above.
+        self.tp_inst.ensurePolished()
+        widest_label = 0
+        for label_text in ("Install RIO Navigation", "Update RIO Navigation"):
+            self.tp_inst.setText(label_text)
+            widest_label = max(widest_label, self.tp_inst.sizeHint().width())
+        self.tp_inst.setText("Install RIO Navigation")
+        self.tp_inst.setFixedWidth(widest_label)
+
+        def install_turnpoints():
+            self._tp_do(S.install_f14_turnpoints)
+
+        def remove_turnpoints():
+            self._tp_do(S.remove_f14_turnpoints)
+
+        self.tp_inst.clicked.connect(install_turnpoints); self.tp_rem.clicked.connect(remove_turnpoints)
+        r = QHBoxLayout(); r.addWidget(self.tp_inst); r.addWidget(self.tp_rem); r.addStretch(1); v.addLayout(r)
+        hint(v, "For the F-14B or F-14B(U) you fly: Jester works your steerpoints through the flight (F10 > Other > RIO Navigation: he has the nav from the start, My Nav takes it, Your Nav hands it back). On the F-14B he also sets a turnpoint you pick from F10 > Other > Turnpoints. "
+                "It copies sqe_f14_turnpoints_export.lua into Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there (a backup, "
+                "Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. Without it missions have no such menus: install it before you generate the mission. "
+                "Works in single player and with the dedicated server on this PC, not on another computer's server. Takes effect when DCS starts.")
+        # The server option lives on this tab with the other DCS settings (it was on Mission Build).
+        v.addSpacing(10)
+        self.server_fly = tick("Fly on the Local DCS Dedicated Server (Experimental)", getattr(settings, "dcs_server_fly", False),           # S161a
+            "Off by default. On: your flight lead gets a client slot and the sortie is meant to run on a DCS dedicated server on this PC, which you join at 127.0.0.1:10308 (no password). "
+            "Needs the MissionScripting patch (above), the DCS_Server profile (start the dedicated server once by hand), a free port 10308 and real time only (no time acceleration). "
+            "SQE keeps your own serverSettings.lua in a backup and puts it back when the server stops. In this first version only the client slot is switched on: a mission built with this on can be flown on a server only, not in single player.")
         v.addStretch(1)
         self.inst.textChanged.connect(self._refresh); self.saves.textChanged.connect(self._refresh); self._refresh()
 
@@ -386,13 +419,28 @@ class SettingsDialog(QDialog):
     def _refresh(self):
         self.ms.setText("MissionScripting.lua: " + S.mission_scripting_status(self.inst.text()))
         st = S.ecm_script_state(self.saves.text())
-        self.ecm_state.setText("ECM script: " + S.ecm_script_status(self.saves.text()))
+        self.ecm_state.setText("Jammer script: " + S.ecm_script_status(self.saves.text()))
         self.ecm_inst.setEnabled(st not in ("nofolder", "ok")); self.ecm_rem.setEnabled(st not in ("nofolder", "none"))
-        self.ecm_inst.setText("Update ECM Script" if st == "old" else "Install ECM Script")
+        self.ecm_inst.setText("Update Jammer Script" if st == "old" else "Install Jammer Script")
+        st = S.f14_turnpoints_state(self.saves.text())
+        self.tp_state.setText("RIO Navigation script: " + S.f14_turnpoints_status(self.saves.text()))
+        self.tp_inst.setEnabled(st not in ("nofolder", "ok")); self.tp_rem.setEnabled(st not in ("nofolder", "none"))
+        if st == "old":
+            self.tp_inst.setText("Update RIO Navigation")
+        else:
+            self.tp_inst.setText("Install RIO Navigation")
+
+    def _tp_do(self, fn):
+        ok, msg = fn(S.native(self.saves.text()))
+        if ok:
+            QMessageBox.information(self, "F-14 RIO Navigation", msg)
+        else:
+            QMessageBox.warning(self, "F-14 RIO Navigation", msg)
+        self._refresh()
 
     def _ecm_do(self, fn):
         ok, msg = fn(S.native(self.saves.text()))
-        (QMessageBox.information if ok else QMessageBox.warning)(self, "ECM script", msg)
+        (QMessageBox.information if ok else QMessageBox.warning)(self, "Jammer script", msg)
         self._refresh()
 
     def _save(self):
@@ -416,6 +464,7 @@ class SettingsDialog(QDialog):
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.carcasses = bool(self.carc.isChecked()); self.s.wreck_static_weight_pct = int(self.cw.value())
         self.s.dormant_sites = bool(self.dorm.isChecked())
+        self.s.dcs_server_fly = bool(self.server_fly.isChecked())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.ils_low_vis = bool(self.ilslv.isChecked())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
@@ -428,8 +477,6 @@ class SettingsDialog(QDialog):
         pr = self.s.problems()
         if pr:
             QMessageBox.warning(self, "Check your paths", "\n".join(pr)); return
-        if self.edge_rows:                                       # S88 R3: Tactical Edge is saved with the open campaign (the caller saves the session)
-            self.state.ground["tactical_edge"] = bool(self.edge.isChecked()); self.state.ground["tactical_edge_decay"] = bool(self.edge.isChecked() and self.edge_decay.isChecked())
         self.s.save(); self.accept()
 
 
@@ -437,14 +484,20 @@ class WaitingDialog(QDialog):
     """FLY opens this. It polls SQE_state.json and shows live casualties for both sides."""
     def __init__(self, session, parent=None):
         super().__init__(parent); self.sess = session; self.data = None; self.manual = None
-        self.setWindowTitle("Sortie In Progress"); self.setMinimumSize(760, 560); self.resize(780, 760)
+        self.setWindowTitle("Sortie In Progress"); self.setMinimumSize(760, 400)
         p = session.state.pending; tl = p["timeline"]
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("Sortie In Progress"); t.setObjectName("title"); lay.addWidget(t)
         self.overall = QLabel(""); self.overall.setObjectName("h2"); self.overall.setVisible(False)         # S77: IN FLIGHT / ALL RECOVERED (set by _poll); S98b: sits above "Last update", hidden while empty
         info = card(); lay.addWidget(info)
         il = info.layout()
-        il.addWidget(QLabel(f"Mission file: <b>SQE_Sortie.miz</b> in your DCS Missions folder. Start DCS, open it from the Missions list, and fly."))
+        if p.get("server"):                                     # S161b: the sortie runs on the local DCS dedicated server
+            how_to_join = QLabel("The sortie runs on your <b>local DCS server</b> and waits for you. Start DCS, <b>Multiplayer</b>, connect to <b>127.0.0.1:10308</b> "
+                                 "(no password) and take the only client slot (your flight lead).")
+        else:
+            how_to_join = QLabel(f"Mission file: <b>SQE_Sortie.miz</b> in your DCS Missions folder. Start DCS, open it from the Missions list, and fly.")
+        how_to_join.setWordWrap(True)                          # a label is one line unless told to wrap: the long text was cut at the card edge
+        il.addWidget(how_to_join)
         pd = p.get("package_dict", {}); cn = p.get("counts") or {}
         il.addWidget(QLabel(f"Mission start <b>{pd.get('start', '')}</b> local   |   {cn.get('groups', '?')} groups, {cn.get('units', '?')} units"))
         il.addWidget(QLabel(f"Launch {tl['launch']}   |   Marshal {tl['marshal']}   |   <b>PUSH {tl['push']}</b>   |   <b>TOT {tl['tot']}</b>   |   Egress {tl['egress']}"))
@@ -456,13 +509,7 @@ class WaitingDialog(QDialog):
         self.ptbl = QTableWidget(0, 2); self.ptbl.setHorizontalHeaderLabels(["Package", "Status"])         # S87: one row per package, its phase and result (set by _status_lines)
         self.ptbl.verticalHeader().setVisible(False); self.ptbl.setEditTriggers(QTableWidget.NoEditTriggers); self.ptbl.setSelectionMode(QTableWidget.NoSelection)
         self.ptbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch); self.ptbl.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.ptbl.setWordWrap(True); self.ptbl.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded); self.ptbl.setVerticalScrollMode(QTableWidget.ScrollPerPixel); self._fill_packages([]); lay.addWidget(self.ptbl, 100); lay.addStretch(1)       # S98b: blank until DCS answers; the package table sits right after the info card and takes its rows, a spacer takes the spare height so everything below stays anchored to the bottom (a short window squeezes the table to PKG_MIN_H and it scrolls)
-        self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This Sortie", "Friendly", "Enemy"])
-        self.tbl.verticalHeader().setVisible(False); self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tbl.setFixedHeight(100)                                         # blank until the first state file; _fill sets the exact height
-        self.tbl.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff); self.tbl.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        lay.addWidget(self.tbl)
+        self.ptbl.setWordWrap(True); self.ptbl.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded); self.ptbl.setVerticalScrollMode(QTableWidget.ScrollPerPixel); self._fill_packages([]); lay.addWidget(self.ptbl, 100)       # S98b: blank until DCS answers; the package table sits right after the info card and takes its rows, a spacer takes the spare height so everything below stays anchored to the bottom (a short window squeezes the table to PKG_MIN_H and it scrolls)
         lay.addWidget(self.status); lay.addWidget(self.overall)          # S98b: mission status stacked just above "Last update"
         self.last = QLabel(""); self.last.setObjectName("small"); lay.addWidget(self.last)
         row = QHBoxLayout()
@@ -471,20 +518,9 @@ class WaitingDialog(QDialog):
         row.addWidget(self.b_man); row.addWidget(self.b_abort); row.addStretch(1); row.addWidget(self.b_ok); lay.addLayout(row)
         self.b_man.clicked.connect(self._manual); self.b_abort.clicked.connect(self._abort); self.b_ok.clicked.connect(self.accept)
         self.timer = QTimer(self); self.timer.timeout.connect(self._poll); self.timer.start(1000); self._dots = 0
-        self._poll()
+        self._poll(); self._fitted = True; self.layout().activate(); self.resize(self.width(), self.sizeHint().height())
 
-    def _fill(self, t):
-        rows = [(DB._title("Aircraft lost / total"), f"{t['blue_air_lost']} / {t['blue_air_total']}", f"{t['red_air_lost']} / {t['red_air_total']}"),
-                (DB._title("Ground units lost / total"), f"{t['blue_ground_lost']} / {t['blue_ground_total']}", f"{t['red_ground_lost']} / {t['red_ground_total']}")]
-        self.tbl.setRowCount(len(rows))
-        for i, r in enumerate(rows):
-            for j, v in enumerate(r):
-                it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignCenter if j else Qt.AlignLeft | Qt.AlignVCenter)
-                self.tbl.setItem(i, j, it)
-        self.tbl.resizeRowsToContents()
-        self.tbl.setFixedHeight(self.tbl.horizontalHeader().height() + sum(self.tbl.rowHeight(i) for i in range(len(rows))) + 10)       # just its rows: the spare height goes to the package table
-
-    PKG_MIN_H = 130                 # px: header and about two rows; the least the package table is squeezed to before it scrolls
+    PKG_ROWS = 5                    # the table is as tall as this many objectives; more scroll
 
     def _show_notes(self):
         """The build notes in a popup under the Notes button; a click outside closes it. No layout change."""
@@ -500,8 +536,12 @@ class WaitingDialog(QDialog):
             for j, v in enumerate((r["name"], r["text"])):
                 it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignLeft | Qt.AlignTop); self.ptbl.setItem(i, j, it)       # XO 2026-11-15: text at the top of its cell when a row wraps
         self.ptbl.resizeRowsToContents()
-        need = self.ptbl.horizontalHeader().height() + sum(self.ptbl.rowHeight(i) for i in range(len(rows))) + 20
-        self.ptbl.setMaximumHeight(need); self.ptbl.setMinimumHeight(min(need, self.PKG_MIN_H))           # as tall as its rows when the window has room; a short window squeezes it to PKG_MIN_H and it scrolls (bar only when needed)
+        hh = self.ptbl.horizontalHeader().height(); rh = [self.ptbl.rowHeight(i) for i in range(len(rows))]
+        need = hh + sum(rh[: self.PKG_ROWS]) + max(0, self.PKG_ROWS - len(rows)) * self.ptbl.verticalHeader().defaultSectionSize() + (4 if len(rows) > self.PKG_ROWS else 20)    # exactly five rows when there are more (the rest scroll, bar only when needed); room for five while fewer are listed
+        if self.ptbl.height() != need:
+            self.ptbl.setFixedHeight(need)
+            if self.isVisible() or getattr(self, "_fitted", False):
+                self.layout().activate(); self.resize(self.width(), self.sizeHint().height())          # the window is as tall as its content needs, no taller
 
     def _status_lines(self, data):
         """S77: the objective lines and the overall line, read-only from the hook's state file (nothing in the campaign changes; Accept stays the authority).
@@ -523,7 +563,7 @@ class WaitingDialog(QDialog):
         status, data, t = self.sess.poll(self.manual)
         self._dots = (self._dots + 1) % 4
         if status == "ok":
-            self.data = data; self._fill(t); self.b_ok.setEnabled(True)
+            self.data = data; self.b_ok.setEnabled(True)
             try:
                 self._status_lines(data)
             except Exception:                                   # a status line must never break the waiting window

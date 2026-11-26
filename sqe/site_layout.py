@@ -42,11 +42,31 @@ class SiteLayout:
 
     def _nearest_airfield(self, x, y):
         """The blue airfield nearest (x, y); raises if there is none (`_home_airfield` is the forgiving one)."""
-        return min((b for b in self.state.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, x, y))
+        nearest_airfield = None
+        nearest_airfield_m = None
+        for base in self.state.bases.values():
+            if base.kind != BaseKind.AIRFIELD:
+                continue
+            base_m = dist(base.x, base.y, x, y)
+            if nearest_airfield_m is None or base_m < nearest_airfield_m:
+                nearest_airfield = base
+                nearest_airfield_m = base_m
+        if nearest_airfield is None:
+            raise ValueError("no airfield base")          # as min() of nothing did
+        return nearest_airfield
 
     def _home_airfield(self, x, y):
         """The blue airfield nearest (x, y), or None when the campaign has none."""
-        return min((b for b in self.state.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, x, y), default=None)
+        nearest_airfield = None
+        nearest_airfield_m = None
+        for base in self.state.bases.values():
+            if base.kind != BaseKind.AIRFIELD:
+                continue
+            base_m = dist(base.x, base.y, x, y)
+            if nearest_airfield_m is None or base_m < nearest_airfield_m:
+                nearest_airfield = base
+                nearest_airfield_m = base_m
+        return nearest_airfield
 
     def _red_skill(self):
         """The AI skill red's groups and jets get: the Red setting at this difficulty, High if the name is unknown."""

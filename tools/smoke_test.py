@@ -139,6 +139,19 @@ def check_saves_round_trip():
     r = mk()
     r.open(s.path)
     assert (r.state.a10_variant, r.state.f14_variant, r.state.link16) == ("A-10C", "F-14BU", True), "an old save without the era keys loads with today's equipment"
+    s = fresh_session(3, 3)                                                  # S192: HAVCAP became HVAACAP; an old save holds the guard flights' tags, their task text and the guard squadrons' role under the old name
+    s.skip_turn()
+    s.save()
+    saved_text = Path(s.path).read_text(encoding="utf-8")
+    assert "HVAACAP" in saved_text, "a new save names the guard flights HVAACAP (the check needs a campaign that has guards planned)"
+    old_text = saved_text.replace("TKR_HVAACAP", "TKR_HAVCAP").replace("HVAACAP", "HAVCAP").replace('"role": "hvaacap"', '"role": "havcap"')
+    assert '"role": "havcap"' in old_text and "HVAACAP" not in old_text, "the test rewrote the save to the old names"
+    Path(s.path).write_text(old_text, encoding="utf-8")
+    r = mk()
+    r.open(s.path)
+    reopened_text = json.dumps(r.state.to_dict())
+    assert "HAVCAP" not in reopened_text and "havcap" not in reopened_text, "an old save's HAVCAP tags, task text and squadron role are renamed on load"
+    assert any(q.role == "hvaacap" for q in r.state.squadrons.values()), "...and the guard squadron keeps its role under the new name"
     (TMP / "appdata" / "SQE").mkdir(parents=True, exist_ok=True)           # an old settings.json with the two keys loads, and they are not kept
     (TMP / "appdata" / "SQE" / "settings.json").write_text('{"pilot_influence": false, "tempo_decay": true}')
     from sqe.settings import AppSettings as _AS
@@ -521,8 +534,54 @@ def check_hook_lua():
     print(f"[hook] {n} real hooks compile and run under the stub DCS")
 
 
+def _mission_scripts(node, found):
+    """Every script text in a mission table: a trigger's "do script" action and a waypoint's "Script" command."""
+    if isinstance(node, dict):
+        if node.get("predicate") == "a_do_script":
+            found.append(str(node.get("text", "")))
+        if node.get("id") == "Script":
+            command = (node.get("params") or {}).get("command")
+            if command:
+                found.append(str(command))
+        for value in node.values():
+            _mission_scripts(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _mission_scripts(value, found)
+    return found
+
+
+def check_mission_lua():
+    """Every script in every built mission compiles in Lua 5.1, the version DCS runs: a syntax error is an error popup in the game. Compile only,
+    nothing is run. Needs lupa (dev only)."""
+    try:
+        from lupa import lua51
+    except ImportError:
+        print("[mission lua] SKIPPED: lupa (with Lua 5.1) is not installed")
+        LUA_SKIPPED.append(True)
+        return
+    runtime = lua51.LuaRuntime()
+    compile_error = runtime.eval("function(code) local chunk, problem = loadstring(code) if chunk then return '' end return problem end")
+    total = 0
+    for ac, _s, _p, miz in builds():
+        if not miz:
+            continue
+        z, M = _mission(miz)
+        dictionary_text = z.read("l10n/DEFAULT/dictionary").decode("utf-8")
+        dictionary = lua.loads(dictionary_text)["dictionary"]
+        scripts = _mission_scripts(M, [])
+        assert scripts, (ac, "no scripts found in the mission")
+        for script in scripts:
+            if script.startswith("DictKey_"):                          # the text is kept in the dictionary
+                script = dictionary[script]
+            problem = compile_error(script)
+            assert not problem, (ac, problem, script[:300])
+            total += 1
+    print(f"[mission lua] {total} mission scripts compile")
+
+
 # ---- 6. soak (in the default run; `--only soak` alone) ------------------------------------------------------------------------------------------------------------
-SOAK_CASES = [("caucasus", 1, 5), ("caucasus", 2, 3), ("caucasus", 3, 7), ("syria", 2, 4), ("syria", 3, 6)]      # (theatre, level, seed); S126: Syria has paths the Caucasus never runs (works rebuild, grace week, opening strike, carrier evade)
+SOAK_CASES = [("caucasus", 1, 5), ("caucasus", 2, 3), ("caucasus", 3, 7), ("syria", 1, 2), ("syria", 2, 4), ("syria", 3, 6)]      # (theatre, level, seed); S126: Syria has paths the Caucasus never runs (works rebuild, grace week, opening strike, carrier evade)
 SOAK_MAX_SKIPS = 300                                          # a loop bound, not a game rule
 SOAK_FLY_EVERY = 20                                           # every N skips the player flies a fake sortie, if anything is flyable
 SOAK_RELOAD_EVERY = 25                                        # every N skips: save, reopen, carry on with the reopened session
@@ -579,6 +638,7 @@ CHECKS = [
     check_miz_parses,
     check_waypoint_locks,
     check_hook_lua,
+    check_mission_lua,
     check_soak,
 ]
 
@@ -586,12 +646,19 @@ CHECKS = [
 # ---- parallel run (S124) ----------------------------------------------------------------------------------------------------------------------------
 # Checks that share the five-jet build (`builds()`) stay together in one process (it is built once there); the rest run on their own, and the soak is one task per campaign.
 GROUPS = [["check_saves_round_trip"], ["check_incompatible_saves"], ["check_syria_theatre"], ["check_ecm_install"], ["check_dialogs", "check_main_window"],
-          ["check_fly_debrief_advance", "check_missions_build", "check_required_flights", "check_miz_parses", "check_hook_lua"]]
+          ["check_fly_debrief_advance", "check_missions_build", "check_required_flights", "check_miz_parses", "check_hook_lua", "check_mission_lua"]]
 LOCK_PARTS = [None] + list(range(len(LOCK_CASES)))              # check_waypoint_locks: one task per part
 
 
 def _timeout_for(name, override):
-    return override if override is not None else (900 if name == "check_soak" else 120)
+    """The watchdog for one check, in seconds. The soak and the waypoint-lock sweep (58 package builds) need longer ones of their own."""
+    if override is not None:
+        return override
+    if name == "check_soak":
+        return 900
+    if name == "check_waypoint_locks":
+        return 300
+    return 120
 
 
 def _run_task(task):
@@ -703,7 +770,7 @@ def run_parallel(selected, jobs, timeout):
 
 def main(argv=None):
     """Run the checks in order. Options: `--list` (names only), `--only a,b` (the checks whose name contains a or b), `--timeout SECONDS` (a check that
-    runs longer dumps every thread's traceback and stops the run; default 120, 900 for the soak, 0 = off), `--seeds N` (soak: N seeds per level),
+    runs longer dumps every thread's traceback and stops the run; default 120, 300 for the waypoint locks, 900 for the soak, 0 = off), `--seeds N` (soak: N seeds per level),
     `--jobs N` (worker processes, default the cores minus two; 1 = everything in this process, the old serial run)."""
     import argparse
     import faulthandler
@@ -734,7 +801,7 @@ def main(argv=None):
         return
     times = []
     for fn in run:
-        timeout = args.timeout if args.timeout is not None else (900 if fn is check_soak else 120)      # the soak needs its own, longer watchdog
+        timeout = _timeout_for(fn.__name__, args.timeout)
         if timeout:
             faulthandler.dump_traceback_later(timeout, exit=True)
         t0 = time.time()

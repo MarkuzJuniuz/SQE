@@ -1,5 +1,425 @@
 # CHANGES.md
 
+## v0.41.696, README screenshots refreshed
+The README's screenshots show the current windows.
+
+## v0.41.695, F-14 RIO Navigation: PUSH waits for push time
+Jester now keeps you on PUSH until push time, so orbiting at the marshal no longer skips it. In the F-14B(U) it is held in manual sequencing like the marshal, and a waiting point the jet steps onto by itself is ordered again instead of ending his work.
+
+## v0.41.694, F-14B(U): just Your Nav and My Nav
+The F-14B(U) no longer has the Turnpoints menu: every point is on Jester's own wheel. Your Nav now always orders the current point again, even when Jester already has the nav, and reloads the flight plan if the jet has lost it.
+
+## v0.41.693, F-14B(U): the station is listed as CAP1
+On a patrol, escort, sweep or TARCAP flight the F-14B(U) listed your first station point as TGT, marked as a surface target. It is now CAP1, as on the kneeboard.
+
+## v0.41.692, F-14B(U): Jester brings deleted waypoints back
+A direct to the tanker deletes home base and everything you have not flown from the F-14B(U). Now, when you hand Jester the nav back or pick a turnpoint and the jet no longer has the point, he reloads the mission's flight plan on the CDNU and takes you there. Click Update in Settings if you had installed the script.
+
+## v0.41.691, F-14 RIO Navigation: Your Nav and My Nav
+The calls are now in F10 > Other > RIO Navigation: Your Nav hands Jester the waypoints, My Nav takes them back, and he tells you whenever the nav is yours again. Home base ends his work: he goes direct to it and, in the F-14B(U), leaves the jet in manual sequencing.
+
+## v0.41.690, F-14B(U) RIO Navigation uses the jet's own sequencing
+In the F-14B(U) Jester now leaves the jet in auto sequencing between points, so it steps on by itself as you pass them. Where he waits (the marshal until your push time, a station until your exit time, TGT on a strike) he puts it in manual. RTB now goes to your landing point, not to a later point such as the bullseye. Click Update in Settings if you had installed the script.
+
+## v0.41.689, the Caucasus can be lost on supply
+On the Caucasus the war is now also lost if the coalition's Force Index stays at 60% or less for three days: Washington calls the war off. The Overview warns you while it is that low. In practice only Level 3 gets there.
+
+## v0.41.688, F-14 RIO Navigation (experimental)
+With the script installed, Jester works your F-14B or F-14B(U) steerpoints through the flight (F10 > Other > Work the Waypoints: On / Off), switching off on TGT for a strike and when you take the navigation over; in the F-14B(U) it takes you out of Destination steering so your HUD follows it. The Turnpoints menu now serves the B(U) too. The Settings entry is now F-14 RIO Navigation: click Update if you had the Turnpoints script.
+
+## v0.41.687, strikes behind a SEAD hit as they do in DCS
+In the war outside your missions, a strike or close air support mission that goes in behind a SEAD now usually damages its target, as it did in DCS tests. Before, most of them did nothing.
+
+## v0.41.685, the A-10C II's jammer is read
+With the jammer script installed, SQE's Jammer Model now knows when your A-10C II is jamming (the OPR on its countermeasure display), as it does for the F-16C. Install the script again in Settings to get it.
+
+## v0.41.682, red's stand-off missiles are less sure
+In the war outside your missions, red's Kh-59M raids now work as they did in DCS tests: some are stopped before launch, most launched salvos are shot down by your fighters, and only some arrive. Red no longer uses them on your troops: they are bombed as before.
+
+## v0.41.680, red's stand-off missiles reach your SAM sites and troops
+Red now sends Kh-59M missiles at your HAWK and Patriot sites, behind its anti-radiation raid or on their own, and at your troops in contact, at every level. Fixed: a raid that went in behind another one could be missing from the mission when it was the one you flew against.
+
+## v0.41.679, red cuts your runways with stand-off missiles
+Red's raids on your airfields now fire Kh-59M missiles along the runway from about 55 nm whenever a bomber wing that carries them can reach, under SAM cover or not. Four or more hits close the field for a day. These raids no longer damage the defences or parked jets.
+
+## v0.41.678, red's stand-off missiles reach under your SAM cover
+Red now fires Kh-59M missiles at supply sites and garrisons under HAWK or Patriot cover too, at every level, coming in on the least defended side. The batteries cannot stop the launch: your fighters have to.
+
+## v0.41.677, your squadron is offered the most important jobs it can fly
+Your squadron used to be put on a random half of each turn's jobs. It is now offered a seat on the most important ones your jet can fly, about half of them.
+
+## v0.41.676, red uses its stand-off missiles whenever it can
+At Levels 2 and 3 red now fires Kh-59M stand-off missiles at your supply sites and garrisons whenever a bomber wing that carries them can reach, instead of on some raids only. A raid is massed when red has saved up the jets for it, not on a random day.
+
+## v0.41.675, ground attacks go in when the odds are there
+On the front a side now attacks whenever it is strong enough, instead of by chance. Red attacks less often than before (at Level 1 almost never), and blue a little more. The background supply strikes of a skipped day go for the best target.
+
+## v0.41.674, patrols go where the threat is, and a worn wing under threat pulls back
+Both sides now put their patrol pairs on the most threatened stations instead of drawing them by chance (the carrier group keeps its own share). A squadron worn down to a third whose field the enemy can reach always stands down to recover, rather than sometimes.
+
+## v0.41.673, fewer dice in what each side tasks
+Which targets get the turn's jobs, red's raid targets, sizes, escorts and strategic-bomber strikes, and how many patrols and sweeps go up no longer come from chance: the best target is taken and fractions are carried to the next turn. Combat results, weather and what a side fails to spot are still uncertain.
+
+## v0.41.672, red picks its raids by the state of the war, not by chance
+While your Patriots and HAWKs cover what red would hit, it goes after the air defences first (SEAD), then airfields. Once they are down it supports its ground forces: troops at the front, garrisons, then supply. At Level 1 the insurgents go for troops and garrisons first. At Levels 2 and 3 red raids more where it had been holding back.
+
+## v0.41.671, red looks at every kind of target before giving up
+When the kind of target red picked has nothing open, it now tries the other kinds before turning to your SAM sites, so an open target is not missed.
+
+## v0.41.670, at Level 2 red raids far more often
+At Level 2 red could barely afford a raid. It now raids your SAM sites most days of the first week, and its bombers follow once your cover thins. Levels 1 and 3 are unchanged.
+
+## v0.41.669, blue tasks by doctrine, not for variety
+The planner no longer holds any job type to 40% of the list or saves a place for one of each. After the SAM wave and close air support for troops in contact (up to two a turn), it takes jobs in order of how much they matter: air defences first, then radars, supply and the rest. Mid-war you will see more strikes; rear garrisons get close air support less often.
+
+## v0.41.668, missions build faster
+The kneeboard pages loaded their fonts again for every line of text. They are now loaded once, which takes about a quarter off the time to build a mission. The pages look the same.
+
+## v0.41.667, the release build is hardened
+The workflow that builds the release now runs pinned versions of its tools, asks for write access only where it publishes, and no longer pastes a tag name into a script. Nothing changes in the program.
+
+## v0.41.666, a dropped job is replaced by a new one
+When a listed job cannot be crewed, the turn now tries other targets (not the same list again), only ones the jets left over can fly, and may add a strike behind a SEAD package that has been built. You see more jobs, mostly early in a war; at Level 3 blue also loses more jets flying them.
+
+## v0.41.665, the planner names only targets a squadron can reach
+The planner now asks the same range question the mission builder asks (the route round the SAM rings), so jobs nobody could fly are no longer listed and then dropped. More of each turn's jobs are flown.
+
+## v0.41.664, stand-off jobs are named only while their jets are free
+The planner used to list several stand-off jobs (SLAM-ER strikes, Standoff DEAD, stand-off radar strikes) for the same few jets, and most were then dropped. It now counts the jets that carry each weapon and gives the other slots to other targets. A stand-off job still waits for its jets; it is never flown as a plain strike instead.
+
+## v0.41.663, the smoke test no longer stops itself on the waypoint-lock check
+The waypoint-lock check can take more than two minutes, so it now has a five-minute limit of its own. Before, the full smoke test could stop partway on a busy PC.
+
+## v0.41.662, the smoke test compiles every mission script
+The smoke test now checks that each script built into a mission compiles in Lua 5.1, the version DCS runs, so a syntax error is caught before it becomes an error popup in the game.
+
+## v0.41.661, campaign guide: how red fighters find an F-117A
+`docs/CAMPAIGN.md` now says that red fighters need their own radar contact before they go after an F-117A. No change in the game.
+
+## v0.41.660, red fighters need their own radar to go after an F-117A
+Red's patrols and alert pairs were ordered onto any blue jet in reach as long as red had an early-warning radar or an AWACS alive, the F-117A included. Against an F-117A they now need to pick it up on their own radar first.
+
+## v0.41.659, the Turnpoints menu entries are "Turnpoint 1", "Turnpoint 2", ...
+The entries under F10 > Other > Turnpoints now carry the same words in every mission, so you can bind voice commands to them. Which leg the point is on shows in the message after you pick it.
+
+## v0.41.658, your F-16C jammer lamp is read on the dedicated server too
+With the Jammer script installed, SQE now sees your F-16C's ECM lamp when the sortie runs on the dedicated server on this PC; before, it only did in single player. Open Settings > DCS Integration and click Update Jammer Script to get the new copy.
+
+## v0.41.657, turnpoints (TP), and an F10 menu to load them in the F-14B (experimental)
+The turn points that take your route round SAM sites are now TP1, TP2, ... on the kneeboard (they were all called AVD). The F-14B cannot hold them, so there is a new optional script (Settings > DCS Integration > F-14B Turnpoints Script): with it installed, F10 > Other > Turnpoints has Jester type the one you pick into the fix point and turn the destination knob to it. Jester types slowly, so pick the next one early. It works in single player and with the dedicated server on your own PC, not on another computer's server.
+
+## v0.41.656, red's escorts and sweep can come from further away
+When a red raid's escort or sweep wing is short of fighters, the wings that top it up may now lie up to 300 nm away (it was 200) and there can be two of them, so the far wings, which hold most of red's Su-27s, help staff the raids on the front fields. The raiders themselves are drawn as before.
+
+## v0.41.655, two settings get new names
+In Settings, "Splash Damage" is now "Blast Wave" and the "ECM Script" group is now "Jammer Model" (its Install button reads Install Jammer Script, and the status line Jammer script). Nothing else changes: your saved choices, the installed script and the F10 menu calls (SQE ECM Switch, SQE ECM OFF) are as they were. Both are still SQE's own code; the guide and the Settings text credit the community scripts the ideas come from.
+
+## v0.41.654, red's SEAD raids: doctrine escorts, a bigger sweep, and Caucasus fighters near the front
+At Levels 2 and 3 red's SEAD raids fly one escort fighter for every two jets (the doctrine figure), and the fighter sweep ahead of them grows (up to 16) so the raid keeps its fighter strength. On the Caucasus at Level 3 red's fighters are MiG-29S and Su-27 only, and most of them now sit on the fields near the front, so red can staff the raids on Senaki (before, its raids there were often short of fighters and sometimes did not come at all). Level 1 is unchanged.
+
+## v0.41.653, red raid groups no longer start on top of each other
+In a big merged mission with a red raid already under way at the start, several of its groups could spawn at exactly the same point and collide in the first seconds (11 of 20 raid aircraft in a test). A group that would start where another raid group starts now flies about 1,000 ft lower than the one before it.
+
+## v0.41.652, a tanker with no safe station waits for the raid to end
+When no tanker spot is clear of the mission's red raids and sweeps, the tanker no longer sits out beyond the covered area: it waits on the ground and launches about ten minutes after the last raid's time over its target, once no red fighter is near its track, and its guard launches with it. The briefing's intelligence gives the time. A tanker that could only launch long after your planned recovery does not fly that mission.
+
+## v0.41.651, the AWACS and the tankers stay under cover
+The AWACS and the tankers are placed under blue cover (a defended field, the carrier group, or a BARCAP flying that turn) first, and keep clear of red's raid routes second. On Syria the AWACS no longer ends up at the western edge of the map; on the Caucasus it now sits under cover on almost every turn (it was under cover on about half the Level 3 turns).
+
+## v0.41.650, the server mission is called SQE_Sortie
+On the local dedicated server the mission is now named SQE_Sortie in DCS's server list (it was SQE_test). The old copy is deleted when the server starts.
+
+## v0.41.649, the waiting window shows the whole "how to join" line
+The instructions at the top of the waiting window (connect to the local server, or open the mission file) wrap onto a second line instead of being cut off.
+
+## v0.41.648, internal test logging
+A test-only logging switch for development runs. Nothing changes for players.
+
+## v0.41.647, the ECM settings sit tidier
+In Settings > DCS Integration the "Show ECM Status" box is now right under "ECM Script", and the Install / Update ECM Script button keeps one width, so Remove no longer shifts when its label changes.
+
+## v0.41.646, the dedicated-server option moves to the DCS Integration tab
+"Fly on the Local DCS Dedicated Server (Experimental)" was a checkbox far down the Mission Build tab; it is now at the bottom of the DCS Integration tab, with the other DCS settings.
+
+## v0.41.645, one command for the smoke test
+`tools\smoke_test.bat` runs the self-test from any folder using the project's `.venv` (it makes the venv first if it is missing). Extra arguments are passed on, e.g. `--only locks`.
+
+## v0.41.644, README screenshots refreshed
+The README pictures show the current windows (HVAACAP in the Missions table and the kneeboard, the new AWACS and tanker texts). Docs only.
+
+## v0.41.643, more code clean-up (S150 PR 14)
+The small one-line helpers behind the buttons, menus and tables in the windows are now plain named functions, for readability. Nothing changes in the game or the windows.
+
+## v0.41.642, code clean-up (S150 PR 13)
+The last small one-line helpers outside the windows are now plain named functions, for readability. Nothing changes in the game.
+
+## v0.41.641, the AWACS and tanker guards are called HVAACAP
+The fighters that guard the AWACS and the tankers are now called HVAACAP (high value airborne asset CAP), the U.S. Air Force term, in the package table, briefings, kneeboard and guide. Old saves are converted when opened.
+
+## v0.41.640, the AWACS finds a clear station
+On Caucasus Level 3 the AWACS station was too close to a red raid or sweep on most turns, because it only looked straight back and never found a clear spot. It now searches behind the rear base and to either side, up to 150 nm, never nearer to red and never off the map, and moves 70 to 100 nm where it has to. Its guard fighters follow it; the tanker stays where it was. Syria is unchanged.
+
+## v0.41.639, docs: how the tanker and the AWACS keep clear of red
+The campaign guide now says where the tanker and the AWACS stay away from red's raids and sweeps, and how they turn away from a fighter. Docs only.
+
+## v0.41.638, the "Bombs away" call says where and which way
+An AI flight's "Bombs away" now follows the brevity manual: it adds where the bombs left (bullseye bearing and range) and the track they fly, as a heading, for example "Bombs away, bullseye 1-2-5/27, heading 2-7-0". "Rifle" and "Magnum" are unchanged.
+
+## v0.41.637, the tanker and the AWACS also keep clear of red sweeps
+Red's fighter sweeps hunt: in the test runs they shot down the tanker and the AWACS far from their own bombers. The tanker's track and the AWACS station now stay at least 100 nm from the route a red sweep flies, as well as 50 nm (tanker) and 40 nm (AWACS) from the raid's. The AWACS stays where it was when no spot behind it is clear. The sweeps themselves are unchanged.
+
+## v0.41.636, Level 3: a bomber raid comes in behind red's SEAD, from another side
+At Level 3, when red sends SEAD against a field's Patriot, it may send one bomber raid at that same field, from an axis at least 100 degrees away from the SEAD raid's, reaching its attack run about 5 minutes after the SEAD missiles are due. In the mission the Patriot keeps facing the SEAD raid, so the bombers meet only the rest of the field's defences (HAWK, guns, Stinger, your fighters). In the war simulation the field's air defence counts half against such a raid. Levels 1 and 2 are unchanged.
+
+## v0.41.635, the tanker and the AWACS keep clear of red raids
+In a mission with a red raid, the tanker's track now stays at least 50 nm from the routes the raid's bombers, escorts and sweeps fly, and the AWACS station moves back (up to 60 nm) when a raid booked that turn passes within 40 nm of it. In the test missions the tanker ends up further from the raids and often nearer home; the player's own route is unchanged.
+
+## v0.41.634, Level 3: red's SEAD strips the Patriot belt in two layers
+At Level 3, when red raids an outer Patriot, a second SEAD wave goes for the Patriot behind it (the one only the outer site covers), its missiles due 5 minutes after the first wave's land. The second wave may cross the outer site's ring but no other live Patriot's. If the first wave leaves the outer Patriot standing, the second meets it too. Levels 1 and 2 are unchanged.
+
+## v0.41.633, internal clean-up: named functions in the engine, campaign set-up and red air planning code
+Thirty-four one-line functions (lambdas) in the turn engine, the campaign set-up and red's air planning were given names. Nothing changes in play: eight unflown campaigns come out identical turn for turn, and 127 test missions too.
+
+## v0.41.632, internal clean-up: named functions in the war, ground war and patrol planning code
+Thirty-one one-line functions (lambdas) in the war simulation, the ground war and blue's patrol planning were given names. Nothing changes in play: eight unflown campaigns come out identical turn for turn, and 127 test missions too.
+
+## v0.41.631, internal clean-up: plain functions in the raid planning and SAM code
+Eighteen one-line functions (lambdas) in the code that plans red's raids and moves and repairs SAM sites were rewritten as small named functions and plain loops. Nothing changes in play: eight unflown campaigns come out identical turn for turn, and 127 test missions too.
+
+## v0.41.630, internal clean-up: plain functions in the strike task, threat map and SEAD timing code
+Twelve more one-line functions (lambdas) were rewritten as plain loops and small named functions. Nothing changes in play: 127 test missions come out identical.
+
+## v0.41.629, internal clean-up: plain functions in the support CAP, station, sweep and site layout code
+Twelve more one-line functions (lambdas) were rewritten as plain loops and small named functions. Nothing changes in play: 127 test missions come out identical.
+
+## v0.41.628, red's SEAD takes your Patriots from the outside in
+Red's SEAD raids no longer fly past one live Patriot to attack a site behind it. A raid goes for the outermost sites first (the ones red can attack without another live Patriot reaching its attack point); a site behind them becomes a target when the ones in front are down.
+
+## v0.41.627, tankers and AWACS pull back from enemy fighters
+A blue tanker or AWACS now leaves its track when an enemy fighter comes within 60 nm: it flies 40 nm straight away from it and orbits there (and moves again if it is still being chased), then goes back to its track once no fighter has been within 80 nm for five minutes. You get a line when it moves and when it is back; the tanker's TACAN stays on.
+
+## v0.41.626, the ECM script option says what it does
+The description of the ECM Script option in Settings was wrong about what the script does. It now says it plainly: a radar-guided missile fired at a jet with a jammer may be fooled (a chance, higher with a pod and from far away, none inside about 12 km) and is then removed in flight. The guide describes it too.
+
+## v0.41.625, shot calls by the book: what was fired at, and where
+Your flights' weapon calls now follow the brevity and air control communication publications: an air-to-air shot says the group's position off the bullseye, its altitude and "hostile" ("Fox 3, group bullseye 0-8-5/27, 29 thousand, hostile"), and an anti-radar shot names the system by its SA number and its position ("Magnum eleven bullseye 3-6-0/32"). Bearings are magnetic and read digit by digit. Rifle and Bombs away are unchanged.
+
+## v0.41.624, internal clean-up: plain functions in the package merging code
+Nine one-line functions (lambdas) in the code that folds neighbouring packages into one mission were rewritten as small named functions. Nothing changes in play: 126 test missions come out identical.
+
+## v0.41.623, internal clean-up: plain functions in the route planner and the red air picture
+Twenty one-line functions (lambdas) in the route planner and in the code that places red patrols were rewritten as plain loops and small named functions. Nothing changes in play: 126 test missions come out identical.
+
+## v0.41.622, internal clean-up: plain functions in the raid and site spawning code
+Eighteen one-line functions (lambdas) in the code that places red raids and ground sites were rewritten as plain loops and small named functions. Nothing changes in play: 126 test missions come out identical.
+
+## v0.41.621, internal clean-up: no lambdas left in the mission builder
+The last 21 one-line functions (lambdas) in the mission builder were rewritten as plain loops and small named functions. Nothing changes in play: 126 test missions come out identical.
+
+## v0.41.620, experimental: Fly starts the sortie on your local DCS server
+With the experimental server option on (Settings, off by default), Fly now starts the local DCS dedicated server with the sortie; it waits, paused, until you join (Multiplayer, 127.0.0.1:10308, the only client slot). The waiting window reads the server's results, and Accept or Abort stops the server and puts your own server settings back. Not yet flown by a person from start to debrief.
+
+## v0.41.619, the AWACS guard is a four-ship
+The fighters that guard the land-based AWACS (E-3) now fly as four when their squadron has the jets, not as a pair; red raid escorts were shooting the AWACS down past a pair. The guard squadron (194th FS, 8 F-15C) now guards only that AWACS, four jets one turn and the other four the next; the tankers and the carrier's E-2C get their guard pair from the ordinary fighter squadrons.
+
+## v0.41.618, a raided field's Patriot faces the raid, and red's SEAD attacks inside its arc
+A Patriot only sees, shoots and can be hit by anti-radar missiles inside about 45 degrees either side of where its radar faces. The Patriot of a field that a red SEAD raid goes for now faces the raid's way in, every other blue Patriot within reach of a raid's route turns to face it too, and red's SEAD groups launch from inside the targeted Patriot's arc. Before, half of red's SEAD bombers attacked from outside it and went home without firing, and the Patriot did not shoot at raiders on its blind side.
+
+## v0.41.617, red SEAD raids start their attack run before the launch point
+A red SEAD bomber group now starts its missile attack at a point on the straight leg 6 nm before its launch point. The fly-over launch point of v0.41.614 is taken back: a group that had dodged a SAM circled back low to overfly it and did not fire.
+
+## v0.41.616, blue guard fighters react anywhere on their patrol track
+A base or carrier BARCAP could not go after a bandit while it flew the far end of its own race-track (its leash was measured from the start of the track). The leash now covers the whole track. The tanker and AWACS guards also go after bandits a little farther out (30 nm, was 25), because red escorts were firing first.
+
+## v0.41.615, F-14B kneeboard: every route point to enter by hand
+The plain F-14B holds only three waypoints. Every other point of your route now shows its position on page 1, right under its row (or on an extra page after page 1 when they do not fit), all of them in route order (before: only the turn points round SAM rings, at most eight, on page 2).
+
+## v0.41.614, red SEAD and Kh-59M raids fly over their launch point
+A red SEAD or Kh-59M bomber group now flies over its launch point before it turns home. On a sharp turn it used to cut the corner about 10 km short, stay out of missile range and go home without firing.
+
+## v0.41.613, blue guard fighters keep their radar searching
+The fighter pairs that guard bases, the carrier, the tanker and the AWACS now search with their radar all the time, as the tanker guard already did. Before, a pair could fly near red jets and not see them until it was fired on.
+
+## v0.41.612, red SEAD raids still fire when they arrive late
+The time window in which a red SEAD bomber group may fire its anti-radiation missiles now runs from when the group reaches its launch point, not to a fixed clock time. A group delayed by a dive, a turn or a hold used to arrive after its window had ended and fired nothing; now it fires.
+
+## v0.41.611, internal clean-up: the start of the mission builder in plain Python
+Fourteen lambdas and one-line loops in the first part of the mission builder were rewritten as plain loops and small named functions. Nothing changes in play: 125 test missions come out identical.
+
+## v0.41.610, internal clean-up: the station and ring code in plain Python
+The helpers that decide where a fighter station may stand (outside SAM rings) were rewritten as plain loops with full names. Nothing changes in play.
+
+## v0.41.609, internal clean-up: unused code removed
+Twenty functions and ten constants that nothing in the program used any more were deleted (about 190 lines). Nothing changes in play.
+
+## v0.41.608, Syria Level 1 is a longer war: free the cities
+On Syria, Level 1 is no longer won by one base: you take Bassel Al-Assad, Rene Mouawad and Shayrat, one after another, and the push after each fall waits one day instead of nine. A war nobody flies now lasts about two weeks at Level 1 (it was three days), about 18 days at Level 2 (it was 8) and about two months at Level 3 (it was one): the war against Lutorin is now won only when all five works have stayed destroyed for 11 days (Level 2) or 12 days (Level 3), while his stockpile runs out. The Level 1 story is rewritten as a march through the cities. A campaign already in progress keeps its old pace and goal.
+
+## v0.41.607, a turn tries the next candidate jobs when one cannot be crewed
+When a job the planner named could not be flown (no stand-off jets free, a target out of reach, no SEAD seat), the turn used to be one package short. It now tries the planner's next candidates, a few at a time, so a turn builds about as many packages as it aims at. On day 1 that is about one more package on the Caucasus; on Syria Level 3 the crews are the limit and nothing changes.
+
+## v0.41.606, the all-AI test's stand-in flight starts in the air
+In the all-AI test mode the flight that stands in for you spent about five and a half minutes taxiing in DCS, so it flew 330 to 400 seconds behind its plan and pulled the whole package's timing with it. It now starts in the air on its first point, like every other AI flight. Your own flight is unchanged.
+
+## v0.41.605, red raid escorts no longer fly in a bomber's lane
+In a test, a red raid escort and a raid bomber collided in mid-air: the escort's formation point sat exactly at another bomber group's altitude. Every escort group now flies on a level of its own, at least 300 m above the highest bomber lane. The raid's route and timing are unchanged.
+
+## v0.41.604, red fields about as many jets as blue at Levels 2 and 3
+On the Caucasus red gets two more air bases (Anapa-Vityazevo and Krasnodar-Center) so it can park about as many jets as the coalition's 284: about 240 at Level 2 and 284 at Level 3 (the bomber wing not counted), with more Su-27 and Su-24M at Level 3 and fewer Su-25. On Syria red grows to 270 jets at Level 2 and 284 at Level 3, with fewer Su-17M4; at Level 3 red flies only fourth-generation fighters (MiG-29, Su-27, MiG-31): the MiG-23s and MiG-25s are gone. New campaigns only; Level 3 stays harder through its types and SAMs, not its count.
+
+## v0.41.603, an experimental switch for flying on a local DCS dedicated server
+Settings > Mission Build has a new experimental option, off by default, to fly on a DCS dedicated server on your PC (real time only). In this first version it gives your flight lead a client slot and adds the server start / stop code that keeps your own server settings safe; the Fly button does not use it yet.
+
+## v0.41.602, a jet that lands at a field that is not yours is lost
+A blue jet (AI or yours) that put down at an enemy field is now captured, and one that put down at a neutral field is interned: both count as a lost airframe, with a line in the debrief. Landing at your own fields and on your carrier is unchanged.
+
+## v0.41.601, an old save's runway-strike line in the sortie history reads as today's
+A save made before the runway job was renamed still showed "Crater the runway at ..." in its sortie history (and in an unfinished sortie). Opening it now maps that line to "OCA: Runway Strike, ..." like the rest of the plan.
+
+## v0.41.600, a CAS flight sent home flies through its egress point
+When an AI CAS flight is sent home (its target group is destroyed, or it strayed too far), it now flies the leg into its egress point instead of turning straight for home, so it keeps to the route that avoids SAMs.
+
+## v0.41.599, red raids keep out of a Patriot's real reach
+In tests a Patriot fired at jets up to 54 nm away at medium altitude and 63 nm at high altitude, further than the 40 nm red's raids kept to. Red raid routes now bend round your Patriot fields at 54 nm (raids at 12,000 to 20,000 ft) or 63 nm (SEAD and fleet raids at 30,000 ft). SEAD raids still launch their missiles from about 50 nm, inside that reach.
+
+## v0.41.598, escorts hold a station again instead of following the strikers
+In tests the AI escort that was meant to fly with the lead striker never did: it ran ahead of its leader while the strikers were still taxiing, ended up 55 to 60 nm away on its own and was shot down by a SAM. Escorts of strike and CAS packages now hold a covering station near the strikers again, as before the follow mode was added. In the test the escort survived and shot down a fighter.
+
+## v0.41.597, SAM rings follow what the SAMs really fire
+In tests an SA-11 Buk fired at jets up to 28 nm away, and the ships' SM-2 missiles up to 78 nm, further than the rings the AI kept to. Your fighter cover and escorts now keep out of an SA-11's real reach for their altitude (18 nm low down, 24 nm from 10,000 ft and 26 nm from 26,000 ft up) and out of 78 nm round the carrier group. This moves a few cover stations and turn points, yours included when you fly cover. Strike routes and the Patriot ring are unchanged.
+
+## v0.41.596, red SEAD raids: Su-24M only, one missile
+Red's SEAD raids against your Patriot and HAWK sites are now flown by Su-24Ms only, all firing the Kh-31P from about 50 nm out. The Su-17M4, which could never fire its Kh-58U, goes back to CAS and bombing work only. Raids at 30,000 ft now fly as designed, because the Su-17M4 no longer pulls the whole raid down to 12,000 ft. Expect about half as many SEAD raids, as the Su-24M is the smaller pool.
+
+## v0.41.595, F-15C patrol jets carry eight AIM-120C
+The F-15Cs that fly TARCAPs, sweeps and the carrier or base patrols now carry eight AIM-120C and three fuel tanks, where they carried four AIM-120C and four Sidewinders. In tests the four-missile jets fired everything and then hung about on station with only Sidewinders. The F-15C escorts keep four AIM-120C and four Sidewinders, because they are the ones that get into the close fight. A TARCAP or escort you fly in an F-15C gets the same kit. Other aircraft are unchanged.
+
+## v0.41.594, red Su-24M SEAD jets now carry the pod they need to fire
+A red Su-24M sent to hit your air defences with Kh-31P anti-radiation missiles now carries its L-081 Fantasmagoria pod. Without it the jets flew to their launch point and went home without firing. In a test the eight Su-24Ms fired all sixteen missiles at a Patriot and HAWK site. The Su-17M4s, which carry the longer-range Kh-58U, still do not fire.
+
+## v0.41.593, carrier and base patrol fighters stay near what they guard, hurt fighters hold back
+The fighters that guard a carrier group or an airfield are now kept within 25 nm (carrier) or 15 nm (base) of their station, so they no longer chase enemy fighters out of the reach of their own ships' and SAMs' cover. A fighter flight that breaks off a fight because it lost a jet now commits on nothing for five minutes, for both sides, so a hurt pair no longer goes straight for the strikers. Your own flight is unchanged.
+
+## v0.41.592, cover fighters no longer park inside a live SAM ring
+When every point within 20 nm behind a package was covered by an enemy SAM ring, the escort and the TARCAP kept their old station, inside the ring, and the SAM shot them down. They now stand on the first clear point further back, up to 60 nm behind the package. Packages whose cover already found a clear point are unchanged.
+
+## v0.41.591, the unit limit can go up to 750
+The "units max" box in Settings > Mission Build now goes up to 750 (it stopped at 400); the default stays 250. A regular merged mission holds roughly 500 to 750 units, so at the top of the range packages and ground sites are no longer left out for size. The groups that sleep until they wake (the Dormant Sites setting) still do not count against the limit. In tests on a dedicated server, missions of 490 to 590 units ran at real-time speed using 0.4 to 0.8 CPU cores; DCS in single player was not measured, so raise it step by step.
+
+## v0.41.590, one unit limit: the fixed 500 ceiling is gone
+A mission's size is now limited only by the Mission Build setting "units max". The separate hidden ceiling of 500 units (a file you could edit, `limits.json`) never applied at the default, because the setting was always lower, and it is removed. Nothing changes at the default limit of 250.
+
+## v0.41.589, fighters back off a little earlier from SAM rings and stop switching
+An AI fighter that is chasing an enemy now breaks off 5 nm before the other side's SAM rings and only starts a chase when it is 8 nm outside them, so it no longer flips between attacking and backing off at the ring edge. After breaking off from a pair because it ran toward the rings, went out of reach or lost a jet, it leaves that pair alone for two minutes (five after a loss), and a flight that loses a jet breaks off at once. Your own flight is unchanged.
+
+## v0.41.588, fighters of both sides commit on enemy fighters, and stay out of their SAM cover
+Every AI air-to-air flight now goes after an enemy fighter that comes within its reach (blue: TARCAPs, escorts, sweeps, BARCAPs, HAVCAPs, alert pairs and raid interceptors; red: patrols, alert pairs, reliefs and standbys) while an AWACS is up, or its own radar has it (red also counts its early-warning radars). A flight never flies into the other side's SAM rings: it can shoot at a jet under SAM cover from outside it and breaks off when it would enter, runs out of reach, or its time on station ends. At most two flights go for one enemy pair, and a tanker or AWACS guard stays near what it guards. Red's raid escorts and sweeps are unchanged. Your own flight is unchanged.
+
+## v0.41.587, cover fighters commit on red fighters
+AI TARCAPs, escorts that hold a station and sweeps now go after a red fighter as soon as it comes within their reach (40 nm for the F-15C) while an AWACS is up or their own radar has it, the way red's alert fighters are sent at you. They break off when the red jet flies back under its own SAM cover, runs well out of reach, or when their time on station ends, then fly their route again. Red fighters sitting under their SAMs are left alone. Your own flight is unchanged.
+
+## v0.41.586, cover fighters reach further, fly higher and carry the AIM-120C
+AI TARCAPs, station escorts and sweeps may now attack from much further out (40 nm for the F-15C, 45 for the F-14, 30 for the F-16 and F/A-18, still kept clear of SAM rings): in testing red fired its first missile from outside the blue fighters' fight area in 11 of 12 engagements, so they were never allowed to attack first. F-15C and F-14 cover flights fly their station at 33,000 ft and a faster 460 / 440 kt, and the F-15C's air-to-air kit carries the AIM-120C instead of the AIM-120B. A TARCAP, escort or sweep you fly in an F-15C or F-14 gets the new altitude, speed and kit too.
+
+## v0.41.585, cover fighters fight on the way in and shoot first
+AI TARCAPs, escorts that hold a station and sweeps now also fight what comes within their reach along their route from the push point to their station, not only round the package, and they fire at maximum range from the start instead of holding their shots until the station. In testing, Su-27s shot an F-15C TARCAP down from just outside its fight circle and it never fired back. Your own flight is unchanged.
+
+## v0.41.584, TARCAP race-track shortened
+A TARCAP's race-track is now 5 nm long instead of 15, so it stays close to its station: in testing the long loop took it about 36 km away for 9 minutes a lap, through most of the strike. Escorts, sweeps and the guard patrols keep their legs. A TARCAP you fly gets the shorter CAP2 too.
+
+## v0.41.583, SEAD flights stay out of the S-300 they attack; cover on every attack axis
+An AI SEAD flight sent against an SA-10 now fires from 40 nm instead of 35, outside the reach where the S-300 opened fire in testing, and it no longer flies toward a second SA-10 its HARMs cannot reach from there (it used to cross the first one to get to it). In a package whose JSOW flight comes in on its own axis, the TARCAP now covers the most exposed axis and the escort the other, instead of both guarding the HARM shooters. Your own SEAD route is unchanged; a TARCAP or escort you fly moves with the new station.
+
+## v0.41.582, no cut-off blue company inside red's lines
+New campaigns no longer start with a small blue force inside the first sector red holds. It showed up on the front map as a detached company beside a red column, 20 km past the line, and it would not have survived there. Red's first sector now starts fully red; saved campaigns keep what they have.
+
+## v0.41.581, a jettisoned bomb is not a runway hit
+A bomb an AI striker dumps far from its target (more than 20 km) is no longer followed for the runway-hit count, so it cannot help cut a field. Real releases count as before.
+
+## v0.41.580, no "Bombs away" for a jettison
+An AI striker that dumps its bombs far from its target (jumped by red on its run) no longer calls "Bombs away": the call needs the release to be within 20 km of the flight's target point. The state file's shot log now records how far from the target each bomb left.
+
+## v0.41.579, two text fixes
+A saved campaign planned before v0.41.435 shows its runway strike as "OCA: Runway Strike, <field>" in the briefing, kneeboard, debrief and history, not "Crater the runway at <field>". A great sortie's closing line no longer claims the enemy will feel it "for days" ("That one will hurt them.").
+
+## v0.41.578, strikers wait for the SAM sites that cover their target
+A strike or CAS package with its own SEAD flight now holds its AI strikers outside until the radars of the SAM sites covering the target are down, not just the target's own (an airfield or a depot has no radars, so the strikers used to go in at once). The hold, its time limit and the turn-back when the SEAD is lost are as before. Your own flight and your routes are unchanged.
+
+## v0.41.577, a runway needs four bomb hits to be cut
+A runway strike now closes the field only when 4 of its bombs land on the runway (it was 1). Fewer hits are damage the repair crews fix overnight, and the debrief says how many were needed. A two-jet flight of Vipers or Tomcats carries exactly 4 GBUs, so it has to land every one.
+
+## v0.41.576, the Air Defense tab lists each side's sites on its own
+The Overview's Air Defense tab now has a "Coalition Sites" table and a table for red's sites, the same columns and widths as on the Force Index tab, instead of one mixed list.
+
+## v0.41.575, Lutorin Works: two rebuild teams
+Red now has two teams rebuilding Lutorin Works at Level 2 and Level 3: two destroyed plants are mended at the same time (about a month each), and a third waits for a team to finish. Winning by destroying every plant at once is harder. Saved campaigns keep the days their one team had left.
+
+## v0.41.574, Tactical Edge is switched off
+The Tactical Edge (your sorties raising the odds of the AI's background jobs) and red's idle surge are off for every campaign, saved ones too, and hidden: no Tactical Edge tab on the Overview, no switches in New Campaign or Settings. The war runs on its own; skipping turns no longer makes red press harder, and flying no longer builds an edge.
+
+## v0.41.573, an opened save shows its new SAM sites at once
+A saved campaign that was missing a blue air-defence site (Hatay's Patriot in a Syria save, v0.41.572) now gets it the moment you open it, a finished war or a day already begun included, and a state note names what was added. Before, it appeared only when the next day was planned.
+
+## v0.41.572, Hatay gets its Patriot
+Syria's Hatay, red's objective and 57 nm from Incirlik, is a recovery field, and recovery fields had HAWK and AAA only. It now has a Patriot battery too, in new campaigns and in saved Syria campaigns (the site appears when you load). Red's raids bend round its 40 nm ring and its SEAD packages can target it. The Caucasus recovery field is unchanged.
+
+## v0.41.571, Syria's bombers move from Tiyas to Bassel Al-Assad
+DCS has no stand at Tiyas that fits a Tu-22M3, so the wing's second half only ever existed on paper and its raiders started from the runway. In new Syria campaigns the Tu-22M3 wing is based at Damascus and Bassel Al-Assad, and a field never holds more bombers than it has stands for: at Level 3, 14 Tu-22M3 at Damascus and 6 at Bassel Al-Assad, 6 Su-27 escorts at each. Tiyas stays an ordinary red field with its SA-5. Saved Syria campaigns keep the wings they have; the Caucasus is unchanged.
+
+## v0.41.570, a detour takes the side away from red's fighters
+When going round a SAM ring to the left or to the right is within 10 % of the same length, the route now takes the side farther from red's nearest patrol station or fighter field (the transit legs, the legs to a station and after it, a package's shared push-to-IP detour, yours included). Routes without that choice are unchanged.
+
+## v0.41.569, a flight that would not fit its fuel tries going under the ring
+Before a flight is left out for fuel (v0.41.568), its detour round a SAM ring can become a low leg straight under the ring where the ring cannot reach that low: an SA-5 (floor 1,000 ft) or SA-2 (1,500 ft) is passed 500 ft under its floor, a radar SAM whose halved low reach stays off the leg at 300 ft, never through a short-range site's ring, with a descent and a climb 20 nm either side and each low nm counted 1.5 times against the fuel. In the test runs no flight needed it yet.
+
+## v0.41.568, a job out of safe reach is not offered
+The planner now judges whether a target is in reach by the length of the safe route round the live SAM rings (to the IP or launch point, the attack leg after it goes in as before), not by the straight line, so a job that no flight can reach without too long a detour is not offered. In 24-turn test runs that changed 11 of 4,785 squadron-target pairs on Syria and 2 of 5,759 on the Caucasus. A built flight whose route (turn points, the way home and its time on station included) is longer than 2.4 times its jet's combat radius (1.5 times that with a tanker) first drops the margin round the rings, then a TARCAP or sweep holds 5 minutes instead of 15, then it is left out of the mission; a flight never goes straight through the rings, and your own flight always flies.
+
+## v0.41.567, your own route goes round the SAM rings too
+Your route now gets the same turn points as an AI flight in your seat: where a leg to the marshal, to the IP or station, or home would cut a live SAM ring, the card lists extra waypoints named AVD (the notes line says how many nm and minutes they add), your egress point and a scramble CAP's race-track are moved out of the rings, and a strike or SEAD IP that sat inside the target's rings moves out along the run-in to the first point clear of them (target unchanged). The plain F-14B holds three waypoints, so its AVD points are listed on page 2 as "ROUTE POINTS (enter by hand)". The attack legs themselves are unchanged.
+
+## v0.41.566, AI egress points and CAP stations out of SAM rings; one detour for a package
+An AI flight's egress point (strike, SEAD, escort) no longer sits inside a live SAM ring: it moves to the nearest point outside the rings, at most 40 nm. A scramble, raid or fleet CAP whose race-track has an end inside a ring moves that end out (the far end first, else the pair walked toward what it guards); a defended point inside a ring keeps its station. A sweep station is never inside a ring the routes keep out of. The strikers of a package share one detour from the push to the IP, each copy shifted by its lane. Your own flight is unchanged.
+
+## v0.41.565, AI flights go round every live SAM ring on the way out, to their station and home
+An AI flight's route (base to marshal to push, push to its IP or station, the way home) now bends round every live SAM ring, including the ring of the site its own package attacks and the rings a fighter used to ignore near its target; a TARCAP, escort or sweep has no ring of its own. A flight that starts or ends inside a ring (a base near the front, an IP inside the target's ring) takes the ring by its nearest edge when that cuts the time inside it. The map and the briefing now draw and quote the same ring the routes keep out of (SA-10 35 nm, SA-5 71, SA-2 26, SA-11 20, SA-6 16, SA-3 15). Your own flight's route is unchanged.
+
+## v0.41.564, kneeboard: when to leave your CAP station; no more "You set standoff"
+The CAP1 row of your kneeboard now says "leave hh:mm:ss": when your flight leaves its TARCAP, escort or sweep station, the same rule an AI flight in your seat follows (your time on station, extended to the last striker of your package and of the packages near it). The SEAD target line reads "SEAD site" and no longer says "You set standoff". Card text only: no route, task or time changes.
+
+## v0.41.563, TARCAP and escort race-tracks point at the threat
+A TARCAP or station escort now flies its race-track along red's line: CAP2 lies behind the station, away from red, so the cold leg runs back and the hot leg points at red, instead of both legs flying the beam across red's approach. Where that point is not clear of the SAM rings (after halving the leg to 5 nm) or red has no approach, CAP2 stays across the line as before. In the plain F-14B the DP point moves with CAP2. Not flown.
+
+## v0.41.562, TARCAPs and station escorts hold on red's line into the package
+In a strike, DEAD or CAS package a TARCAP or station escort now holds on red's straight line into the package, just behind the protect point nearest red, facing the threat, so it can shoot past the strikers instead of sitting beside or behind them. It stays outside every SAM ring and at most 20 nm behind that point (the F-14 a little further); where nothing is clear within that, it keeps its old station. In the plain F-14B and the other fighters the CAP1 and CAP2 points move with it. Not flown.
+
+## v0.41.561, TARCAPs and station escorts are on station two minutes before the first striker reaches its IP
+A TARCAP or station escort now pushes so that it reaches its station two minutes before the first ground-attack flight of its package reaches its first protect point (IP, HARM, JSOW or release point, or target), instead of two minutes ahead of the strikers' push whatever the distances. Before, a TARCAP reached its station about 37 s before the TOT and after it in 3 builds of 10. The cover is never pushed later than before, and at most 15 minutes earlier. An escort that flies with its strikers is unchanged.
+
+## v0.41.560, AI routes go round SAM rings with as many turn points as they need
+An AI strike, SEAD or CAS route, a raid scramble's way out, a support CAP's way home and the red raids' lanes now follow the shortest path round the SAM rings they must avoid, with as many turn points as it takes, instead of one point per ring (the two new legs often still cut the ring). A gap between two rings narrower than 4 nm counts as closed. A ring that holds a leg's start or end point no longer bends that leg.
+
+## v0.41.559, F-14B: a station fighter's CAP1 is waypoint 3, CAP2 is DP, ST is the package target
+In the plain F-14B a fighter job with a station (TARCAP, sweep, fleet-defence CAP, escort) now has CAP1 as waypoint 3 and CAP2 as the DP navigation point, which shows on the TID but cannot be selected. An escort whose route has an egress keeps waypoint 3 for the EGR and gets CAP1 as the IP point, flown before it. A TARCAP or escort of a strike, DEAD or CAS package also gets ST at the package's ground target, listed just above HA on the card. A BARCAP is unchanged (CAP1 and CAP2 are waypoints 1 and 2). The midway DP of v0.41.558 is gone. Strike jobs and fighters flying a strike-shaped route are unchanged. Not flown.
+
+## v0.41.558, F-14B: a point is saved once, DP sits midway between CAP1 and CAP2
+In the plain F-14B a point that is already waypoint 1, 2 or 3 is no longer written a second time as the IP or ST navigation target point (a BARCAP's CAP1 and CAP2 were both). When the player's route has both CAP1 and CAP2 the jet also gets a DP navigation target point midway between them, which shows on the TID, and the kneeboard lists it just above HA. The pilot still flies to the waypoints, IP and ST; DP and HA are markers. Not flown.
+
+## v0.41.557, tools/release.py: one command to release main
+`tools/release.py` releases main without hand-typed git: it checks the tree is clean, checks out main and pulls it (fast-forward only, main must equal origin/main), reads `__version__`, stops if the tag `vX.Y.Z` already exists here or on origin, stops if `docs/CHANGES.md` has no `## vX.Y.Z` entry, runs `python -m compileall -q sqe tools` and the full smoke test (it must print SMOKE TEST PASSED), then asks for `y` and tags that exact commit and pushes the tag, which starts the release build. Any problem stops it before the tag. `--dry-run` runs every check and the smoke test but does not tag or push. It never merges or pushes a branch. No game code changed. Not flown (a tool).
+
+## v0.41.556, B3: red's raid kits follow the target
+A Su-24M raid on a runway now carries four BetAB-500ShP (rocket-boosted concrete-piercing bombs, pylons 2, 3, 6, 7, the other pylons empty), on troops or a garrison four RBK-500U (126 OAB-2.5RT each), on a supply site the FAB kit as before. The planned KAB-500S for supply sites (a Lutorin pull-forward) is NOT carried: the pinned pydcs lists it on the Su-30 and Su-34 only, so `loadouts.STRIKE_KITS` finds no Su-24M pylon for it and the FAB kit stays; it switches on by itself if pydcs ever lists it. Syria's Su-17M4 carries four BetAB-500ShP on a runway, four RBK-500 (PTAB-1M) on troops, four FAB-500 on supply sites. `enemy_strike_loadout(cls, kind)` takes the target kind from the raid spawner and from red's front-line strike (troops). Kh-59M raids, the Su-25's kit and the Tu-22M3 (Kh-22 on the carrier raid, OFAB racks on a land strike; DCS cannot fire the Kh-22 at land) are unchanged. CAMPAIGN.md and GUIDE.md say what red carries. Not flown in DCS.
+
+## v0.41.555, B2: red SEAD fires two missiles from two ranges, Level 3 packages are 8 jets
+Red's SEAD raid packages now alternate: the first, and every second one, is a Kh-58U package that fires from 65 nm (`raid_spawns.ARM58_LAUNCH_NM`; the Kh-58U reaches 120 km from 10,000 m); the others are Kh-31P packages at 50 nm as before. Their launch times are set from the missile flight (Kh-58U Mach 3.6, Kh-31P about 1,000 m/s) so that every package's missiles reach the site together (within the 4 s between two groups). Same Attack Group task and the same air-defence-zone fallback. Level 3 SEAD packages are 8 jets (it was 6): a HAWK is 16 jets in two packages, and a full Patriot is 16 jets in two packages too, because a raid never flies more than 16 jets (`POOL_MAX_RAIDERS`). Syria's Su-17M4 flies SEAD packages (always Kh-58U on pylons 3 and 6); the Caucasus has none, so its SEAD is the Su-24M's. A Su-24M Kh-58U is on pylons 2 and 7 like the Kh-31P. The briefing line of a SEAD raid names the missiles and the ranges. The background war counts a Kh-58U package like a Kh-31P one. Human-flown routes are unchanged (checked on three campaigns). Not flown in DCS: whether the AI fires the Kh-58U at 65 nm, and the Su-17M4's Kh-58U.
+
+## v0.41.554, B1: Syria's bomber wing is 20 over two fields, a closed bomber field is back in two turns
+The Syria Level 3 Tu-22M3 wing is 20 (it was 16), split 10 and 10 between Damascus and Tiyas, with 12 escorts split 6 and 6; the Syria `max_raid` override is gone, so the carrier raid fields the default 16. The carrier raid and the Tu-22M3 land strike draw from both fields and skip one that is cut or destroyed. Any field holding a Tu-22M3 squadron (Mozdok too) now reopens two turns after a crater instead of six; every other field keeps six. The Syria Level 3 land strike is 4 Tu-22M3 (the Caucasus stays 2 + 2). New pack keys `bomber_bases` and `land_tu` (see THEATRES.md). Tiyas parks no Tu-22M3 in DCS, so it holds its half on the wing roster only; only Damascus parks bombers. Side effect: Syria's Damascus and Tiyas Tu-22M3 and escort squadrons are now part of each field's own wing (new squadron ids and names), and the wing's replacement timer is shared with the roster squadrons there. The Caucasus campaign state is identical on the same seed apart from the repair time (checked on five seeds).
+
+## v0.41.553, S132: smaller waiting window, the dormant-sites log is for debugging only
+The waiting window no longer shows the "This Sortie" table of friendly and enemy aircraft and ground units (the package objectives list shows how the sortie goes). The window is about 200 pixels shorter: the objectives table is five rows tall and scrolls when a mission has more. The wake and sleep lines and the 10-second tick that Dormant Ground Sites wrote to dcs.log are now written only when the environment variable `SQE_DEBUG` is set to `1` before SQE starts (a performance run); a normal install writes nothing.
+
 ## v0.41.552, S103f: the F-14B points are the ones Jester can select
 The plain F-14B no longer gets a DP point, which Jester cannot select. WP 1 is the marshal point, 2 the push and 3 the egress when the route has one. A fighter's station (CAP1) is the IP and the other end of its racetrack (CAP2) is ST; a strike keeps IP and ST on the target. A BARCAP has CAP1 and CAP2 as waypoints 1 and 2. HA (the hostile area) stays.
 

@@ -33,9 +33,16 @@ class SeadTiming:
                     bx, by = spot[0], spot[1]
             mshl = tm.package_marshal(st, (bx, by), bearing(bx, by, tgt.x, tgt.y), (tgt.x, tgt.y), p.flights)
             g = make_geometry(bx, by, tgt.x, tgt.y, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
+            from .strike_tasks import own_target_keep
             um = tm.umbrella_site(st, tgt)
+            keep_out = []
+            if um:
+                keep_out.append((um.x, um.y, samtier.get(um.variant, "harm_nm")))
+            own_keep = own_target_keep(tgt)                            # S153: the builder keeps the HARM point off an SA-10 target too
+            if own_keep is not None:
+                keep_out.append(own_keep)
             wps = plan_route(Role.SEAD, (bx, by), g, spec.profile, is_player=False, tanker_xy=None,
-                             keep_out=(um.x, um.y, samtier.get(um.variant, "harm_nm")) if um else None)
+                             keep_out=keep_out or None)
             assign_times(wps, 0.0)
             push, obj = next(w for w in wps if w.name == "PUSH"), objective_wp(wps)
             return obj.eta_s - push.eta_s
@@ -79,8 +86,21 @@ class SeadTiming:
         groups = self._sead_groups(pkgs)
         if len(groups) < 2:
             return
-        groups.sort(key=lambda g: (-max(wave_factor(st, it[1]) for it in g), min(int(it[0].start[:2]) * 60 + int(it[0].start[3:5]) for it in g)))
-        arrive = lambda it: int(it[0].start[:2]) * 60 + int(it[0].start[3:5]) + it[2] / 60.0
+        def strongest_then_earliest(group):
+            # the group with the largest wave factor first; among equals the one whose earliest package starts first
+            largest_factor = None
+            earliest_start = None
+            for item in group:
+                factor = wave_factor(st, item[1])
+                if largest_factor is None or factor > largest_factor:
+                    largest_factor = factor
+                start_min = int(item[0].start[:2]) * 60 + int(item[0].start[3:5])
+                if earliest_start is None or start_min < earliest_start:
+                    earliest_start = start_min
+            return (-largest_factor, earliest_start)
+        groups.sort(key=strongest_then_earliest)
+        def arrive(it):
+            return int(it[0].start[:2]) * 60 + int(it[0].start[3:5]) + it[2] / 60.0
         last = None
         for g in groups:
             now = max(arrive(it) for it in g)
@@ -142,7 +162,8 @@ class SeadTiming:
                 p.start = f"{m // 60:02d}:{m % 60:02d}"
         # v0.41.158: a follow job (STRIKE / CAS behind the SEAD of the long-reach sites round its target) starts FOLLOW_GAP_MIN after the latest of those packages
         stage = {p.objective.target_id: p for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS}
-        hm = lambda q: int(q.start[:2]) * 60 + int(q.start[3:5])
+        def hm(q):
+            return int(q.start[:2]) * 60 + int(q.start[3:5])
         for p in pkgs:
             sps = [stage[x] for x in after_sites(p.objective) if x in stage]
             if sps:

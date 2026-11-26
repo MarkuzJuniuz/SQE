@@ -33,7 +33,11 @@ def need(state, b) -> tuple:
         if t and math.hypot(x - b.x, y - b.y) / NM <= NEED_RADIUS_NM:
             counts[t] = counts.get(t, 0) + 1
     if counts:
-        t = max(sorted(counts), key=lambda k: counts[k])
+        # The type with the most jets (a tie goes to the first in sorted order).
+        def jets_of_type(type_key):
+            return counts[type_key]
+
+        t = max(sorted(counts), key=jets_of_type)
         if counts[t] >= NEED_MIN:
             return t, counts[t]
     return "F-16C", counts.get("F-16C", 0)
@@ -58,7 +62,7 @@ def form(state, b, parking) -> tuple:
     if cs is None and aircraft != "F-16C":
         aircraft, short = "F-16C", 0
         cs = callsign_for(state, aircraft)
-    size = max([q.authorized for q in state.squadrons.values() if q.aircraft == aircraft and q.role != "havcap"] or [12])
+    size = max([q.authorized for q in state.squadrons.values() if q.aircraft == aircraft and q.role != "hvaacap"] or [12])
     here = sum(q.authorized for q in state.squadrons.values() if q.base_id == b.id)
     cap = parking(b.airport, aircraft) if b.airport else None
     if cap is not None:

@@ -37,11 +37,6 @@ def load(th: dict):
     return d
 
 
-def clear_cache() -> None:
-    _CACHE.clear()
-    _SPOTS.clear()
-
-
 _SPOTS: dict = {}
 
 
@@ -141,7 +136,11 @@ def apply(st, th: dict) -> set:
     put_all([a for a in list(st.assets.values()) + list((getattr(st, "blue_assets", None) or {}).values()) if a.kind in (AssetKind.FUEL, AssetKind.DEPOT)], "supply", SUPPLY_REACH_M)
     put_all([a for a in st.assets.values() if a.kind == AssetKind.ARMOR and a.id.startswith("armor_")], "ground", COLUMN_REACH_M)
     # the dug-in garrisons of the SAM sites (off the road: a SAM spot) and the columns' air defence (a road spot) settle on a spot near where they ended up
-    for a in sorted(st.assets.values(), key=lambda a: a.id):
+    # Asset id order, so the garrisons settle in the same order every time.
+    def asset_id(asset):
+        return asset.id
+
+    for a in sorted(st.assets.values(), key=asset_id):
         if a.id.startswith("gar_") and a.guards in placed:
             put(a, "sam", FOLLOWER_REACH_M)
         elif a.id.startswith("fsam_") and ("armor_" + a.id[5:]) in placed:

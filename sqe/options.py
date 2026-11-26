@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .radio import RadioLayout
+from .settings import f14_turnpoints_installed, f14_turnpoints_state
 
 
 @dataclass
@@ -25,7 +26,7 @@ class MissionOptions:
     base_defenses: bool = True
     carrier_escorts: bool = True
     enemy_cap_engage_nm: int = 50       # enemy patrol fighters chase no further than this (0 = unlimited); v0.41.61: fixed, no settings box
-    friendly_cap_engage_nm: int = 50    # HAVCAP / base BARCAP likewise (0 = unlimited); v0.41.61: fixed, no settings box
+    friendly_cap_engage_nm: int = 50    # HVAACAP / base BARCAP likewise (0 = unlimited); v0.41.61: fixed, no settings box
     fighter_engage_nm: int = 40         # AI escorts and sweeps chase no further than this (0 = unlimited)
     fighter_engage_minutes: int = 5     # AI escorts, sweeps, SEAD stop engaging this many minutes after the TOT and fly on (alert pairs: +5). 0 = no time limit
     player_is_ai: bool = False          # test: your own flight is built as an AI flight (no player / client slot) and gets the AI behaviour too (stand-off, engage window)
@@ -40,13 +41,14 @@ class MissionOptions:
     damage_calls: bool = True           # v0.41.215: damage / mayday calls from the other aircraft
     ecm_status: bool = True             # v0.41.213: the on-screen ECM messages (F-16C lamp, FC3 F10 calls); only with ecm_script
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
+    f14_turnpoints: bool = False        # the F-14 RIO Navigation export script is installed: the player's F-14B / F-14B(U) gets the F10 entries (`rio_nav`)
+    f14_script_old: bool = False        # ...but the installed copy is older than SQE's: it cannot work the waypoints (the build warns)
     dormant_sites: bool = False         # S89: red SAM sites on the route start late-activated and wake by detector (see `_wire_dormant`)
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
     wreck_static_weight: float = 0.25   # how much of a live unit one wreck or one live static building counts toward the unit limit (v0.41.221: the buildings too; renamed in S88 R2)
     carcass_range_nm: int = 40          # only sites this close to the route get wrecks
     full_map: bool = False              # stress test: build everything that exists (see _spawn_everything); the unit limit is off
     max_units: int = 250                # the unit limit of the BASE mission (wrecks are trimmed, furthest first, to fit under it); merged packages' units do not count (v0.41.104)
-    unit_ceiling: int = 0               # most units in total, merged packages included (0 = sqe/data/limits.json, 500); a runaway guard
     target_area_radius_nm: int = 15           # v0.41.209 (XO; S139b: was merge_radius_nm): the target area radius, also the radius inside which every supply site (fuel farm, depot, both sides) is built round the target: the performance knob
     enemy_air_sum: int = 100            # folded packages: biggest enemy-air need + this % of the others' (S88 R2: no setting, no UI: 100 for everybody)
     carrier_min_enemy_nm: int = 150     # the carrier group is moved back along the line of retreat until it is at least this far from the fight
@@ -75,6 +77,7 @@ _PLAIN = (
     ("fighter_standoff", "fighter_standoff", bool, _REQUIRED),
     ("carcasses", "carcasses", bool, True),
     ("dormant_sites", "dormant_sites", bool, False),
+    ("player_is_client", "dcs_server_fly", bool, False),         # S161a: the server option gives the flight lead a client slot
     ("reactive", "reactive", bool, True),
     ("ecm_script", "ecm_script", bool, False),
     ("ecm_status", "ecm_status", bool, True),
@@ -98,6 +101,9 @@ def options_from_settings(options: MissionOptions, settings, *, ai_test: bool, f
         setattr(options, field_name, cast(value))
     options.hot_runway_own_field = options.hot_runway_starts and bool(getattr(settings, "hot_runway_own_field", False))
     options.wreck_static_weight = max(5, int(getattr(settings, "wreck_static_weight_pct", 25))) / 100.0
+    # not a saved setting: installed or not, on this PC, when the mission is built
+    options.f14_turnpoints = f14_turnpoints_installed(getattr(settings, "dcs_saves", ""))
+    options.f14_script_old = f14_turnpoints_state(getattr(settings, "dcs_saves", "")) == "old"
     options.player_is_ai = bool(ai_test)
     options.full_map = bool(full_map)
     if full_map:

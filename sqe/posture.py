@@ -99,7 +99,11 @@ def _warnings(state) -> list:
     """(kind, text) pairs. Kinds: fall, retake, counter_due, counter_on, lost, clock."""
     g, out = state.ground, []
     n = ground.n_zones(g)
-    for k, bid in sorted(g.get("fall", {}).items(), key=lambda kv: int(kv[0])):
+    # Zone number order (the keys are strings).
+    def zone_number(item):
+        return int(item[0])
+
+    for k, bid in sorted(g.get("fall", {}).items(), key=zone_number):
         if bid in g["fallen"] or bid not in state.bases:
             continue
         i = int(k)
@@ -143,6 +147,8 @@ def posture(state) -> tuple:
         lab = ENDINGS.get(int(state.level), "Ceasefire")
         return lab, story.now_line(state, lab, LINES[lab])
     if state.status == "DEFEAT":
+        if (state.ground or {}).get("pulled_out"):          # S213: lost on the Force Index, not on the ground
+            return "Defeat", story.now_line(state, "Pull-out", "The coalition's supply has collapsed and it is pulling out. The campaign is lost.")
         return "Defeat", story.now_line(state, "Defeat", LINES["Defeat"])
     if not _active(state):
         return "Holding", story.now_line(state, "Holding", LINES["Holding"])
@@ -167,6 +173,9 @@ def posture(state) -> tuple:
 def supply_lines(state) -> list:
     e, f = ground.supply(state, "red"), ground.supply(state, "blue")
     out = [f"Coalition Force Index: {round(100 * f)}% ({supply_word(f)})", f"{story.enemy(state)} Force Index: {round(100 * e)}% ({supply_word(e)})"]
+    warning = ground.supply_loss_warning(state)          # S213: only where the pack loses on the coalition's supply collapsing, and only while under the line
+    if warning:
+        out.insert(1, warning)
     w = ground.supply_collapse_word(state)               # S90: only where the pack wins on the enemy's supply collapsing
     if w:
         out.append(f"{story.enemy(state)} supply collapse: {w}")

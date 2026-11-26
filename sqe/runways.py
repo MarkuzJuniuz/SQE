@@ -2,7 +2,7 @@
 
 DCS closes a bombed runway for AI for about 60 minutes (probe 2026-11-03: pairs on the ramp stayed at speed 0 until 61 min after the last bomb, then took off;
 an inbound pair diverted on its own to Kutaisi), and nothing in the scripting API holds it shut. SQE ignores that and keeps its own rule: a field that took
-HITS_TO_CLOSE bomb impacts on its runway is CRATERED for CLOSE_TURNS (6 turns = 24 hours, S25; v0.41.334 had 12 two-hour turns; it was 2 to 5 days by supply). While cratered, its squadrons do not
+HITS_TO_CLOSE bomb impacts on its runway is CRATERED for CLOSE_TURNS (6 turns = 24 hours, S25; v0.41.334 had 12 two-hour turns; it was 2 to 5 days by supply); a field that holds a Tu-22M3 squadron for BOMBER_CLOSE_TURNS (2 turns = 8 hours, B1). While cratered, its squadrons do not
 fly (no packages, no scrambles, no raids, no base CAP) and nobody plans to recover there. The whole field closes, not one runway (XO). Replacement jets that
 arrive meanwhile wait, `held` (refit.py), and join when the runway reopens.
 
@@ -12,7 +12,8 @@ Field ids are the Base ids of blue fields and the EnemyAsset ids of red ones (on
 Sources and judgment calls:
   * Repair: a USAF crater team fills craters in about 2 hours (af.mil, "Airmen ready to rapidly repair runways"). A real strip is usable again in hours; the 24 hours
     here are a GAME rule (XO 2026-11-08, flat for now), not a sourced figure. Until Phase 3 of the campaign rules plan the clock moves a whole day at a time.
-  * HITS_TO_CLOSE = 1 (was 3, XO 2026-11-13): XO's call. One BMS player reports 2 to 3 hit zones per runway (forum.falcon-bms.com/post/121547, one person's observation, low firmness).
+  * HITS_TO_CLOSE = 4 (XO 2026-11-22; 3 before 2026-11-13, then 1 so a human pilot's own bomb alone closed the field): the flown runway strikes put 6 of 8 impacts inside the rectangle, so the wingmen
+    do drop; judgment call. The old low-firmness source: one BMS player reports 2 to 3 hit zones per runway (forum.falcon-bms.com/post/121547, one person's observation).
   * The runway is a rectangle, RUNWAY_HALF_LEN_M x RUNWAY_HALF_WIDTH_M about the field reference point along each runway heading (pydcs has the heading only):
     the same judgment-call corridor mission_builder uses to keep ground groups off the strip.
 """
@@ -22,8 +23,9 @@ import math
 
 from . import clock
 
-HITS_TO_CLOSE = 1             # bomb impacts inside the runway rectangle that close the field (XO 2026-11-03: 3; XO 2026-11-13: 1, so a human pilot's own bomb alone closes it even if the wingmen drop nothing; judgment call, to be revisited after the next probes)
+HITS_TO_CLOSE = 4             # bomb impacts inside the runway rectangle that close the field (XO 2026-11-03: 3; 2026-11-13: 1, so a human pilot's own bomb alone closed it while the wingmen's drops were unproven; XO 2026-11-22: 4, flown runway strikes put 6 of 8 inside the rectangle; judgment call)
 CLOSE_TURNS = 6               # S25: was 12; a cratered field stays shut 6 four-hour turns = 24 hours, whatever the supply (XO 2026-11-08, "24 hours flat for now"; game rule, not a sourced figure)
+BOMBER_CLOSE_TURNS = 2        # B1 (XO 2026-11-21, "priority runway repair on every bomber field"): a field that holds a Tu-22M3 squadron (Mozdok; Damascus and Bassel Al-Assad in Syria) is shut this many turns (8 hours), not CLOSE_TURNS. Game rule, not a sourced figure: a real crater repair takes hours (af.mil, above), and a strategic bomber base is the first one a crew team is sent to
 RUNWAY_HALF_LEN_M = 2600.0    # same corridor as mission_builder.RUNWAY_HALF_LEN_M (long enough for the longest Caucasus strip; judgment call)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and mission_builder.RUNWAY_HALF_WIDTH_M (runway 45-60 m wide plus a margin; judgment call)
 
@@ -60,6 +62,13 @@ def hours_left(state, field_id: str) -> int:
     return turns_left(state, field_id) * clock.TURN_MIN // 60
 
 
+def close_turns(state, field_id: str) -> int:
+    """Turns a hit on this field closes it for: `BOMBER_CLOSE_TURNS` when a Tu-22M3 squadron is based there (red's bomber fields get the priority repair), else `CLOSE_TURNS`."""
+    if any(q.aircraft == "Tu_22M3" for w in state.enemy_air if w.base_asset_id == field_id for q in w.sqns):
+        return BOMBER_CLOSE_TURNS
+    return CLOSE_TURNS
+
+
 def crater(state, field_id: str, hits: int | None = None) -> str:
     """Close the field (a new hit while it is closed does NOT extend it: one repair crew, one timer). Returns the log line."""
     name = _name(state, field_id)
@@ -68,7 +77,7 @@ def crater(state, field_id: str, hits: int | None = None) -> str:
         c = _craters(state)[field_id]
         c["hits"] = int(c.get("hits", 0)) + int(hits or 0)
         return f"{name}: runway hit again, still closed"
-    _craters(state)[field_id] = {"turn": state.turn, "until": state.turn + CLOSE_TURNS, "hits": int(hits if hits is not None else HITS_TO_CLOSE), "side": side}
+    _craters(state)[field_id] = {"turn": state.turn, "until": state.turn + close_turns(state, field_id), "hits": int(hits if hits is not None else HITS_TO_CLOSE), "side": side}
     return f"{name}: runway CUT, field closed. Closed for some time; its squadrons cannot fly and new jets wait until then"
 
 
@@ -85,14 +94,6 @@ def add_hits(state, field_id: str, hits: int) -> str | None:
 def _name(state, field_id: str) -> str:
     o = state.assets.get(field_id) or state.bases.get(field_id)
     return getattr(o, "name", field_id)
-
-
-def squadron_grounded(state, sq) -> bool:
-    return is_closed(state, sq.base_id)
-
-
-def wing_grounded(state, wing) -> bool:
-    return is_closed(state, wing.base_asset_id)
 
 
 def rectangle(heading_deg: float, half_len: float = RUNWAY_HALF_LEN_M, half_w: float = RUNWAY_HALF_WIDTH_M):
@@ -133,6 +134,7 @@ CRATER_BLASTS_MAX = 6         # ... and at most this many (judgment call: a few 
 CRATER_POWER = 450.0          # trigger.action.explosion power of one blast, about one Mk-84 (judgment call; whether DCS leaves a runway crater from a scripted blast is untested)
 CRATER_REACH = 0.75           # the blasts lie within this share of the runway half length either side of the reference point (judgment call: inside the strip even if the reference point is off centre)
 CRATER_MIN_GAP_M = 120.0      # blasts at least this far apart along the runway (judgment call)
+KH59_AIM_REACH = 0.6          # S209: red's Kh-59M aim points lie within this share of the runway half length either side of the reference point (judgment call: nearer the middle than the craters, so a small error in the heading still leaves the point on the strip)
 
 # Blue fields with an ILS: pydcs airport name -> the runway end the ILS belongs to. From the DCS airfield panels as XO copied them into kneeboard.NAV (v0.41.177, v0.41.252);
 # the other end of each runway has no ILS. Phase 9a (XO data, 2026-11-10; not checked against DCS here): Vaziani and Tbilisi-Lochini have an ILS on both ends; one runway per field is kept, 13
@@ -158,18 +160,24 @@ def _end_number(name: str) -> int:
     return int(str(name).rstrip("LCR"))
 
 
-def runway_end(ap, number: int):
-    """The approach (heading, name) of the runway end `number` of this pydcs airport, or None."""
-    for r in ap.runways:
-        for end in (r.main, r.opposite):
-            if _end_number(end.name) == number:
-                return end
-    return None
-
-
 def _along(x: float, y: float, hdg_deg: float, d: float):
     h = math.radians(hdg_deg)
     return x + d * math.cos(h), y + d * math.sin(h)           # DCS x north, y east
+
+
+def aim_points(ap, count: int) -> list:
+    """S209: `count` aim points spread along the first runway of `ap` (x north, y east), for a Kh-59M runway raid: one for each bomber flight (the geometry of `crater_points`, on the centreline, no jitter).
+    Empty when the field has no runway data."""
+    if not ap.runways or count <= 0:
+        return []
+    heading = ap.runways[0].main.heading + mag_var_deg()
+    span = RUNWAY_HALF_LENGTH_M * KH59_AIM_REACH
+    cell = 2.0 * span / count
+    out = []
+    for index in range(count):
+        distance = -span + cell * (index + 0.5)
+        out.append(_along(ap.position.x, ap.position.y, heading, distance))
+    return out
 
 
 def crater_points(state, field_id: str, ap, rng) -> list:

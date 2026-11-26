@@ -11,7 +11,10 @@ Sources and judgment calls (the numbers below are JUDGMENT CALLS unless a source
 - Escort ratio (XO 2026-11-03, v0.41.249): ONE escort per TWO bombers, what XO reads public sources to suggest for red doctrine (not checked by Crew Chief; the
   earlier rule was 2 per bomber, after a 4 + 4 raid "didn't last long"). A raid is the FULL size or none (16 bombers + 8 escorts at L3, 8 + 4 at L2), except
   when desperate, which sends what it has. If red cannot field them, it holds.
-- Safe / desperate thresholds, cooldowns and the Mozdok weight are judgment calls, tuned on the 100-day background sims."""
+- Safe / desperate thresholds, cooldowns and the Mozdok weight are judgment calls, tuned on the 100-day background sims.
+- B1 (XO 2026-11-21, red-standoff-plan): a pack may name SEVERAL bomber fields (`bomber_bases`, Syria: Damascus and Bassel Al-Assad; S142: each field's Tu-22M3 share is capped at its DCS stand count). The Tu-22M3 squadron and its escort squadron of each field are part of that field's red wing (one wing per
+  field, like every other red field), `bomber_wings` lists the ones whose field is up, and the carrier raid and the land strike draw from all of them (the S46 pool: the first field gives what it has, the next the rest). A cut or
+  destroyed field is skipped. With one bomber field (the Caucasus) every figure and every draw is what it was."""
 from __future__ import annotations
 
 import math
@@ -37,8 +40,8 @@ FRONT_IADS_AT = 0.40          # ...when the mean health of red's SAM sites and E
 COVER_FLOOR = 0.3             # share of blue's fighters that is still ready when no patrol is up (alert launch), judgment call
 BLUE_FIGHTERS_CAP = 8         # fighters a carrier can put against one raid, as far as red's estimate goes
 # v0.41.355 (campaign rules plan Phase 10a, XO 2026-11-10: "spread the risk on something more productive for red"): the Tu-22M3 LAND STRIKE, 2 Tu-22M3 + 2 Mozdok Su-27 on a blue supply site, comes FIRST in the bomber pool.
-LAND_TU = 2                   # Tu-22M3 in one land strike (XO plan decision 34: a 2-ship escorted by a 2-ship)
-LAND_ESCORTS = 2              # Mozdok Su-27 that ride along
+LAND_TU = 2                   # Tu-22M3 in one land strike (XO plan decision 34: a 2-ship escorted by a 2-ship); B1: a pack's `land_tu` {level: n} replaces it (`land_tu(d)`; Syria L3 4, XO 2026-11-21)
+LAND_ESCORTS = 2              # Mozdok Su-27 that ride along (the floor: a bigger strike takes one escort per two Tu-22M3, rounded up, `land_escorts(d)`; the 2-ship stays 2 + 2)
 LAND_STRIKES_PER_DAY = {2: 1, 3: 2}   # land strikes a day at most, by level (judgment call: a Tu-22M3 is lost outright and comes back one per 48 h, `refit.SLOW_REPL_MIN`, so the cap is what keeps the wing alive); L1 has no bomber wing
 
 
@@ -79,6 +82,26 @@ def escorts_for(n: int) -> int:
     return int(math.ceil(n * ESCORT_PER_BOMBER))
 
 
+def land_tu(d) -> int:
+    """B1: Tu-22M3 in one land strike at this level: the active pack's `land_tu` {level: n} (Syria L3 4: a 20-jet wing fields a 16-jet carrier raid and still a 4-ship strike; XO 2026-11-21), else `LAND_TU` (the Caucasus 2)."""
+    from . import theatres
+    v = (theatres.hook("land_tu") or {}).get(str(int(getattr(d, "level", 3))))
+    return LAND_TU if v is None else int(v)
+
+
+def land_escorts(d) -> int:
+    """B1: the land strike's escorts: `LAND_ESCORTS` (2) as before, or one per two Tu-22M3 rounded up (`escorts_for`) when the strike is bigger (the 2-ship keeps 2 + 2: one escort per two would be 1). Judgment call (the 1 : 2 raid ratio, XO 2026-11-03)."""
+    return max(LAND_ESCORTS, escorts_for(land_tu(d)))
+
+
+def bomber_base_ids(th=None) -> list:
+    """B1: the field ids of the bomber wing, in the order the wings are drawn on (the first is the lead): the pack's `bomber_bases` list, else its one `bomber_base` (the Caucasus: Mozdok)."""
+    from . import theatres
+    th = th if th is not None else theatres.active()
+    ids = th.get("bomber_bases") or ([th["bomber_base"]] if th.get("bomber_base") else [])
+    return list(ids)
+
+
 def max_raid(d) -> int:
     from . import theatres
     lv = int(getattr(d, "level", 3))
@@ -115,8 +138,44 @@ def carrier_claim(state, d, turn: int) -> tuple:
     return (int(dec["n"]), int(dec["escorts"])) if dec["mode"] != "hold" else (0, 0)
 
 
+def bomber_wings(state) -> list:
+    """B1: every Tu-22M3 wing whose field is up (not destroyed, runway not cut), in the pack's `bomber_bases` order (`bomber_base_ids`): the lead first. One entry in the Caucasus. A closed field is skipped."""
+    order = {a: i for i, a in enumerate(bomber_base_ids())}
+    ws = [w for w in state.enemy_air if "Tu_22M3" in w.types and not state.assets[w.base_asset_id].destroyed and not runways.is_closed(state, w.base_asset_id)]
+    # The pack's bomber_bases order; a field not in it goes last.
+    def field_order(wing):
+        return order.get(wing.base_asset_id, len(order))
+
+    return sorted(ws, key=field_order)
+
+
 def _bomber_wing(state):
-    return next((w for w in state.enemy_air if "Tu_22M3" in w.types and not state.assets[w.base_asset_id].destroyed and not runways.is_closed(state, w.base_asset_id)), None)
+    """The LEAD bomber wing (the first field that is up), else None: the bearing and the facing patrol area are taken from it (B1: `bomber_wings` has them all)."""
+    ws = bomber_wings(state)
+    return ws[0] if ws else None
+
+
+def _is_in(w, ws) -> bool:
+    return w is not None and any(w is x for x in ws)
+
+
+def _fill(parts, n: int) -> list:
+    """[(wing, jets free)] -> [(wing, jets)]: `n` jets taken in order, each wing as many as it has (the S46 pool: the lead gives what it has, the next the rest); a wing that gives none is left out."""
+    out = []
+    for w, free in parts:
+        k = min(int(n), max(0, int(free)))
+        if k > 0:
+            out.append((w, k))
+            n -= k
+        if n <= 0:
+            break
+    return out
+
+
+def names_of(state, ws) -> str:
+    """B1: the field names of these wings for a text: "Mozdok", "Damascus and Bassel Al-Assad"."""
+    ns = [state.assets[w.base_asset_id].name for w in ws]
+    return " and ".join(ns) if len(ns) < 3 else ", ".join(ns[:-1]) + " and " + ns[-1]
 
 
 def _carrier(state):
@@ -127,19 +186,27 @@ def _carrier(state):
 def escort_options(state, bw, cv):
     """[(jets that can reach the carrier, wing, type)] best first: serviceable jets of one fighter type whose radius (x 0.85) reaches the carrier.
     v0.41.106: Mozdok's own escort squadron (role "escort", the bomber wing's fighters) is counted and goes FIRST when it can cover a minimum raid;
-    the other fields are the fallback and the top-up."""
+    the other fields are the fallback and the top-up. B1: `bw` is a bomber wing or a list of them (every bomber field's own escort squadron goes first, in the list's order)."""
+    bws = list(bw) if isinstance(bw, (list, tuple)) else [bw]
     out = []
     for w in state.enemy_air:
         a = state.assets[w.base_asset_id]
         if a.destroyed:
             continue
         d_nm = math.hypot(a.x - cv.x, a.y - cv.y) / NM
-        sq = [q for q in w.sqns if q.role == "escort"] if w is bw else w.sqns
+        sq = [q for q in w.sqns if q.role == "escort"] if _is_in(w, bws) else w.sqns
         for t in dict.fromkeys(q.aircraft for q in sq):
             if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm:
                 out.append((sum(q.available for q in sq if q.aircraft == t), w, t))
-    own = [r for r in out if r[1] is bw and r[0] >= escorts_for(MIN_RAID)]
-    rest = sorted((r for r in out if r not in own), key=lambda r: (-r[0], r[1].base_asset_id, r[2]))
+    own = [r for r in out if _is_in(r[1], bws) and r[0] >= escorts_for(MIN_RAID)]
+    def bomber_field_index(row):
+        return next((i for i, b in enumerate(bws) if b is row[1]), 0)
+
+    def most_escorts_then_field(row):
+        return (-row[0], row[1].base_asset_id, row[2])
+
+    own.sort(key=bomber_field_index)                 # B1: the lead field's escorts first (one field: the order it had)
+    rest = sorted((r for r in out if r not in own), key=most_escorts_then_field)
     return own + rest
 
 
@@ -153,10 +220,12 @@ def mozdok_pressure(state, bw) -> float:
 
 
 def desperation(state, bw) -> float:
+    """`bw`: the bomber wing, or a list of them (B1: the base under attack is the hardest-hit of the fields that are up: judgment call)."""
     from .war import totals
     t = totals(state)
+    ws = list(bw) if isinstance(bw, (list, tuple)) else [bw]
     losing = LOSING_HARD if (t["enemy_air"] < 0.45 or t["c2"] < 0.5) else LOSING_SOFT if (t["enemy_air"] < 0.60 or t["c2"] < 0.65) else 0.0
-    return losing + MOZDOK_WEIGHT * mozdok_pressure(state, bw) + (FRONT_WEIGHT if t["iads"] <= FRONT_IADS_AT else 0.0)
+    return losing + MOZDOK_WEIGHT * max(mozdok_pressure(state, w) for w in ws) + (FRONT_WEIGHT if t["iads"] <= FRONT_IADS_AT else 0.0)
 
 
 def estimated_stop(state, d, n, cv) -> float:
@@ -182,21 +251,40 @@ def decide(state, d) -> dict:
     """Today's call on the carrier raid: {"mode": "hold" | "safe" | "desperate", "n": bombers, "escorts", "wing", "type", "why"}. Pure: the same state gives
     the same answer, so the planner and the raid plan agree. v0.41.109: a raid is STAGED the day before (QUIET_DAYS): the day red decides to go it only
     holds ("quiet": True, "stage": {...}; the planner records it with `note_stage`), and the raid launches on the staged day."""
-    hold = lambda why: {"mode": "hold", "n": 0, "escorts": 0, "wing": "", "type": "", "why": why}
-    bw, cv = _bomber_wing(state), _carrier(state)
+    # The "no raid today" answer, with the reason.
+    def hold(why):
+        return {"mode": "hold", "n": 0, "escorts": 0, "wing": "", "type": "", "why": why}
+
+    bws, cv = bomber_wings(state), _carrier(state)                # B1: every bomber field that is up; a cut or destroyed one is skipped
+    bw = bws[0] if bws else None
     if getattr(d, "bomber_policy", "none") == "none" or bw is None or cv is None:
         return hold("no bomber wing or no carrier")
-    avail = bw.available_of({"Tu_22M3"})                         # the wing also holds the escort squadron (v0.41.106)
-    opts = escort_options(state, bw, cv)
+    tu_by = [(w, w.available_of({"Tu_22M3"})) for w in bws]       # the wings also hold the escort squadrons (v0.41.106)
+    avail = sum(a for _w, a in tu_by)
+    opts = escort_options(state, bws, cv)
     jets, ew, et = opts[0] if opts else (0, None, "")
+    esc_by = [(w, j) for j, w, t_ in opts if _is_in(w, bws) and t_ == et] if _is_in(ew, bws) else []        # B1: the bomber fields' own escort squadrons of that type fly together
+    if len(esc_by) > 1:
+        jets = sum(j for _w, j in esc_by)
     full = max_raid(d)
     n_max = min(avail, int(jets / ESCORT_PER_BOMBER), full)
     n_max -= n_max % 2
     left_ = max(0, land_cap(d) - land_done(state))                # v0.41.355 (Phase 10a, cadence (c)): the land strikes of today are crewed FIRST; a "safe" raid needs a FULL raid of Tu-22M3 and escorts still left after them (a "desperate" one takes everything)
-    n_safe = min(avail - LAND_TU * left_, int((jets - (LAND_ESCORTS * left_ if ew is bw else 0)) / ESCORT_PER_BOMBER), full)
+    n_safe = min(avail - land_tu(d) * left_, int((jets - (land_escorts(d) * left_ if _is_in(ew, bws) else 0)) / ESCORT_PER_BOMBER), full)
     n_safe -= n_safe % 2
-    go = lambda mode, n, desp: {"mode": mode, "n": n, "escorts": escorts_for(n), "wing": ew.base_asset_id, "type": et,
-                                "why": f"{mode}: {n} bombers, {escorts_for(n)} escorts (desperation {desp:.2f})"}
+    def go(mode, n, desp):
+        out = {"mode": mode, "n": n, "escorts": escorts_for(n), "wing": ew.base_asset_id, "type": et, "tu_wing": bw.base_asset_id,
+               "why": f"{mode}: {n} bombers, {escorts_for(n)} escorts (desperation {desp:.2f})"}
+        tu_ = _fill(tu_by, n)                                    # B1: the bombers come from the fields in order; `pool` (the raid plan's S46 key) names the partners only when there are some
+        if tu_:
+            out["tu_wing"] = tu_[0][0].base_asset_id
+        if len(tu_) > 1:
+            out["pool"] = [{"wing": w.base_asset_id, "raider": "Tu_22M3", "n": k} for w, k in tu_[1:]]
+        es_ = _fill(esc_by, escorts_for(n)) if len(esc_by) > 1 else []
+        if len(es_) > 1:
+            out["wing"] = es_[0][0].base_asset_id
+            out["esc_pool"] = [{"wing": w.base_asset_id, "type": et, "n": k} for w, k in es_[1:]]
+        return out
     stage = (state.raids or {}).get("bomber_stage") or {}
     if QUIET_DAYS > 0 and stage.get("launch") == state.day:      # the staged day: the raid goes if it still has its escorts
         n = min(int(stage.get("n", 0)), n_max)
@@ -212,7 +300,7 @@ def decide(state, d) -> dict:
         return hold(f"only {avail} bombers and {jets} escorts: not enough for a {MIN_RAID}-ship raid with {escorts_for(MIN_RAID)} escorts")
     days = [x for x in ((state.raids or {}).get("bomber_days") or [])]
     cd_safe = max([x for x in days if x != state.day] or [-99])
-    desp = desperation(state, bw)
+    desp = desperation(state, bws)
     mode, n = "hold", 0
     if desp >= DESPERATE_AT:
         if state.day - cd_safe >= COOLDOWN_DESPERATE or state.day in days:
@@ -234,7 +322,10 @@ def stage_extras(state, launch: int) -> dict:
     range; the pack's `raid_bearing_deg` where it has one, S90 J8) and the turn it launches in ("turn", seeded, among the launch day's planned turns that have a planned turn right before them on the same day; absent when none has). Seeded by campaign and launch day only."""
     rnd = random.Random(f"{state.campaign_id}:{launch}:stage")
     out = {"brg": raid_bearing(state, rnd)}
-    ok = lambda t: bool(getattr(state, "night_ops", False)) or not clock.is_night_turn(t)
+    # A turn the raid may use: any turn with night ops on, else a day turn.
+    def ok(turn):
+        return bool(getattr(state, "night_ops", False)) or not clock.is_night_turn(turn)
+
     cands = [t for t in range(clock.first_turn(launch) + 1, clock.first_turn(launch + 1)) if ok(t) and ok(t - 1)]
     if cands:
         out["turn"] = rnd.choice(cands)
@@ -263,12 +354,12 @@ def intel(state) -> dict | None:
     stage = (state.raids or {}).get("bomber_stage") or {}
     if QUIET_DAYS <= 0 or int(stage.get("launch", -1)) < state.day or _carrier(state) is None:
         return None
-    bw = _bomber_wing(state)
-    if bw is None:                                                                    # S116: cut or destroyed after it was staged: called off now, the day's start cancels the stage
+    bws = bomber_wings(state)
+    if not bws:                                                                       # S116: cut or destroyed after it was staged: called off now, the day's start cancels the stage (B1: every bomber field)
         wh, why = _bomber_field(state)
         return {"head": "INTELLIGENCE \u00b7 CARRIER RAID CALLED OFF", "text": f"{wh} {why}: the Tu-22M3 raid on the carrier is called off.", "sub": "The fleet will return to its station.",
                 "pills": ["Raid called off", "Carrier returning"], "log": f"INTELLIGENCE: {wh} {why}: the Tu-22M3 raid on the carrier is called off."}
-    where = state.assets[bw.base_asset_id].name
+    where = names_of(state, bws)
     quiet = int(stage.get("launch", -1)) > state.day
     head = "INTELLIGENCE \u00b7 CARRIER RAID EXPECTED"
     text = f"Tu-22M3s are loading Kh-22 missiles at {where}. The raid on the carrier is expected " + ("within a day." if quiet else "today.")
@@ -277,19 +368,23 @@ def intel(state) -> dict | None:
 
 
 def _bomber_field(state) -> tuple:
-    """(name, why) of the Tu-22M3 wing's field when it cannot fly: "is destroyed" or "has its runway cut"; ("The bomber base", "is out of action") when there is no such wing."""
-    w = next((w for w in state.enemy_air if "Tu_22M3" in w.types), None)
-    a = state.assets.get(w.base_asset_id) if w is not None else None
-    if a is None:
+    """(name, why) of the Tu-22M3 wing's field when it cannot fly: "is destroyed" or "has its runway cut"; ("The bomber base", "is out of action") when there is no such wing. B1: with several bomber fields the names are
+    joined ("Damascus and Bassel Al-Assad") and the verb follows them ("are destroyed", "have their runways cut", else "are out of action")."""
+    ws = [w for w in state.enemy_air if "Tu_22M3" in w.types and w.base_asset_id in state.assets]
+    if not ws:
         return "The bomber base", "is out of action"
-    return a.name, ("is destroyed" if a.destroyed else "has its runway cut")
+    if len(ws) == 1:
+        a = state.assets[ws[0].base_asset_id]
+        return a.name, ("is destroyed" if a.destroyed else "has its runway cut")
+    gone = [state.assets[w.base_asset_id].destroyed for w in ws]
+    return names_of(state, ws), ("are destroyed" if all(gone) else "have their runways cut" if not any(gone) else "are out of action")
 
 
 def cancel_if_cut(state) -> str | None:
     """S116 (XO 2026-11-20): a staged raid whose bomber field is cut or destroyed before it launches is called off: no Tu-22M3 could take off. The stage goes, the escorts are free again, the fleet may sail back (`cv_evade`
     cleared) and today's banner says so (`raids["bomber_off"]`). -> the war-log line, else None."""
     stage = (state.raids or {}).get("bomber_stage") or {}
-    if QUIET_DAYS <= 0 or int(stage.get("launch", -1)) < state.day or _bomber_wing(state) is not None:
+    if QUIET_DAYS <= 0 or int(stage.get("launch", -1)) < state.day or bomber_wings(state):
         return None
     wh, why = _bomber_field(state)
     state.raids.pop("bomber_stage", None)
@@ -304,13 +399,12 @@ GUARD_FROM_NM = 300                   # ...from fields within this of the bomber
 
 
 def guard_base(state, level: int):
-    """S116: (bomber base asset id, pairs a turn) while the quiet day before a staged raid is on and its field can still fly, else None. Red flies no ordinary patrol from that field; fighters from nearby fields cover it by
-    day and by night (so a night F-117A strike meets them), a tell the player can read. `redair.plan_turn` reads it."""
+    """S116: [(bomber base asset id, pairs a turn)] while the quiet day before a staged raid is on, one entry per bomber field that can still fly (B1: Syria has two; the Caucasus one), else []. Red flies no ordinary patrol from
+    those fields; fighters from nearby fields cover each by day and by night (so a night F-117A strike meets them), a tell the player can read. `redair.plan_turn` reads it."""
     if not is_quiet(state):
-        return None
-    bw = _bomber_wing(state)
+        return []
     n = GUARD_PAIRS.get(max(1, min(3, int(level))), 0)
-    return (bw.base_asset_id, n) if bw is not None and n > 0 else None
+    return [(w.base_asset_id, n) for w in bomber_wings(state)] if n > 0 else []
 
 
 def is_quiet(state) -> bool:
@@ -322,9 +416,9 @@ def status_lines(state) -> list:
     """Overview lines: the quiet day (v0.41.148: the damaged-deck line is gone, XO wants no carrier line on the Overview)."""
     out = []
     if is_quiet(state):
-        bw = _bomber_wing(state)
+        bws = bomber_wings(state)
         out.append("Red air is unusually quiet today: no strikes or raids, only patrols"
-                   + (f", and fighters from other fields are on station over {state.assets[bw.base_asset_id].name}" if bw is not None else "") + ". Something is being prepared.")
+                   + (f", and fighters from other fields are on station over {names_of(state, bws)}" if bws else "") + ". Something is being prepared.")
     return out                                                           # v0.41.148 (XO 2026-10-25): the carrier gets no line on the Overview
 
 
