@@ -376,18 +376,18 @@ class SettingsDialog(QDialog):
         hint(v, "Lets SQE read your jammer (the F-16C's ECM lamp, the A-10C II's jammer window; about four times a second) so its jamming model knows when it is on. It copies sqe_ecm_export.lua into "
                 "Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there (a backup, Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. "
                 "Without it SQE counts your jammer as on over the attack leg. Takes effect when DCS starts.")
-        # The F-14B Turnpoints script: installed or not is the whole setting (no checkbox).
+        # F-14 RIO Navigation (S210; was the F-14B Turnpoints script): installed or not is the whole setting (no checkbox).
         v.addSpacing(10)
-        v.addWidget(QLabel("F-14B Turnpoints Script (Experimental)"))
+        v.addWidget(QLabel("F-14 RIO Navigation (Experimental)"))
         self.tp_state = QLabel(); v.addWidget(self.tp_state)
-        self.tp_inst = QPushButton("Install Turnpoints Script"); self.tp_rem = QPushButton("Remove")
+        self.tp_inst = QPushButton("Install RIO Navigation"); self.tp_rem = QPushButton("Remove")
         # Fixed width, for the same reason as the jammer button above.
         self.tp_inst.ensurePolished()
         widest_label = 0
-        for label_text in ("Install Turnpoints Script", "Update Turnpoints Script"):
+        for label_text in ("Install RIO Navigation", "Update RIO Navigation"):
             self.tp_inst.setText(label_text)
             widest_label = max(widest_label, self.tp_inst.sizeHint().width())
-        self.tp_inst.setText("Install Turnpoints Script")
+        self.tp_inst.setText("Install RIO Navigation")
         self.tp_inst.setFixedWidth(widest_label)
 
         def install_turnpoints():
@@ -398,9 +398,9 @@ class SettingsDialog(QDialog):
 
         self.tp_inst.clicked.connect(install_turnpoints); self.tp_rem.clicked.connect(remove_turnpoints)
         r = QHBoxLayout(); r.addWidget(self.tp_inst); r.addWidget(self.tp_rem); r.addStretch(1); v.addLayout(r)
-        hint(v, "For the F-14B you fly: F10 > Other > Turnpoints has Jester type a turnpoint (the points round SAM sites, TP1, TP2, ... on your kneeboard) into the fix point and turn the "
-                "destination knob to it. It copies sqe_f14_turnpoints_export.lua into Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there (a backup, "
-                "Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. Without it missions have no Turnpoints menu: install it before you generate the mission. "
+        hint(v, "For the F-14B or F-14B(U) you fly: Jester works your steerpoints through the flight (F10 > Other > RIO Navigation: he has the nav from the start, My Nav takes it, Your Nav hands it back). On the F-14B he also sets a turnpoint you pick from F10 > Other > Turnpoints. "
+                "It copies sqe_f14_turnpoints_export.lua into Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there (a backup, "
+                "Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. Without it missions have no such menus: install it before you generate the mission. "
                 "Works in single player and with the dedicated server on this PC, not on another computer's server. Takes effect when DCS starts.")
         # The server option lives on this tab with the other DCS settings (it was on Mission Build).
         v.addSpacing(10)
@@ -423,19 +423,19 @@ class SettingsDialog(QDialog):
         self.ecm_inst.setEnabled(st not in ("nofolder", "ok")); self.ecm_rem.setEnabled(st not in ("nofolder", "none"))
         self.ecm_inst.setText("Update Jammer Script" if st == "old" else "Install Jammer Script")
         st = S.f14_turnpoints_state(self.saves.text())
-        self.tp_state.setText("Turnpoints script: " + S.f14_turnpoints_status(self.saves.text()))
+        self.tp_state.setText("RIO Navigation script: " + S.f14_turnpoints_status(self.saves.text()))
         self.tp_inst.setEnabled(st not in ("nofolder", "ok")); self.tp_rem.setEnabled(st not in ("nofolder", "none"))
         if st == "old":
-            self.tp_inst.setText("Update Turnpoints Script")
+            self.tp_inst.setText("Update RIO Navigation")
         else:
-            self.tp_inst.setText("Install Turnpoints Script")
+            self.tp_inst.setText("Install RIO Navigation")
 
     def _tp_do(self, fn):
         ok, msg = fn(S.native(self.saves.text()))
         if ok:
-            QMessageBox.information(self, "Turnpoints script", msg)
+            QMessageBox.information(self, "F-14 RIO Navigation", msg)
         else:
-            QMessageBox.warning(self, "Turnpoints script", msg)
+            QMessageBox.warning(self, "F-14 RIO Navigation", msg)
         self._refresh()
 
     def _ecm_do(self, fn):

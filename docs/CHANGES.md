@@ -1,10 +1,28 @@
 # CHANGES.md
 
+## v0.41.695, F-14 RIO Navigation: PUSH waits for push time
+Jester now keeps you on PUSH until push time, so orbiting at the marshal no longer skips it. In the F-14B(U) it is held in manual sequencing like the marshal, and a waiting point the jet steps onto by itself is ordered again instead of ending his work.
+
+## v0.41.694, F-14B(U): just Your Nav and My Nav
+The F-14B(U) no longer has the Turnpoints menu: every point is on Jester's own wheel. Your Nav now always orders the current point again, even when Jester already has the nav, and reloads the flight plan if the jet has lost it.
+
 ## v0.41.693, F-14B(U): the station is listed as CAP1
 On a patrol, escort, sweep or TARCAP flight the F-14B(U) listed your first station point as TGT, marked as a surface target. It is now CAP1, as on the kneeboard.
 
+## v0.41.692, F-14B(U): Jester brings deleted waypoints back
+A direct to the tanker deletes home base and everything you have not flown from the F-14B(U). Now, when you hand Jester the nav back or pick a turnpoint and the jet no longer has the point, he reloads the mission's flight plan on the CDNU and takes you there. Click Update in Settings if you had installed the script.
+
+## v0.41.691, F-14 RIO Navigation: Your Nav and My Nav
+The calls are now in F10 > Other > RIO Navigation: Your Nav hands Jester the waypoints, My Nav takes them back, and he tells you whenever the nav is yours again. Home base ends his work: he goes direct to it and, in the F-14B(U), leaves the jet in manual sequencing.
+
+## v0.41.690, F-14B(U) RIO Navigation uses the jet's own sequencing
+In the F-14B(U) Jester now leaves the jet in auto sequencing between points, so it steps on by itself as you pass them. Where he waits (the marshal until your push time, a station until your exit time, TGT on a strike) he puts it in manual. RTB now goes to your landing point, not to a later point such as the bullseye. Click Update in Settings if you had installed the script.
+
 ## v0.41.689, the Caucasus can be lost on supply
 On the Caucasus the war is now also lost if the coalition's Force Index stays at 60% or less for three days: Washington calls the war off. The Overview warns you while it is that low. In practice only Level 3 gets there.
+
+## v0.41.688, F-14 RIO Navigation (experimental)
+With the script installed, Jester works your F-14B or F-14B(U) steerpoints through the flight (F10 > Other > Work the Waypoints: On / Off), switching off on TGT for a strike and when you take the navigation over; in the F-14B(U) it takes you out of Destination steering so your HUD follows it. The Turnpoints menu now serves the B(U) too. The Settings entry is now F-14 RIO Navigation: click Update if you had the Turnpoints script.
 
 ## v0.41.687, strikes behind a SEAD hit as they do in DCS
 In the war outside your missions, a strike or close air support mission that goes in behind a SEAD now usually damages its target, as it did in DCS tests. Before, most of them did nothing.
