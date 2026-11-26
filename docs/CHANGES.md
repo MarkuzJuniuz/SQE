@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.691, F-14 RIO Navigation: Your Nav and My Nav
+The calls are now in F10 > Other > RIO Navigation: Your Nav hands Jester the waypoints, My Nav takes them back, and he tells you whenever the nav is yours again. Home base ends his work: he goes direct to it and, in the F-14B(U), leaves the jet in manual sequencing.
+
 ## v0.41.690, F-14B(U) RIO Navigation uses the jet's own sequencing
 In the F-14B(U) Jester now leaves the jet in auto sequencing between points, so it steps on by itself as you pass them. Where he waits (the marshal until your push time, a station until your exit time, TGT on a strike) he puts it in manual. RTB now goes to your landing point, not to a later point such as the bullseye. Click Update in Settings if you had installed the script.
 

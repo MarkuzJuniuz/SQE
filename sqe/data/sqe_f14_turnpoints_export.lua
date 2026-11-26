@@ -1,4 +1,4 @@
--- SQE F-14 RIO Navigation (experimental): presses what the mission asks for in your F-14B or F-14B(U) (F10 > Other > Work the Waypoints, and Turnpoints).
+-- SQE F-14 RIO Navigation (experimental): presses what the mission asks for in your F-14B or F-14B(U) (F10 > Other > RIO Navigation, and Turnpoints).
 --
 -- The mission writes one line into Logs\SQE_turnpoints.req ("SQERIO <count> <time> <delay>,<command>,<value>;... HOLD:<n>/<n>"): in your Saved Games\DCS folder in single player,
 -- in the sibling DCS_Server folder when the sortie runs on the DCS dedicated server on this PC. This script reads it and sends the commands to the cockpit.

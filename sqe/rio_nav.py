@@ -8,6 +8,9 @@ F-14B(U) sequencing (S210b): between the points where Jester waits, the jet is l
 where the flight is. At a waiting point (the marshal until its leave time, a station until its exit time, TGT on a strike) the jet is held in MANUAL. Each request ends with "HOLD:n/n/n", the waiting
 points' waypoint numbers, so the export script can switch to manual the moment the jet steps onto one.
 
+The player's calls are F10 > Other > RIO Navigation: "Your Nav" (Jester works the waypoints, as from the mission start) and "My Nav" (he stops). Home base (the RTB leg) ends his work: he goes
+direct to it, holds the F-14B(U) in manual and hands the nav back.
+
 F-14B(U), probe flown 2026-11-26 and Heatblur's CDNU manual: direct-to a later waypoint DELETES the ones in between (the one you leave goes to history; the last 5 history points can be flown to again).
 Nothing here steers to a station's far end before its near end, so a point still needed is never jumped. In Destination steering the HUD ignores direct-to, so switching on first steps out of it
 (command 1, done by the export script).
@@ -20,7 +23,9 @@ from __future__ import annotations
 
 REQUEST_FILE = "SQE_turnpoints.req"       # the same file as the Turnpoints feature before it: the installed script's Remove button deletes it
 OVERRIDE_FILE = "SQE_turnpoints.ovr"
-TOGGLE_TITLE = "Work the Waypoints: On / Off"
+MENU_TITLE = "RIO Navigation"
+YOUR_NAV_TITLE = "Your Nav"
+MY_NAV_TITLE = "My Nav"
 TURNPOINTS_TITLE = "Turnpoints"
 MENU_PAGE = 9                              # DCS shows ten entries in a menu; the tenth is the door to the next page
 MAX_ZONES = 99
@@ -48,6 +53,8 @@ def leg_kind(name: str) -> str:
         return "cap2"
     if name == "TGT":
         return "tgt"
+    if name == "RTB":
+        return "home"
     return "route"
 
 
@@ -136,6 +143,7 @@ __TURNPOINTS__
 local GROUP, UNIT, BU, STRIKE, LEAVE, EXIT = __GROUP__, __UNIT__, __BU__, __STRIKE__, __LEAVE__, __EXIT__
 local NM = 1852
 local SEQUENCING, MANUAL, AUTO = 10043, 1.0, 0.33
+local NO_ACCESS = "Waypoint work needs DCS scripting access (SQE Settings, DCS Integration)."
 local release = false                      -- F-14B(U): the waypoint work went off, tell the export script there is nothing left to hold
 local on, started, current, closest, catching, after_target, typed_zone = true, false, 0, nil, false, false, nil
 local outbox, count, last_override = {}, 0, ""
@@ -180,6 +188,7 @@ local function is_waiting(leg)
   if leg.kind == "mshl" then return LEAVE ~= nil end
   if leg.kind == "cap1" or leg.kind == "cap2" then return true end
   if leg.kind == "tgt" then return STRIKE end
+  if leg.kind == "home" then return true end
   return false
 end
 
@@ -263,7 +272,11 @@ local function select_leg(index, forced)
   end
   if STRIKE and leg.kind == "tgt" then
     after_target = true
-    turn_off("Next steerpoint: " .. leg.name .. ". Waypoint work off on TGT: switch it back on after your run.")
+    turn_off("Next steerpoint: " .. leg.name .. ". Your nav: hand it back after your run.")
+    return
+  end
+  if leg.kind == "home" then                   -- home base ends the work
+    turn_off("Next steerpoint: " .. leg.name .. ". Home base: your nav.")
     return
   end
   say("Next steerpoint: " .. leg.name .. (note and (". " .. note) or ""))
@@ -301,7 +314,7 @@ end
 local function switch_on(now)
   if not can_write() then
     on = false
-    say("Waypoint work needs DCS scripting access (SQE Settings, DCS Integration).")
+    say(NO_ACCESS)
     return
   end
   on = true
@@ -362,15 +375,15 @@ end
 
 -- what the export script saw, in words
 local function off_reason(reason)
-  if reason == "button" then return "Waypoint work off: you changed the navigation source." end
+  if reason == "button" then return "Your nav. You changed the navigation source." end
   if reason == "unable" then
     local name = "the waypoint"
     if legs[current] then name = legs[current].name end
-    return "Waypoint work off: the jet did not go direct to " .. name .. " (a waypoint you jump over is gone from the F-14B(U))."
+    return "Your nav. The jet did not go direct to " .. name .. " (a waypoint you jump over is gone from the F-14B(U))."
   end
-  if reason == "mode" then return "Waypoint work off: could not leave Destination steering." end
-  if reason == "sequence" then return "Waypoint work off: the jet did not change between manual and auto sequencing." end
-  return "Waypoint work off: you took the steerpoint."
+  if reason == "mode" then return "Your nav. I could not leave Destination steering." end
+  if reason == "sequence" then return "Your nav. The jet did not change between manual and auto sequencing." end
+  return "Your nav. You took the steerpoint."
 end
 
 local function tick()
@@ -394,14 +407,30 @@ local function tick()
   flush()
 end
 
-local function toggle()
+-- "Your Nav": Jester takes the waypoints. Said while he has them, he only repeats the current steerpoint.
+local function your_nav()
   if on and started then
-    turn_off("Waypoint work off.")
+    local leg = legs[current]
+    if leg then say("I have the nav. Current steerpoint: " .. leg.name) end
+    return
+  end
+  if not can_write() then
+    say(NO_ACCESS)
+    return
+  end
+  started = true
+  last_override = read_file("__OVERRIDE__")
+  say("I have the nav.")
+  switch_on(timer.getTime())
+  flush()
+end
+
+-- "My Nav": you take them back (said before he starts, he does not start)
+local function my_nav()
+  if on then
+    turn_off("Your nav.")
   else
-    started = true
-    if can_write() then last_override = read_file("__OVERRIDE__") end
-    switch_on(timer.getTime())
-    flush()
+    say("Your nav.")
   end
 end
 
@@ -410,7 +439,7 @@ local function turnpoint(item)
     say("Turnpoints need DCS scripting access (SQE Settings, DCS Integration).")
     return
   end
-  if on then turn_off("Waypoint work off: you took the steerpoint.") end
+  if on then turn_off("Your nav. You picked a turnpoint.") end
   if BU then
     set_up_bu()
     press(0, 10037, item.num / 100)
@@ -428,7 +457,9 @@ if can_write() then
   write_file("__REQUEST__", "")
   write_file("__OVERRIDE__", "")
 end
-missionCommands.addCommandForGroup(GROUP, "__TOGGLE__", nil, toggle)
+local nav_menu = missionCommands.addSubMenuForGroup(GROUP, "__MENU_TITLE__")      -- made first, so it is listed above Turnpoints
+missionCommands.addCommandForGroup(GROUP, "__YOUR_NAV__", nav_menu, your_nav)
+missionCommands.addCommandForGroup(GROUP, "__MY_NAV__", nav_menu, my_nav)
 if #turnpoints > 0 then
   local menu = missionCommands.addSubMenuForGroup(GROUP, "__TURNPOINTS_TITLE__")
   local on_page = 0
@@ -451,7 +482,7 @@ end, nil, timer.getTime() + 1)
 
 def mission_script(group_id: int, unit_name: str, bu: bool, strike: bool, legs: list, turnpoint_items: list, leave_s, exit_s) -> str:
     """The mission script for the player's F-14. `legs` from `plain_legs` / `bu_legs`; `turnpoint_items` = [{"label", "note", "zone" (plain) , "num" (B(U))}]; `leave_s` = when the flight leaves its marshal;
-    `exit_s` = when it leaves its station (None when it has none). `strike`: switch off once TGT is selected."""
+    `exit_s` = when it leaves its station (None when it has none). `strike`: switch off once TGT is selected (home base always ends the work)."""
     leg_lines = []
     for leg in legs:
         leg_lines.append("  { name = %s, kind = %s, x = %.1f, y = %.1f, t = %d, knob = %s, zone = %s, num = %s },"
@@ -461,7 +492,7 @@ def mission_script(group_id: int, unit_name: str, bu: bool, strike: bool, legs: 
         turnpoint_lines.append("  { label = %s, note = %s, zone = %s, num = %s }," % (_lua_value(item["label"]), _lua_value(item["note"]), _lua_value(item.get("zone")), _lua_value(item.get("num"))))
     values = {"__LEGS__": "\n".join(leg_lines), "__TURNPOINTS__": "\n".join(turnpoint_lines), "__GROUP__": str(group_id), "__UNIT__": _lua_value(unit_name), "__BU__": _lua_value(bu),
               "__STRIKE__": _lua_value(strike), "__LEAVE__": _lua_value(None if leave_s is None else int(leave_s)), "__EXIT__": _lua_value(None if exit_s is None else int(exit_s)),
-              "__REQUEST__": REQUEST_FILE, "__OVERRIDE__": OVERRIDE_FILE, "__TOGGLE__": TOGGLE_TITLE, "__TURNPOINTS_TITLE__": TURNPOINTS_TITLE, "__PAGE__": str(MENU_PAGE)}
+              "__REQUEST__": REQUEST_FILE, "__OVERRIDE__": OVERRIDE_FILE, "__MENU_TITLE__": MENU_TITLE, "__YOUR_NAV__": YOUR_NAV_TITLE, "__MY_NAV__": MY_NAV_TITLE, "__TURNPOINTS_TITLE__": TURNPOINTS_TITLE, "__PAGE__": str(MENU_PAGE)}
     script = _SCRIPT
     for mark, value in values.items():
         script = script.replace(mark, value)
