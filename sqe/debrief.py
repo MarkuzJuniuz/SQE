@@ -9,6 +9,7 @@ REQUIRES io/lfs un-sanitized in <DCS>\\Scripts\\MissionScripting.lua (Settings h
 from __future__ import annotations
 import json
 import os
+import random
 import re
 import time
 from dataclasses import dataclass, field, asdict
@@ -233,6 +234,27 @@ def tally(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         elif g["kind"] == "asset":
             t["red_ground_total"] += len(g["units"]); t["red_ground_lost"] += n_dead
     return t
+
+
+def _kh59_runway_debrief(state, data: dict, group: dict, alive: list, where: str, wing, t_now: float, out: dict) -> None:
+    """S209: one bomber group of a flown Kh-59M runway raid. The mission counts the missiles that came down on the runway (`rwy`, applied by `runways.add_hits` further on), so nothing is added here. Only a mission
+    left before the missiles could land is settled the old way: half the time the group's missiles got through (`raids.hit`)."""
+    from . import raids
+    base_id = group["raid_base"]
+    landed_by = float(group.get("raid_arrive_s", 0.0)) + raids.KH59_FLY_S
+    if alive and t_now < landed_by:
+        roll = random.Random(f"{state.campaign_id}:{state.day}:early")
+        if roll.random() < 0.5:
+            out["lines"].append(f"Raid: you left before the missiles arrived; they came through to {where}")
+            for line in raids.hit(state, base_id, wing, roll, len(alive), "", group.get("ac"), kh59=True):
+                out["lines"].append(line.strip())
+        else:
+            out["lines"].append("Raid: you left before the missiles arrived; the defences stopped them")
+        return
+    if not (data.get("rwy") or {}).get(base_id):
+        line = f"Raid on {where}: no missile hit the runway"
+        if line not in out["lines"]:
+            out["lines"].append(line)
 
 
 def _plan_entry(state, pkg_id: str, pending: dict | None = None) -> dict:
@@ -575,14 +597,18 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 out["lines"].append(f"Raid: {len(g['units']) - len(alive)} of {len(g['units'])} attack aircraft shot down")
             if cv_sunk_ and cv_ is not None and g["raid_base"] == cv_.id:
                 continue
+            weapons = "missiles" if g.get("raid_kh59") else "bombs"
+            if g.get("raid_kh59") and not g.get("raid_aim"):
+                _kh59_runway_debrief(state, data, g, alive, where, wing, t_now, out)          # S209: the runway hits are what the mission counted
+                continue
             rg_ = (data.get("rgate") or {}).get(g.get("raid_group", ""), {}) if g.get("raid_gate_s") is not None else {}
             arrive_ = g.get("raid_arrive_s", 0.0)
             if rg_.get("open") is not None:                       # v0.41.126: held at the gate until the radars went down: it can arrive no sooner than that plus the leg in
                 arrive_ = max(arrive_, float(rg_["open"]) + float(g["raid_gate_s"]))
             if alive and g.get("raid_gate_s") is not None and rg_.get("abort") is not None and rg_.get("open") is None:
-                out["lines"].append(f"Raid on {where}: the radars were still up, so the attack aircraft turned back at the gate; no bombs fell")
+                out["lines"].append(f"Raid on {where}: the radars were still up, so the attack aircraft turned back at the gate; no {weapons} fell")
             elif alive and g.get("raid_gate_s") is not None and rg_.get("open") is None:
-                out["lines"].append(f"Raid on {where}: the attack aircraft were still held outside the defences; no bombs fell")
+                out["lines"].append(f"Raid on {where}: the attack aircraft were still held outside the defences; no {weapons} fell")
             elif alive and t_now >= arrive_:
                 from . import raids as _rd
                 import random as _rnd
@@ -598,7 +624,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 else:
                     out["lines"].append("Raid: you left before the raiders arrived; the defences stopped them")
             else:
-                out["lines"].append(f"Raid on {where}: stopped, no bombs fell")
+                out["lines"].append(f"Raid on {where}: stopped, no {weapons} fell")
     for aid_, cap_ in site_cap.items():                     # ...the buildings that really burned count: the site is at most that healthy
         a_ = (getattr(state, "blue_assets", None) or {}).get(aid_)
         if a_ is not None and cap_ < a_.health - 1e-6:

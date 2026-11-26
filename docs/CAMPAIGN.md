@@ -234,7 +234,9 @@ offer it yet, so the supply kit is still the FAB one.) On Syria the Su-17M4 carr
 (268 PTAB-1M each) on troops and four FAB-500 on a supply site. Red's front-line strike on a blue column carries the troops kit.
 At every level a supply-site or garrison raid carries Kh-59M stand-off missiles whenever a bomber wing that has them can reach,
 under HAWK or Patriot cover too: the bombers come in on the least defended side and fire from about 55 nm, so catch them before
-that.
+that. A raid on one of your airfields does the same, with the missiles aimed along the runway: enough hits close the field (see
+Runways), and such a raid does not damage the defences or parked jets. A closed field, or one no Su-24M can reach, is bombed
+as before.
 Kh-59M raids, the Su-25's eight FAB-500 and the Tu-22M3 (three Kh-22 on the carrier raid, four racks of nine OFAB-250 on a land
 strike: DCS's Kh-22 is an anti-ship missile and the AI does not fire it at land) are as before. Red's SEAD packages fire the
 Kh-31P (50 nm), as described below; red's Tu-22M3 fields (Mozdok, Damascus, Bassel Al-Assad) are repaired in two

@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.679, red cuts your runways with stand-off missiles
+Red's raids on your airfields now fire Kh-59M missiles along the runway from about 55 nm whenever a bomber wing that carries them can reach, under SAM cover or not. Four or more hits close the field for a day. These raids no longer damage the defences or parked jets.
+
 ## v0.41.678, red's stand-off missiles reach under your SAM cover
 Red now fires Kh-59M missiles at supply sites and garrisons under HAWK or Patriot cover too, at every level, coming in on the least defended side. The batteries cannot stop the launch: your fighters have to.
 

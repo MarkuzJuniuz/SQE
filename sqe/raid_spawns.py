@@ -16,7 +16,7 @@ from dcs.point import PointAction
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import blue_commit, callsigns, reactive, samtier, scramble
+from . import blue_commit, callsigns, reactive, runways, samtier, scramble
 from . import seacheck as seac
 from . import threatmap as tm
 from .difficulty import ai_skill
@@ -1095,8 +1095,8 @@ class RaidSpawns:
         from . import raids as _raids48
         from .raids import raid_members, escort_members
         bmem = raid_members(ex) if (ex.get("land") or ex.get("pool")) else [(ex["bomber_wing"], ex.get("raider", "Tu_22M3"), int(ex["bombers"]))]     # S46: [(wing, type, jets)], the lead first; one entry for every raid that is not pooled (B1: a carrier raid drawn from several bomber fields is)
-        kh59_r = bool(_raids48.is_kh59(ex) and ex.get("land") and aim and not sead_r
-                      and all(enemy_standoff_loadout(t_) for _a, t_, _n in _raids48.raid_members(ex)))       # S48 (the switch is `raids.KH59_RAIDS`, read now): every member must carry a Kh-59M (a Su-25 cannot: a pool with one is a plain raid), on a supply site / garrison aim (not the runway)
+        kh59_r = bool(_raids48.is_kh59(ex) and ex.get("land") and not sead_r
+                      and all(enemy_standoff_loadout(t_) for _a, t_, _n in _raids48.raid_members(ex)))       # S48 (the switch is `raids.KH59_RAIDS`, read now): every member carries a Kh-59M (S209: the plan books only carrying types)
         launch_ = None
         strike_kind = {"field": "runway", "garrison": "troops", "sector": "troops", "supply": "supply"}.get(_raids48.aim_kind(aim))          # B3: what a plain raid attacks -> its kit (`loadouts.STRIKE_KITS`): the runway (no aim), troops and garrisons, supply sites
         pk_sizes, pk_path, pk_kind, pk_off = None, None, None, None      # S59a: a SEAD raid's packages and each one's own route (the shared way in, then its own launch point); B2: each package's kind and launch delay
@@ -1272,7 +1272,7 @@ class RaidSpawns:
 
         mshl_lvl = [0]                                         # S26: the next free marshal level for an unstaged group
 
-        def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0, lateral_nm=0.0, home=None, path_=None, L_=None, stop_short=False):
+        def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0, lateral_nm=0.0, home=None, path_=None, L_=None, stop_short=False, aim_at=None):
             pos, rem, hold, act = start_at(shift, path_, L_)
             fin = fin_
             if stop_short and launch_ is not None and len(path) > 2 and rem and rem[-1] == launch_:          # S66: a SEAD raid's sweep never flies the last leg (same route and clock as the SEAD flights, `shift` s ahead): the launch point is ARM_LAUNCH_NM from the site, on the edge of a Patriot's low 40 nm ring (raids.PATRIOT_NM; S171, XO 2026-11-23: INSIDE its 63 nm ring against a 30,000 ft jet, accepted: the Kh-31P reaches about 50 nm, T3c-T3e lost no Su-24M); its last point is SEAD_SWEEP_STOP_NM out, on the line site - last way-in point (the launch point lies on it), and it turns home from there
@@ -1371,8 +1371,9 @@ class RaidSpawns:
                         zt_.stop_after_duration(int(ARM_WINDOW_S)); wp.tasks.append(zt_)          # S178: the same duration for the fallback zone task
                     elif kh59_r:                                # S48: the Kh-59M flight fires its missiles at the aim from the launch point (the point task chosen by KH59_TASK), then turns home
                         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
-                        tk_ = (task.AttackMapObject(mapping.Vector2(dx, dy), group_attack=True) if KH59_TASK == "AttackMapObject"
-                               else task.Bombing(mapping.Vector2(dx, dy), expend=task.Expend.All, group_attack=True))
+                        aim_x, aim_y = aim_at or (dx, dy)       # S209: a runway raid gives each flight its own point along the runway
+                        tk_ = (task.AttackMapObject(mapping.Vector2(aim_x, aim_y), group_attack=True) if KH59_TASK == "AttackMapObject"
+                               else task.Bombing(mapping.Vector2(aim_x, aim_y), expend=task.Expend.All, group_attack=True))
                         ca_ = task.ControlledTask(tk_)
                         ca_.stop_after_time(int(hit_s + shift + KH59_WINDOW_S)); wp.tasks.append(ca_)
                     elif land and apt is not None:
@@ -1420,7 +1421,7 @@ class RaidSpawns:
         def bomber_kit(t_, kind_=None):
             """(class, task, loadout) of a raider type. S46: one per member, a pooled raid flies each type with its own loadout. B2: a SEAD package's kit is its kind's (`kind_`: "Kh_58U" | "Kh_31P")."""
             if land:
-                return (getattr(planes, t_), (task.SEAD if sead_r else (task.GroundAttack if aim else task.RunwayAttack)),
+                return (getattr(planes, t_), (task.SEAD if sead_r else (task.GroundAttack if (aim or kh59_r) else task.RunwayAttack)),
                         enemy_arm_loadout(t_, kind_ or "Kh_31P") if sead_r else enemy_standoff_loadout(t_) if kh59_r else (enemy_land_bomber_loadout("Tu_22M3") if t_ == "Tu_22M3" else enemy_strike_loadout(t_, strike_kind)))      # v0.41.355 (Phase 10a): the Tu-22M3 land strike carries OFAB-250 racks, no Kh-22, no anti-ship task
             return planes.Tu_22M3, task.AntishipStrike, enemy_bomber_loadout("Tu_22M3")
         kits_ = {}
@@ -1446,6 +1447,11 @@ class RaidSpawns:
                         bent_.append((key_[0], key_[1], k_)); bpk_.append(pk_)
         lat_ = [(i_ - (len(bent_) - 1) / 2.0) * RAID_ECHELON_NM if len(bent_) > 1 else 0.0 for i_ in range(len(bent_))]         # v0.41.296: echelon, centred on the route
         bsh_, bpa_, bLk_, pk_seen = [], [], [], {}
+        runway_points = []
+        if kh59_r and not aim:                              # S209: a Kh-59M runway raid: one aim point along the runway for each bomber group
+            raided_airport = self.t.airports.get(cvb.airport) if cvb.airport else None
+            if raided_airport is not None:
+                runway_points = runways.aim_points(raided_airport, len(bent_))
         for gi, (aid_, t_, n_) in enumerate(bent_):         # v0.41.108: a big raid is several groups, a minute apart on the same route
             cls_b, task_b, load = kit_of(t_, pk_kind[bpk_[gi]] if sead_r else None)
             if sead_r:                                      # S59a: every package arrives at T on its own leg; the groups of one package SEAD_GROUP_GAP_S apart. B2: and a package whose missile flies shorter leaves pk_off later
@@ -1458,14 +1464,17 @@ class RaidSpawns:
                 bpa_.append(pk_path[pk_i]); bLk_.append(pk_L[pk_i])
             else:
                 bsh_.append(gi * gap_); bpa_.append(None); bLk_.append(None)
-            g = build_group(f"Raid Bomber {rn_['bg'] + 1}", cls_b, n_, task_b, bomber=True, shift=bsh_[gi], lateral_nm=lat_[gi], home=home_of(aid_), path_=bpa_[gi], L_=bLk_[gi])
+            aim_at = None
+            if runway_points:
+                aim_at = runway_points[gi % len(runway_points)]
+            g = build_group(f"Raid Bomber {rn_['bg'] + 1}", cls_b, n_, task_b, bomber=True, shift=bsh_[gi], lateral_nm=lat_[gi], home=home_of(aid_), path_=bpa_[gi], L_=bLk_[gi], aim_at=aim_at)
             rn_["bg"] += 1
             names = []
             for u in g.units:
                 rn_["bu"] += 1
                 u.name = f"RAID-B-{rn_['bu']}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", aid_, names, ac=t_, raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
-                         raid_arrive_s=float(hit_s + bsh_[gi]), raid_group=g.name, **({"raid_pkg": int(bpk_[gi])} if sead_r else {}))          # S46: each group is charged to its own wing and type (the debrief takes a loss off that squadron)
+                         raid_arrive_s=float(hit_s + bsh_[gi]), raid_group=g.name, raid_kh59=kh59_r, **({"raid_pkg": int(bpk_[gi])} if sead_r else {}))          # S46: each group is charged to its own wing and type (the debrief takes a loss off that squadron)
             bomber_gs.append(g)
         self.sead_report = sead_rep                                # B2: read by the checks
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)

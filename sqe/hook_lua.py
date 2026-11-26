@@ -715,7 +715,13 @@ function H:onEvent(e)
 end
 -- S51: the weapons the two followers below track. A bomb (Weapon.Category.BOMB) and the AGM-154 JSOW: S50 (DCS, both the A and the C) showed the JSOW reports
 -- getCategory() = ROCKET (2), not BOMB, so a category test alone saw no JSOW at all. Matched by type name, never widened to every missile (a HARM, a SLAM-ER or an AIM is not a crater).
+-- S209: red's Kh-59M (type name "X_59M") craters runways. It is a missile, so the bomb test below does not see it.
+local function isCruise(w)
+  local okn, tn = pcall(function() return w:getTypeName() end)
+  return okn and tn ~= nil and string.find(tn, "X_59M", 1, true) ~= nil
+end
 local function isBombLike(w)
+  if isCruise(w) then return true end
   local okd, d = pcall(function() return w:getDesc() end)
   if okd and d and d.category == 3 then return true end          -- v0.41.423: Weapon.Category.BOMB, from the descriptor (like the rest of this hook); w:getCategory() is the OBJECT category (2, WEAPON) for every weapon, so the old test never matched a bomb and `imp` / `rwy` stayed empty
   local ok, cat = pcall(function() return w:getCategory() end)
@@ -751,7 +757,7 @@ if #RWYS > 0 then
   function H4:onEvent(e)
     if e.id == world.event.S_EVENT_SHOT and e.weapon then
       local dj = bombRange(e, nameOf(e.initiator))
-      if isBombLike(e.weapon) and not (dj and dj > BOMB_FAR_M) then RWYW[#RWYW + 1] = { w = e.weapon } end      -- S149: a jettisoned bomb is no runway hit (it is not followed)
+      if isBombLike(e.weapon) and not (dj and dj > BOMB_FAR_M) then RWYW[#RWYW + 1] = { w = e.weapon, cruise = isCruise(e.weapon) } end      -- S149: a jettisoned bomb is no runway hit (it is not followed)
     end
   end
   world.addEventHandler(H4)
@@ -764,7 +770,13 @@ if #RWYS > 0 then
         keep[#keep + 1] = s
       elseif s.p then
         local v = s.v or { x = 0, y = 0, z = 0 }
-        pcall(rwyTest, { x = s.p.x + v.x * RWY_DT, y = s.p.y + v.y * RWY_DT, z = s.p.z + v.z * RWY_DT })
+        local last = { x = s.p.x + v.x * RWY_DT, y = s.p.y + v.y * RWY_DT, z = s.p.z + v.z * RWY_DT }
+        local in_the_air = false
+        if s.cruise then                                -- S209: a missile shot down over the field vanishes high up: only one that reached the ground is a hit
+          local okh, ground = pcall(function() return land.getHeight({ x = last.x, y = last.z }) end)
+          in_the_air = okh and (s.p.y - ground) > 150
+        end
+        if not in_the_air then pcall(rwyTest, last) end
       end
     end
     RWYW = keep
