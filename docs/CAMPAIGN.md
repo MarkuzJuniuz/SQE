@@ -173,7 +173,9 @@ some a parked truck only. Hitting them, and the depots and fuel farms, is how bl
 ### Air defence
 
 Red's SAM sites are **suppressed** (their radars blinded by SEAD) for two turns, then recover, or **destroyed** by DEAD. A
-destroyed site is rebuilt later, at the pace of red's Force Index, and mobile sites move after being hurt. A **belt** of overlapping long-range
+destroyed site is rebuilt later, at the pace of red's Force Index, and mobile sites move after being hurt. A strike or close air support package that goes
+in behind a SEAD and is resolved by the war (not flown by you) is held if the radars were not suppressed; if it goes in, it damages its target about nine
+times in ten and takes a little under half of the target's health (measured in DCS test missions). A **belt** of overlapping long-range
 sites protects what is behind it: a site inside an intact belt cannot be offered as a target until the belt site covering
 it falls.
 

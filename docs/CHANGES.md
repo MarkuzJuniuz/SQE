@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.687, strikes behind a SEAD hit as they do in DCS
+In the war outside your missions, a strike or close air support mission that goes in behind a SEAD now usually damages its target, as it did in DCS tests. Before, most of them did nothing.
+
 ## v0.41.685, the A-10C II's jammer is read
 With the jammer script installed, SQE's Jammer Model now knows when your A-10C II is jamming (the OPR on its countermeasure display), as it does for the F-16C. Install the script again in Settings to get it.
 
