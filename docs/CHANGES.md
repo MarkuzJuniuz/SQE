@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.698, raids are scored from what they hit
+In a mission you fly, a red raid now costs you what its target really lost: your air-defence units, supply buildings, garrison and troop vehicles. The debrief names what was destroyed. Before, it counted the bombers still alive, whatever they had done.
+
 ## v0.41.697, guides brought up to date
 The campaign guide gives today's Syria war lengths, and the setup guide covers both maps (jets, year, start hour) and the range red's anti-radiation missiles are fired from.
 

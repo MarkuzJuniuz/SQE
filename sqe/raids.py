@@ -1312,8 +1312,9 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
     return warned, surprise
 
 
-def hit(state, base_id: str, wing, rng: random.Random, through: int | None = None, aim: str = "", ac: str | None = None, kh59: bool = False) -> list:
-    """Bombs fall on one of our airfields, a supply site, a garrison or on friendly troops. The raiders lose a jet to the defences. Log lines. S48: `kh59` = the jets fired Kh-59M from standoff: each counts `KH59_HIT_EQUIV` bomber jets on a supply site or garrison."""
+def hit(state, base_id: str, wing, rng: random.Random, through: int | None = None, aim: str = "", ac: str | None = None, kh59: bool = False, defences: bool = True) -> list:
+    """Bombs fall on one of our airfields, a supply site, a garrison or on friendly troops. The raiders lose a jet to the defences. Log lines. S48: `kh59` = the jets fired Kh-59M from standoff: each counts `KH59_HIT_EQUIV` bomber jets on a supply site or garrison.
+    S215a: `defences` False = a flown raid on a field whose air-defence units were in the mission: their losses are read from the mission, only the parked jets are taken here."""
     b = state.bases[base_id]
     k = through if through is not None else rng.randint(1, 3)
     if kh59 and aim_kind(aim) == "field":
@@ -1341,11 +1342,16 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
     gar = state.blue_assets.get(f"bgar_{base_id}") if getattr(state, "blue_assets", None) else None
     shield = 1.0 - GARRISON_SHIELD * (gar.health if gar is not None and not gar.destroyed else 0.0)
     gone = []
-    if b.kind != BaseKind.CARRIER:
+    if b.kind != BaseKind.CARRIER and defences:
         from .sams import hit_field
         gone = hit_field(state, b, BASE_LOSS * ke * shield * (1.0 - 0.4 * ad))     # v0.41.30: batteries soak part of the damage (judgment call)
     sqs = sorted((s for s in state.squadrons.values() if s.base_id == base_id and s.available > 0), key=_most_available_first)
-    lines = [f"   bombs fell on {b.name}: its defences are {strength_word(b.defense)}{' (' + ', '.join(gone) + ' destroyed)' if gone else ''}" if b.kind != BaseKind.CARRIER else f"   missiles hit {b.name}"]
+    if b.kind == BaseKind.CARRIER:
+        lines = [f"   missiles hit {b.name}"]
+    elif defences:
+        lines = [f"   bombs fell on {b.name}: its defences are {strength_word(b.defense)}{' (' + ', '.join(gone) + ' destroyed)' if gone else ''}"]
+    else:
+        lines = [f"   bombs fell on {b.name}"]
     if sqs:
         sq = sqs[0]
         lost = min(sq.available, rng.randint(1, 1 + int(ke)))

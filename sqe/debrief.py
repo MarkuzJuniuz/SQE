@@ -236,6 +236,92 @@ def tally(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     return t
 
 
+# S215a: what the debrief calls a unit of a blue air-defence site (DCS type -> words)
+BLUE_UNIT_WORDS = {"Patriot str": "radar", "Patriot ECS": "control station", "Patriot cp": "command post", "Patriot EPP": "power plant", "Patriot ln": "launcher",
+                   "Hawk sr": "search radar", "Hawk tr": "tracking radar", "Hawk cwar": "acquisition radar", "Hawk pcp": "command post", "Hawk ln": "launcher",
+                   "Vulcan": "Vulcan gun", "M1097 Avenger": "Avenger"}
+
+
+def _target_in_mission(manifest: Manifest, ref: str) -> bool:
+    """S215a: True when this mission put units of `ref` (a blue SAM site, supply site, garrison or friendly sector) on the map, so what it lost can be read."""
+    for group in manifest.groups:
+        if group["kind"] in ("blue_sam", "blue_site") and group["ref"] == ref and group["units"]:
+            return True
+    return False
+
+
+def _field_defences_in_mission(manifest: Manifest, base_id: str) -> bool:
+    """S215a: True when this mission built any air-defence site of the blue field `base_id`."""
+    for group in manifest.groups:
+        if group["kind"] == "blue_sam" and group.get("field") == base_id and group["units"]:
+            return True
+    return False
+
+
+def _lost_words(unit_types: list) -> str:
+    """"radar, 2 launchers and command post" from the DCS types of the dead units."""
+    counts = {}
+    for unit_type in unit_types:
+        word = BLUE_UNIT_WORDS.get(unit_type, "vehicle")
+        counts[word] = counts.get(word, 0) + 1
+    parts = []
+    for word, count in counts.items():
+        if count == 1:
+            parts.append(word)
+        else:
+            parts.append(f"{count} {word}s")
+    if len(parts) == 1:
+        return parts[0]
+    return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
+def _score_blue_sams(state: CampaignState, manifest: Manifest, lost: set, out: dict) -> None:
+    """S215a: a blue air-defence site is at most as healthy as the share of its units still standing (the rule the supply buildings use), so a site whose units died
+    is hurt even when every raider died too, and a raider that did nothing adds nothing. Applied after any early-exit raid roll, so one raid is not counted twice."""
+    from . import sams
+    for group in manifest.groups:
+        if group["kind"] != "blue_sam" or not group["units"]:
+            continue
+        dead_types = []
+        for unit_name, unit_type in zip(group["units"], group["types"]):
+            if unit_name in lost:
+                dead_types.append(unit_type)
+        site = (state.blue_sams or {}).get(group["ref"])
+        if not dead_types or site is None:
+            continue
+        before = site.health
+        standing = len(group["units"]) - len(dead_types)
+        cap = float(group["health_before"]) * standing / len(group["units"])
+        site.health = max(0.0, min(before, cap))
+        line = f"{site.name}: {_lost_words(dead_types)} destroyed"
+        if strength_word(site.health) != strength_word(before):
+            line += f" ({strength_word(before)} -> {strength_word(site.health)})"
+        out["lines"].append(line)
+        base = state.bases.get(group.get("field"))
+        if base is not None:
+            sams._sync(state, base)                       # the field's one defence number follows its sites
+
+
+def _score_raided_troops(state: CampaignState, manifest: Manifest, lost: set, out: dict) -> None:
+    """S215a: the friendly troops a raid was aimed at: their dead vehicles cost the sector strength by `ground.front_loss`, the rule for a company's losses in a
+    front battle (the group's size when built stands for the company's size: judgment call)."""
+    from . import ground
+    for group in manifest.groups:
+        ref = str(group.get("ref", ""))
+        if group["kind"] != "blue_site" or not ref.startswith("sector:") or not group["units"]:
+            continue
+        dead = 0
+        for unit_name in group["units"]:
+            if unit_name in lost:
+                dead += 1
+        if dead == 0:
+            continue
+        out["lines"].append(f"Friendly troops under air attack: lost {dead} of {len(group['units'])} vehicles")
+        line = ground.front_loss(state, int(ref.split(":")[1]), dead, len(group["units"]))
+        if line:
+            out["lines"].append(line)
+
+
 def _kh59_runway_debrief(state, data: dict, group: dict, alive: list, where: str, wing, t_now: float, out: dict) -> None:
     """S209: one bomber group of a flown Kh-59M runway raid. The mission counts the missiles that came down on the runway (`rwy`, applied by `runways.add_hits` further on), so nothing is added here. Only a mission
     left before the missiles could land is settled the old way: half the time the group's missiles got through (`raids.hit`)."""
@@ -500,10 +586,12 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
            "flights": {}}                                  # v0.41.337: friendly flight id -> {squadron, flew, lost, limped}: what Session._flown_sorties hands to refit.commit_turn
     limped_ = set((data.get("limped") or {}).keys())         # the hook's `limped` object: units that landed or were recovered below LIMP_LIFE (unit name -> hit points left, percent)
     site_cap = {}                                           # v0.41.241: blue supply sites / garrisons: the health the destroyed buildings or vehicles leave (applied after the raid's own hit, so one raid is never counted twice)
+    site_lost = {}                                          # S215a: ...and how many of how many were destroyed, for the line
     for g in manifest.groups:
         dead = [u for u in g["units"] if u in lost]
         if g["kind"] == "blue_site" and dead and g["units"] and g.get("health_before") is not None:
             site_cap[g["ref"]] = min(site_cap.get(g["ref"], 1.0), float(g["health_before"]) * (len(g["units"]) - len(dead)) / len(g["units"]))
+            site_lost[g["ref"]] = (len(dead), len(g["units"]))
         if g["kind"] == "friendly":
             sq = state.squadrons[g["squadron"]]
             sq.available = max(0, sq.available - len(dead))
@@ -583,7 +671,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 w.lose(g.get("ac"), len(dead))                    # v0.41.53: the loss comes off the squadron that flew that type
                 out["red_air_lost"] += len(dead)
                 out["lines"].append(f"{len(dead)} enemy aircraft from {state.assets[g['ref']].name} destroyed")
-    # a raid you were sent to stop: bombers still alive when they reached their base got through
+    # a raid you were sent to stop. S215a: a target whose units are in the mission is scored from what it lost (after this loop), whatever happened to the bombers;
+    # the bombers still alive count only for what the mission has no units for (a field's parked jets, the carrier, a target not built) and when you left early
     t_now = float(data.get("time", 0) or 0)
     from . import fleet as _fleet
     cv_sunk_ = _fleet.sunk_in(state, data)                      # v0.41.257: the carrier went down in this mission: the ship's loss replaces the old deck-hit model
@@ -601,6 +690,9 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             if g.get("raid_kh59") and not g.get("raid_aim"):
                 _kh59_runway_debrief(state, data, g, alive, where, wing, t_now, out)          # S209: the runway hits are what the mission counted
                 continue
+            aim_ = g.get("raid_aim", "")
+            read_from_units = bool(aim_) and _target_in_mission(manifest, aim_)
+            defences_read = not aim_ and _field_defences_in_mission(manifest, g["raid_base"])
             rg_ = (data.get("rgate") or {}).get(g.get("raid_group", ""), {}) if g.get("raid_gate_s") is not None else {}
             arrive_ = g.get("raid_arrive_s", 0.0)
             if rg_.get("open") is not None:                       # v0.41.126: held at the gate until the radars went down: it can arrive no sooner than that plus the leg in
@@ -609,11 +701,14 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 out["lines"].append(f"Raid on {where}: the radars were still up, so the attack aircraft turned back at the gate; no {weapons} fell")
             elif alive and g.get("raid_gate_s") is not None and rg_.get("open") is None:
                 out["lines"].append(f"Raid on {where}: the attack aircraft were still held outside the defences; no {weapons} fell")
-            elif alive and t_now >= arrive_:
+            elif alive and read_from_units and t_now >= arrive_ + float(g.get("raid_weapons_s", 0.0)):
+                out["lines"].append(f"Raid on {where}: {len(alive)} attack aircraft got through")
+            elif alive and not read_from_units and t_now >= arrive_:
                 from . import raids as _rd
                 import random as _rnd
                 out["lines"].append(f"Raid on {where}: {len(alive)} attack aircraft got through")
-                out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, _rnd.Random(f"{state.campaign_id}:{state.day}:through"), len(alive), g.get("raid_aim", ""), g.get("ac"))]
+                through_rng = _rnd.Random(f"{state.campaign_id}:{state.day}:through")
+                out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, through_rng, len(alive), aim_, g.get("ac"), defences=not defences_read)]
             elif alive:
                 from . import raids as _rd
                 import random as _rnd
@@ -623,13 +718,18 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                     out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, rr, len(alive), g.get("raid_aim", ""), g.get("ac"))]
                 else:
                     out["lines"].append("Raid: you left before the raiders arrived; the defences stopped them")
+            elif read_from_units or defences_read:
+                out["lines"].append(f"Raid on {where}: every attack aircraft was shot down")
             else:
                 out["lines"].append(f"Raid on {where}: stopped, no {weapons} fell")
     for aid_, cap_ in site_cap.items():                     # ...the buildings that really burned count: the site is at most that healthy
         a_ = (getattr(state, "blue_assets", None) or {}).get(aid_)
         if a_ is not None and cap_ < a_.health - 1e-6:
-            out["lines"].append(f"{a_.name}: {strength_word(a_.health)} -> {strength_word(cap_)} (buildings destroyed)")
+            dead_n, total_n = site_lost[aid_]
+            out["lines"].append(f"{a_.name}: {strength_word(a_.health)} -> {strength_word(cap_)} ({dead_n} of {total_n} destroyed)")
             a_.health = max(0.0, cap_)
+    _score_blue_sams(state, manifest, lost, out)
+    _score_raided_troops(state, manifest, lost, out)
     follow_ = any((p_.get("objective") or {}).get("after") for p_ in (state.plan or []) if p_.get("id") == data.get("package"))      # v0.41.158: a strike / CAS behind a SEAD
     for ref in data.get("aborted", []) or []:
         a = state.assets.get(ref)
