@@ -218,7 +218,9 @@ At Level 2 red raids your SAM sites most days of a war's first week (a few a day
 
 **What red goes for** follows the war, not chance. While one of your Patriots, HAWKs or the fleet's missiles covers something it would raid, red's main effort is its SEAD raids
 on those sites, then any uncovered airfield. Once that cover is down it supports its ground forces: troops in a contested sector, garrisons, then supply sites, and your
-airfields when nothing else is open. Level 1's insurgents have no SEAD: they go for troops and garrisons first and airfields last.
+airfields when nothing else is open. Level 1's insurgents have no SEAD: they go for troops and garrisons first, then airfields, and your
+SAM sites last. Kh-59M stand-off missiles (below) let red raid a target under cover: while cover stands, an airfield can be hit
+that way even when the anti-radiation raids cannot go.
 
 A **raid** is a package that red actually plans: a Su-24M strike on a field, a supply site, a garrison or a
 troop column, with escorts. Whether a raid goes in depends on whether red has the jets: nothing is rolled once you click
@@ -234,7 +236,8 @@ offer it yet, so the supply kit is still the FAB one.) On Syria the Su-17M4 carr
 (268 PTAB-1M each) on troops and four FAB-500 on a supply site. Red's front-line strike on a blue column carries the troops kit.
 At every level a supply-site or garrison raid carries Kh-59M stand-off missiles whenever a bomber wing that has them can reach,
 under HAWK or Patriot cover too: the bombers come in on the least defended side and fire from about 55 nm, so catch them before
-that. A raid on one of your airfields does the same, with the missiles aimed along the runway: enough hits close the field (see
+that. The same goes for troops in contact, and for your HAWK and Patriot sites: a Kh-59M raid goes in five minutes behind red's
+anti-radiation raid on that site, or alone when red cannot field one. A raid on one of your airfields does the same, with the missiles aimed along the runway: enough hits close the field (see
 Runways), and such a raid does not damage the defences or parked jets. A closed field, or one no Su-24M can reach, is bombed
 as before.
 Kh-59M raids, the Su-25's eight FAB-500 and the Tu-22M3 (three Kh-22 on the carrier raid, four racks of nine OFAB-250 on a land

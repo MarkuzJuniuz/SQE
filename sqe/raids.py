@@ -100,7 +100,7 @@ SEAD_HAWK_PACKAGES = 2          # S44 (XO 2026-11-12): a HAWK gets two packages 
 SEAD_SITE_HIT = 0.15          # ...and a blue SAM site loses this much health per SEAD jet that gets through (a launch of 3 jets takes 0.45 off a HAWK, 6 take 0.9 off a Patriot; judgment call, tuned with the probe `.private/probes/s36`: 0.08 never opened a field, 0.25 wiped the SAMs by day 10, 0.15 sags them and reopens fields)
 KH59_RAIDS = True             # S48 (XO musing 2026-11-12, probe flown 2026-11-12): red's raids fire the Kh-59M from standoff and turn for home (`plan_raid` books it, `raid_spawns` builds it, `war._resolve_raid` resolves it). False = every raid as S46 left it. Both the plan and the spawner read this module attribute at call time
 KH59_BY_LEVEL = {1: True, 2: True, 3: True}   # S209 (XO 2026-11-25: "Let them use it however it can be used", "Let level 1 have it too, for fun"): every level. Level 1 is a rule XO chose for fun, not doctrine (an insurgent force would have no crews for a TV-guided missile). A raid is a Kh-59M raid whenever a wing that carries it can field it (S208: no dice)
-KH59_KINDS = ("supply", "garrison", "field")   # the kinds of aim a Kh-59M raid flies at (S209: under blue's Patriot / HAWK cover too; "field" = the missiles are aimed along the runway). Never the carrier: the AI fires this land missile only at a fixed point, and a ship moves
+KH59_KINDS = ("supply", "garrison", "field", "sam", "sector")   # the kinds of aim a Kh-59M raid flies at (S209: under blue's Patriot / HAWK cover too; "field" = the missiles are aimed along the runway). Never the carrier: the AI fires this land missile only at a fixed point, and a ship moves
 KH59_FLY_S = 340              # launch to impact (probe 2026-11-12: 335 to 355 s from 55 to 58 nm; S208 server test 334 s): a mission left earlier than this after the launch has not seen the hits
 KH59_LAUNCH_NM = 50           # the Kh-59M raid's launch point, this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M with margin for a low launch (judgment call; probe 2026-11-12 and the S208 server test: the Su-24M fires several nm before the point, about 57 nm)
 KH59_ALT_FT = 20000           # the altitude a Kh-59M raid flies (`raid_spawns`: a land raid without attack types), for the Patriot ring its way in is measured against
@@ -403,6 +403,8 @@ def candidates(state, kind: str, tu: bool = False, d_=None) -> list:
                 continue
             r = sam_reach(state, d_, a.x, a.y)
             if r is None:
+                r = kh59_reach(state, d_, home, a.id, a.x, a.y)          # S209: no SEAD package for it (Level 1, or too few jets): a Kh-59M raid can still go
+            if r is None:
                 continue
             out.append((home, a.id, max(0.15, 1.0 - r[0] / 330.0) * (0.5 + a.health) * (SEAD_PATRIOT_WEIGHT if _full_patriot(a) else 1.0)))
             sam_cover.append(patriots_over_attack_point(state, a, r[1]))
@@ -468,7 +470,9 @@ def _most_ready(rng: random.Random, state, wing, types: list) -> str:
 # CIA translation 1973, https://www.cia.gov/readingroom/docs/1973-10-12-A.pdf; CIA assessment 1972, .../1972-10-01d.pdf). Cold War sources; the order of the
 # ground-support kinds (troops in contact, garrisons, supply) is a judgment call. Level 1 has no SEAD doctrine (insurgents): ground support first, airfields
 # last (judgment call).
-KINDS_WHILE_COVERED = ("sam", "field", "sector", "garrison", "supply")     # blue's Patriot / HAWK stands over something red would raid: win the air first
+# S209: "sam" is a SEAD raid (with its Kh-59M follow-up); "sam_alone" a SAM site only a Kh-59M raid can go at (no SEAD package to be had). Airfields rank above that: a lone missile raid on a site is nearly always
+# possible and would otherwise keep red off the runways altogether (measured: Level 2 field raids 0.30 a day to none; judgment call).
+KINDS_WHILE_COVERED = ("sam", "field", "sam_alone", "sector", "garrison", "supply")     # blue's Patriot / HAWK stands over something red would raid: win the air first
 KINDS_AFTER_COVER = ("sector", "garrison", "supply", "field")              # the air defences are down over red's targets: support the ground fight
 
 
@@ -487,21 +491,30 @@ def cover_stands(state, d) -> bool:
 def _raidable(state, d, kind: str, taken) -> list:
     """The candidates of one kind red could actually book now: not already booked this turn, a wing in reach with the jets, not under cover (S36b: bombers wait
     until the SAMs over a target are down; red's SEAD goes at the SAM itself, kind "sam")."""
+    alone = kind == "sam_alone"
+    if alone:
+        kind = "sam"
     if kind == "sam":
         found = candidates(state, "sam", d_=d)
     else:
         found = candidates(state, kind)
     out = []
+    missiles_only = []                    # S209: SAM sites only a Kh-59M raid can go at (no SEAD package)
     for base, aim, weight in found:
         if (base.id, aim) in taken:
             continue
         x, y = aim_xy(state, aim, base)
-        if kh59_reach(state, d, base, aim, x, y) is not None:              # S209: a Kh-59M raid goes in whatever covers the target
+        standoff = kh59_reach(state, d, base, aim, x, y)
+        if standoff is not None and kind != "sam":                         # S209: a Kh-59M raid goes in whatever covers the target
             out.append((base, aim, weight))
             continue
         reach = reach_for(state, aim_kind(aim), x, y, d=d)
         if reach is not None and sead_plan(state, d, base, aim, reach[1], reach[2])[0] and _sead_fieldable(state, d, base, aim, reach[1], reach[2]):
             out.append((base, aim, weight))
+        elif standoff is not None:
+            missiles_only.append((base, aim, weight))
+    if alone:
+        return missiles_only
     return out
 
 
@@ -511,11 +524,13 @@ def pick_aim(state, d, rng: random.Random, taken=frozenset()):
     order = KINDS_AFTER_COVER
     if cover_stands(state, d):
         order = KINDS_WHILE_COVERED
+    elif getattr(d, "raid_arm", 0) <= 0:
+        order = KINDS_AFTER_COVER + ("sam_alone",)    # S209: Level 1 (no SEAD doctrine) still has the Kh-59M: a SAM site only when nothing on the ground is left (judgment call)
     for kind in order:
         found = _raidable(state, d, kind, taken)
         if not found:
             continue
-        if kind != "sam":
+        if kind not in ("sam", "sam_alone"):
             found = shy(state, d, found)
         base, aim, _weight = _best(rng, found)
         return base, aim
@@ -929,18 +944,23 @@ def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
     return plan
 
 
-def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool = False, credit: float = 0.0):
+def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool = False, credit: float = 0.0, kh59_only: bool = False):
     """Book one raid out of the turn's free red jets and plan it: the wing and type that fly it, the raiders (`bombers`), the escort wing and type with the escorts, the bearing it arrives on. v0.41.341 (Phase 5b): this was done
     at build time (`PackageBuilder._land_raid_plan`) from the wings' serviceable jets, and a wing that could not reach any more by then left the package with no plan (the KeyError in `raid_spawns._raid_axis`); now the draw,
     the booking and the package agree. -> {extras of the package, "jets": [[squadron id, jets, "raid" | "esc"]]}, or None when no wing can field it (then nothing is booked and there is no raid). S36b (XO 2026-11-11):
     a target under live cover is not raided (`sead_plan`; the bombers carry no SEAD and DEAD groups any more): red's SEAD package goes at the SAM site (`_plan_sead`); Level 1 goes in under the cover."""
-    if aim_kind(aim) == "sam":
-        return _plan_sead(state, d, base, aim, oid, turn)
+    if aim_kind(aim) == "sam" and not kh59_only:
+        sead_booking = _plan_sead(state, d, base, aim, oid, turn)
+        if sead_booking is not None:
+            return sead_booking
+        kh59_only = True                                          # S209: no SEAD package can be fielded: the Kh-59M raid goes at the site alone
     ax, ay = aim_xy(state, aim, base)
     rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:raid")
     want = wanted_size(d, credit)                                                          # S208: massed when red has saved up the jets
     r = kh59_reach(state, d, base, aim, ax, ay, want=want)                                 # S209: a Kh-59M raid whenever a carrying wing can field it, covered target or not
     kh59 = r is not None
+    if kh59_only and not kh59:
+        return None
     if r is None and ignore_cover:
         r = _reach(state, aim_kind(aim), ax, ay, True, want=want)                          # S186: a flank raid goes in under cover on purpose (the cover test is skipped)
     elif r is None:
@@ -1077,6 +1097,17 @@ def plan_flank_raid(state, d, first_aim: str, first_plan: dict, oid: str, turn: 
         plan["flank_after"] = first_oid                  # the SEAD raid's objective id: the engine starts this raid just after it, the builder times its bombs `layer_gap_s` after the SEAD missiles land
         plan["layer_gap_s"] = SEAD_FLANK_GAP_S
     return base, plan
+
+
+def plan_kh59_followup(state, d, base, aim: str, first_oid: str, oid: str, turn: int):
+    """S209: the Kh-59M raid behind a SEAD raid on the blue SAM site `aim`: booked from the jets the SEAD raid left, timed `SEAD_FLANK_GAP_S` after the SEAD missiles are due (`flank_after`, the S186 layer
+    machinery: the builder and the engine read it). -> plan or None (no carrying wing has a pair free). Nothing is booked when None."""
+    plan = plan_raid(state, d, base, aim, oid, turn, kh59_only=True)
+    if plan is None:
+        return None
+    plan["flank_after"] = first_oid
+    plan["layer_gap_s"] = SEAD_FLANK_GAP_S
+    return plan
 
 
 def patriots_over_way_in(state, base, brg: float) -> int:
@@ -1241,6 +1272,17 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
         n_made += 1
         credit -= raid_cost(bk, d)
         if bk.get("sead") and not unwarned and state.raids is not None:
+            # S209: the Kh-59M raid on the same site behind the SEAD raid, before the layer and the flank raid take the bombers. At Level 2 its jets are not charged to the credit (judgment call: it is part of the one
+            # SEAD operation, and the Level 2 credit rule, `raid_cost`, already charges a single package)
+            follow_oid = f"obj-t{turn}-r{len(warned) + 1}"
+            follow_plan = plan_kh59_followup(state, d, base, aim, o.id, follow_oid, turn)
+            if follow_plan is not None:
+                follow_obj = raid_objective(base, aim, describe(state, base, aim))
+                follow_obj.id = follow_oid
+                booked[follow_obj.id] = follow_plan
+                warned.append(follow_obj)
+                if int(getattr(d, "level", 2)) != 2:
+                    credit -= follow_plan["bombers"]
             # S183 rule 2: at Level 3 the raid strips a second layer: wave 2 is its own booked raid, planned from the jets wave 1 left (it does not count against RAID_MAX_PER_TURN)
             second_oid = f"obj-t{turn}-r{len(warned) + 1}"
             layer = plan_second_layer(state, d, aim, o.id, second_oid, turn)
@@ -1348,6 +1390,8 @@ def overnight(state, d, rng: random.Random) -> list:
         struck.add((b.id, aim))
         x, y = aim_xy(state, aim, b)
         standoff = kh59_reach(state, d, b, aim, x, y)              # S209: an unwarned Kh-59M raid, fired from outside the batteries
+        if aim_kind(aim) == "sam" and sam_reach(state, d, x, y) is not None:
+            standoff = None                                       # a SAM site stays a SEAD raid when red can field one
         r = standoff
         if r is None:
             r = reach_for(state, aim_kind(aim), x, y, d=d)
@@ -1372,7 +1416,7 @@ def overnight(state, d, rng: random.Random) -> list:
             p_stop = min(0.95, p_stop + blue_barcap.PATROL_STOP)
         from . import tempo as _tp
         p_stop = min(0.95, p_stop + TEMPO_STOP_SHARE * _tp.get(state, "AIR"))      # v0.41.171: the player's air work taught the alert pairs (Tactical Edge off: 0)
-        n_ = sead_jets(state, aim, d) if aim_kind(aim) == "sam" else wanted_size(d, 0.0)
+        n_ = sead_jets(state, aim, d) if aim_kind(aim) == "sam" and standoff is None else wanted_size(d, 0.0)
         if n_ <= 4:                                              # a small raid is settled as one lump (all stopped or all through), as before v0.41.155
             if rng.random() < p_stop:
                 k = wing.lose(r[2], rng.randint(1, 3 + round(ad_)))
