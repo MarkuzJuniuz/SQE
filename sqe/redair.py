@@ -22,7 +22,7 @@ Pure planning, no pydcs.
 from __future__ import annotations
 import math
 import random
-from . import barcap, clock, fraction, refit, reserve, runways
+from . import barcap, clock, fraction, patrol_threat, refit, reserve, runways
 from .loadouts import ENEMY_FIGHTERS
 from .models import AssetKind, BaseKind
 from .routes import NM, bearing, dist, offset
@@ -183,8 +183,11 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
             cands += [(w, ar, sqs) for ar in bc["red"] if ar["asset"] == w.base_asset_id]
     want = RED_CAP_SHARE[lvl][1 if night else 0] * len(cands)
     want = fraction.whole_units(state, "red_cap", turn, want)               # S207e: a share of the areas that can be up; the fraction is carried, not rolled
-    order = list(range(len(cands)))
-    rng.shuffle(order)
+    # S208: the most threatened station first (the CAP sits between the threat and the asset), not a shuffle; equal threats: the seeded draw.
+    def threat_to_station(index):
+        _wing, area, _squadrons = cands[index]
+        return (patrol_threat.blue_on(state, area["ax"], area["ay"]), rng.random())
+    order = sorted(range(len(cands)), key=threat_to_station, reverse=True)
     up = 0
     for i in order:
         if up >= want:
