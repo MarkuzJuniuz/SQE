@@ -277,8 +277,10 @@ the carrier is sunk, its aircraft are moved to land fields (any that cannot be p
 
 * **Victory** (Caucasus; Syria's is in section 10) is by the ground war only: you take **Sochi** (Levels 1 and 2) or **Sochi and Krymsk** (Level 3). At Levels 2 and
   3 the red counter-force that arrives must also be beaten. Jet counts alone do not win the war.
-* **Defeat** is either of: the coalition's air component falls below 15% of its authorised strength, or **3 of your airfields
-  have fallen**. A sunk carrier does not count as a fallen field (its aircraft land elsewhere; the carrier group sails back in after 7
+* **Defeat** is any of: the coalition's air component falls below 15% of its authorised strength, **3 of your airfields
+  have fallen**, or (Caucasus) your supply collapses: your **Force Index** is at 60% or less on **three nights running** and Washington calls the war off. The
+  Overview warns while it is that low and counts the days; one better day starts the count again. It is mostly a Level 3 danger, in the first weeks, when red's
+  raids hit your fuel and depots. A sunk carrier does not count as a fallen field (its aircraft land elsewhere; the carrier group sails back in after 7
   days).
 * **No idle surge, no Tactical Edge.** The war runs on its own: red does not press harder when you skip turns, and your sorties do not raise the odds of the AI's jobs. Your flying counts as part of the war through what you really destroy and defend. (The code for both is kept but switched off.)
 

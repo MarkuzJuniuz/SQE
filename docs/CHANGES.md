@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.690, F-14B(U) RIO Navigation uses the jet's own sequencing
+In the F-14B(U) Jester now leaves the jet in auto sequencing between points, so it steps on by itself as you pass them. Where he waits (the marshal until your push time, a station until your exit time, TGT on a strike) he puts it in manual. RTB now goes to your landing point, not to a later point such as the bullseye. Click Update in Settings if you had installed the script.
+
+## v0.41.689, the Caucasus can be lost on supply
+On the Caucasus the war is now also lost if the coalition's Force Index stays at 60% or less for three days: Washington calls the war off. The Overview warns you while it is that low. In practice only Level 3 gets there.
+
 ## v0.41.688, F-14 RIO Navigation (experimental)
 With the script installed, Jester works your F-14B or F-14B(U) steerpoints through the flight (F10 > Other > Work the Waypoints: On / Off), switching off on TGT for a strike and when you take the navigation over; in the F-14B(U) it takes you out of Destination steering so your HUD follows it. The Turnpoints menu now serves the B(U) too. The Settings entry is now F-14 RIO Navigation: click Update if you had the Turnpoints script.
 

@@ -1180,6 +1180,52 @@ def supply_collapse_word(state):
     return "distant" if m >= SUPPLY_COLLAPSE_BANDS[0] else "approaching" if m >= SUPPLY_COLLAPSE_BANDS[1] else "close"
 
 
+def supply_lose_rule(state):
+    """S213 (XO 2026-11-26): the mirror of `supply_win_rule`: the active pack's `lose_supply` rule for this level, {"below": 0..1, "days": n}, or None (no such defeat)."""
+    from . import theatres
+    rules = theatres.active().get("lose_supply") or {}
+    level = str(getattr(state, "level", 2))
+    return rules.get(level) or None
+
+
+def update_supply_loss(state) -> list:
+    """Nightly (`war.end_day`, after the sites mended, like `update_supply_win`): the coalition's Force Index at or below `below` on `days` consecutive day checks loses the war
+    (`g["supply_lost"]`, read by `war.update_status`); a day above it resets the count (`g["supply_low_blue"]`, saved with the campaign). -> the war-log lines."""
+    g = state.ground
+    rule = supply_lose_rule(state)
+    if not g or not rule or g.get("supply_lost"):
+        return []
+    if supply(state, "blue") <= float(rule["below"]):
+        g["supply_low_blue"] = int(g.get("supply_low_blue", 0)) + 1
+    else:
+        g["supply_low_blue"] = 0
+    if g["supply_low_blue"] < int(rule["days"]):
+        return []
+    g["supply_lost"] = True
+    lines = ["The coalition's supply has collapsed: Washington has lost its appetite for the war and the coalition is pulling out"]
+    return lines + story.beat(state, "lose_supply")
+
+
+def supply_loss_warning(state) -> str:
+    """The Overview's line while the coalition's Force Index is at or below the `lose_supply` line, with the days counted. "" otherwise."""
+    rule = supply_lose_rule(state)
+    if rule is None or state.status != "ACTIVE":
+        return ""
+    if supply(state, "blue") > float(rule["below"]):
+        return ""
+    days = int(rule["days"])
+    counted = int((state.ground or {}).get("supply_low_blue", 0))
+    left = max(1, days - counted)
+    line = round(100 * float(rule["below"]))
+    if counted == 0:                                    # under the line today, no night counted yet
+        return "Coalition Force Index at or under %d%%: %d days of it and the coalition pulls out" % (line, days)
+    if left == 1:
+        rest = "one more and the coalition pulls out"
+    else:
+        rest = "%d more and the coalition pulls out" % left
+    return "Coalition Force Index at or under %d%% for %d of %d days: %s" % (line, counted, days, rest)
+
+
 def apply_red_fall(state, rb) -> list:
     """A red base falls to us: the field and everything dug in round it go down for good, and its jets withdraw to the nearest standing red field
     (FALL_LOSS of them lost on the way), the way our own squadrons do when one of our fields falls. Its depots and fuel farms change sides with their
