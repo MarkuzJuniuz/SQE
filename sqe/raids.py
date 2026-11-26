@@ -98,9 +98,12 @@ SEAD_FLANK_AD_SHARE = 0.5     # ...in the war sim the field's air defence counts
 SEAD_PATRIOT_WEIGHT = 2.0     # S64 (XO 2026-11-12, run 21-39-54: a raid went at a HAWK while its full-strength Patriot stood beside it): a full-strength Patriot weighs this much more than a HAWK in red's draw of a SEAD target (judgment call; a Patriot below full strength keeps weight 1). The draw only offers a full Patriot red can field (`_sead_fieldable`)
 SEAD_HAWK_PACKAGES = 2          # S44 (XO 2026-11-12): a HAWK gets two packages too (a Patriot below full strength, or whatever is left of one, still one)
 SEAD_SITE_HIT = 0.15          # ...and a blue SAM site loses this much health per SEAD jet that gets through (a launch of 3 jets takes 0.45 off a HAWK, 6 take 0.9 off a Patriot; judgment call, tuned with the probe `.private/probes/s36`: 0.08 never opened a field, 0.25 wiped the SAMs by day 10, 0.15 sags them and reopens fields)
-KH59_RAIDS = True             # S48 (XO musing 2026-11-12, probe flown 2026-11-12): red's Su-24M raids on an UNCOVERED supply site or garrison fire the Kh-59M from about 50 nm and turn for home (`plan_raid` draws it, `raid_spawns` builds it, `war._resolve_raid` resolves it). False = every raid as S46 left it. Both the plan and the spawner read this module attribute at call time
-KH59_BY_LEVEL = {1: False, 2: True, 3: True}   # S208 (XO 2026-11-25: no dice): at Levels 2 and 3 a supply-site or garrison raid is a Kh-59M raid whenever a wing that carries it can field it (standoff keeps the jets alive; was a 30 % / 50 % chance). L1: none (insurgents have no standoff weapons)
-KH59_KINDS = ("supply", "garrison")   # ...only these fixed targets (not the runway, troops in contact, SAM sites or the carrier)
+KH59_RAIDS = True             # S48 (XO musing 2026-11-12, probe flown 2026-11-12): red's raids fire the Kh-59M from standoff and turn for home (`plan_raid` books it, `raid_spawns` builds it, `war._resolve_raid` resolves it). False = every raid as S46 left it. Both the plan and the spawner read this module attribute at call time
+KH59_BY_LEVEL = {1: True, 2: True, 3: True}   # S209 (XO 2026-11-25: "Let them use it however it can be used", "Let level 1 have it too, for fun"): every level. Level 1 is a rule XO chose for fun, not doctrine (an insurgent force would have no crews for a TV-guided missile). A raid is a Kh-59M raid whenever a wing that carries it can field it (S208: no dice)
+KH59_KINDS = ("supply", "garrison")   # the kinds of aim a Kh-59M raid flies at (S209: under blue's Patriot / HAWK cover too). Never the carrier: the AI fires this land missile only at a fixed point, and a ship moves
+KH59_LAUNCH_NM = 50           # the Kh-59M raid's launch point, this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M with margin for a low launch (judgment call; probe 2026-11-12 and the S208 server test: the Su-24M fires several nm before the point, about 57 nm)
+KH59_ALT_FT = 20000           # the altitude a Kh-59M raid flies (`raid_spawns`: a land raid without attack types), for the Patriot ring its way in is measured against
+KH59_BEARING_MAX_DEG = 90     # the way in may swing this far from the wing's own bearing to avoid blue's batteries (judgment call: farther is flying round the back of the target)
 KH59_HIT_EQUIV = 1.0          # ...a Kh-59M jet that launches counts as this many free-fall-bomber jets in `hit()` on a supply site or garrison (judgment call: two 320 kg precision missiles are worth about one jet's load of unguided bombs; red's gain is the missing losses and the safe launch point, not a bigger hit)
 ASSET_HIT = 0.20              # health a supply site or garrison loses per aircraft that gets through
 SECTOR_HIT = 4.0              # friendly sector strength lost per aircraft that gets through
@@ -164,6 +167,78 @@ def aim_xy(state, aim: str, base):
 
 def aim_kind(aim: str) -> str:
     return "field" if not aim else "sector" if aim.startswith("sector:") else "garrison" if aim.startswith(("bgar_", "bfwd_")) else "sam" if aim.startswith("bsam_") else "supply"
+
+
+def kh59_types() -> tuple:
+    """S209: the bomber types that can carry the Kh-59M (their standoff loadout is not empty). Only these fly or pool into a Kh-59M raid, so a jet without the missile (a Su-25) never turns it into a bomb raid."""
+    from .loadouts import enemy_standoff_loadout
+    carriers = []
+    for aircraft in bomber_types():
+        if enemy_standoff_loadout(aircraft):
+            carriers.append(aircraft)
+    return tuple(carriers)
+
+
+def kh59_reach(state, d, base, aim: str, x: float, y: float, budget: bool = True, want: int = 0):
+    """S209: (distance nm, wing, type) of the wing that would fly a Kh-59M raid on this aim, or None (switch off, level, a kind it does not fly, or no wing with a carrying type in reach). Cover does not matter:
+    the missiles are fired from outside it."""
+    if not KH59_RAIDS or not KH59_BY_LEVEL.get(max(1, min(3, int(getattr(d, "level", 3)))), False):
+        return None
+    if aim_kind(aim) not in KH59_KINDS:
+        return None
+    types = kh59_types()
+    if not types:
+        return None
+    return _reach(state, aim_kind(aim), x, y, budget, only=types, want=want)
+
+
+def kh59_exposure(state, aim_x: float, aim_y: float, brg: float) -> int:
+    """S209: how many live blue Patriot / HAWK batteries reach a Kh-59M raid's way in on bearing `brg`: points every 10 nm from the launch point (`KH59_LAUNCH_NM`) out to `SEAD_FLANK_WAY_IN_NM`."""
+    from . import samtier
+    from .sams import blue_battery
+    sample_points = []
+    for step_nm in range(KH59_LAUNCH_NM, SEAD_FLANK_WAY_IN_NM + 1, 10):
+        north = aim_x + step_nm * NM * math.cos(math.radians(brg))
+        east = aim_y + step_nm * NM * math.sin(math.radians(brg))
+        sample_points.append((north, east))
+    sites = getattr(state, "blue_sams", None) or {}
+    count = 0
+    for field in state.bases.values():
+        if field.kind != BaseKind.AIRFIELD:
+            continue
+        battery = blue_battery(field, state)
+        batteries = []
+        if battery.get("patriot_ln"):
+            batteries.append(("pat", samtier.ring_nm("Patriot", KH59_ALT_FT)))
+        if battery.get("hawk"):
+            batteries.append(("hawk", HAWK_NM))
+        for key, ring_nm in batteries:
+            position = sites.get(f"bsam_{field.id}_{key}") or field
+            for point_x, point_y in sample_points:
+                if math.hypot(position.x - point_x, position.y - point_y) <= ring_nm * NM:
+                    count += 1
+                    break
+    return count
+
+
+def kh59_bearing(state, aim_x: float, aim_y: float, start_brg: float) -> float:
+    """S209: the bearing a Kh-59M raid comes in on: the one with the fewest batteries over its way in (`kh59_exposure`), the one nearest `start_brg` (the wing's own bearing) among equals, within
+    `KH59_BEARING_MAX_DEG` of it. When every way in is covered the least covered one is flown. The plan stores it as `brg`, which the mission builder and blue's intercept both follow."""
+    offsets = [0]
+    for step_deg in range(10, KH59_BEARING_MAX_DEG + 1, 10):
+        offsets.append(step_deg)
+        offsets.append(-step_deg)
+    best_brg = start_brg % 360
+    best_count = None
+    for offset_deg in offsets:
+        brg = (start_brg + offset_deg) % 360
+        count = kh59_exposure(state, aim_x, aim_y, brg)
+        if best_count is None or count < best_count:
+            best_brg = brg
+            best_count = count
+        if best_count == 0:
+            break
+    return best_brg
 
 
 def describe(state, base, aim: str = "") -> str:
@@ -418,6 +493,9 @@ def _raidable(state, d, kind: str, taken) -> list:
         if (base.id, aim) in taken:
             continue
         x, y = aim_xy(state, aim, base)
+        if kh59_reach(state, d, base, aim, x, y) is not None:              # S209: a Kh-59M raid goes in whatever covers the target
+            out.append((base, aim, weight))
+            continue
         reach = reach_for(state, aim_kind(aim), x, y, d=d)
         if reach is not None and sead_plan(state, d, base, aim, reach[1], reach[2])[0] and _sead_fieldable(state, d, base, aim, reach[1], reach[2]):
             out.append((base, aim, weight))
@@ -858,12 +936,8 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool 
     ax, ay = aim_xy(state, aim, base)
     rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:raid")
     want = wanted_size(d, credit)                                                          # S208: massed when red has saved up the jets
-    kh59 = False                                                                            # S48: a Kh-59M raid (fixed target, never covered: `reach_for` is None under cover; never Level 1's banzai raids)
-    standoff_ = KH59_BY_LEVEL.get(max(1, min(3, int(getattr(d, "level", 3)))), False)
-    r = None
-    if KH59_RAIDS and standoff_ and not ignore_cover and aim_kind(aim) in KH59_KINDS and not getattr(d, "raid_banzai", False):
-        r = reach_for(state, aim_kind(aim), ax, ay, d=d, want=want, only=bomber_types())       # the Su-25 cannot carry it: no bomber wing that can field it, the ordinary draw below
-        kh59 = r is not None
+    r = kh59_reach(state, d, base, aim, ax, ay, want=want)                                 # S209: a Kh-59M raid whenever a carrying wing can field it, covered target or not
+    kh59 = r is not None
     if r is None and ignore_cover:
         r = _reach(state, aim_kind(aim), ax, ay, True, want=want)                          # S186: a flank raid goes in under cover on purpose (the cover test is skipped)
     elif r is None:
@@ -871,7 +945,7 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool 
     if r is None:
         return None
     bw, raider = r[1], r[2]
-    if not ignore_cover and not sead_plan(state, d, base, aim, bw, raider)[0]:
+    if not ignore_cover and not kh59 and not sead_plan(state, d, base, aim, bw, raider)[0]:
         return None
     ba = state.assets[bw.base_asset_id]
     rdy = redair.ready_of(state, bw, (raider,))
@@ -882,7 +956,7 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool 
     from . import blue_barcap
     pool = []
     if POOL_RAIDS and nb < want and aim_kind(aim) in POOL_KINDS:                                      # S46: the lead wing cannot fill the size drawn: a nearby wing joins it
-        pool = _pool_partners(state, aim_kind(aim), bw, ax, ay, min(want, POOL_MAX_RAIDERS) - nb, only=bomber_types() if kh59 else None)
+        pool = _pool_partners(state, aim_kind(aim), bw, ax, ay, min(want, POOL_MAX_RAIDERS) - nb, only=kh59_types() if kh59 else None)
     nb_lead = nb
     nb += sum(p["n"] for p in pool)
     alone_ = (raider in attack_types() and all(p["raider"] in attack_types() for p in pool) and aim_kind(aim) == "supply" and SU25_SUPPLY                          # v0.41.359 (Phase 10c): no blue fighter squadron can reach the site's field (blue's own patrol rule, `blue_barcap._cap_squadrons`): the Su-25s go alone
@@ -910,7 +984,10 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool 
     for p in esc_pool:
         redair.spend(state, p["wing"], p["n"])
     escorts += sum(p["n"] for p in esc_pool)
-    plan = {"land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb,
+    brg = (brg + rnd.uniform(-12, 12)) % 360
+    if kh59 and not ignore_cover:
+        brg = kh59_bearing(state, ax, ay, brg)                                        # S209: swing round blue's batteries where there is a way
+    plan = {"land": True, "raider": raider, "brg": round(brg, 1), "bombers": nb,
             "bomber_wing": bw.base_asset_id, "escort_wing": esc[0].base_asset_id if esc else "", "escort_type": esc[1] if esc else "", "escorts": escorts, "mass": nb >= 8, "aim": aim, "dest": [ax, ay], "jets": jets}
     if kh59:
         plan["kh59"] = True                                                          # S48: the spawner flies it with Kh-59M, the war sim resolves it as a standoff raid
@@ -1251,7 +1328,10 @@ def overnight(state, d, rng: random.Random) -> list:
         b, aim = pa
         struck.add((b.id, aim))
         x, y = aim_xy(state, aim, b)
-        r = reach_for(state, aim_kind(aim), x, y, d=d)
+        standoff = kh59_reach(state, d, b, aim, x, y)              # S209: an unwarned Kh-59M raid, fired from outside the batteries
+        r = standoff
+        if r is None:
+            r = reach_for(state, aim_kind(aim), x, y, d=d)
         if r is None:
             continue
         wing = r[1]
@@ -1259,7 +1339,9 @@ def overnight(state, d, rng: random.Random) -> list:
         alert = sum(s.available for s in state.squadrons.values() if s.base_id == b.id) / max(1, sum(s.authorized for s in state.squadrons.values() if s.base_id == b.id))
         from .sams import covering_ad
         ad_ = covering_ad(state, x, y)
-        if not sead_plan(state, d, b, aim, wing, r[2])[0]:         # v0.41.125: no dice: a covered target is not raided (S36b)
+        if standoff is not None:
+            ad_ = 0.0                                             # the batteries do not fight a standoff raid (as in `war._resolve_raid`)
+        elif not sead_plan(state, d, b, aim, wing, r[2])[0]:      # v0.41.125: no dice: a covered target is not raided by bombers (S36b)
             continue
         p_stop = min(0.95, 0.2 + 0.45 * ad_ + 0.3 * alert)       # v0.41.30: the batteries that cover the target (was the field's defense number)
         what = {"field": b.name, "sam": state.blue_sams[aim].name if aim in state.blue_sams else "", "supply": state.blue_assets[aim].name if aim in state.blue_assets else "", "garrison": state.blue_assets[aim].name if aim in state.blue_assets else "",
@@ -1274,13 +1356,16 @@ def overnight(state, d, rng: random.Random) -> list:
         n_ = sead_jets(state, aim, d) if aim_kind(aim) == "sam" else wanted_size(d, 0.0)
         if n_ <= 4:                                              # a small raid is settled as one lump (all stopped or all through), as before v0.41.155
             if rng.random() < p_stop:
-                k = wing.lose(r[2], rng.randint(1, 3 + round(covering_ad(state, x, y))))
+                k = wing.lose(r[2], rng.randint(1, 3 + round(ad_)))
                 lines.append(f"Surprise raid on {what}: " + ("the base patrol and " if up_ else "") + f"alert aircraft got up in time; {k} attack aircraft shot down")
                 if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                     lines.append(ln_)
             else:
                 lines.append(f"Surprise raid on {what}: nobody was warned and the aircraft got through")
-                lines += [x_.strip() for x_ in hit(state, b.id, wing, rng, None, aim, r[2])]
+                losing_wing = wing
+                if standoff is not None:
+                    losing_wing = None                            # a standoff raid loses nothing to the defences over the target
+                lines += [x_.strip() for x_ in hit(state, b.id, losing_wing, rng, None, aim, r[2], kh59=standoff is not None)]
         else:                                                    # v0.41.155 (red zerg): a mass raid is settled aircraft by aircraft
             stopped_ = sum(1 for _ in range(n_) if rng.random() < p_stop)
             through_ = n_ - stopped_
@@ -1289,7 +1374,7 @@ def overnight(state, d, rng: random.Random) -> list:
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
             if through_:
-                lines += [x_.strip() for x_ in hit(state, b.id, None, rng, through_, aim, r[2])]
+                lines += [x_.strip() for x_ in hit(state, b.id, None, rng, through_, aim, r[2], kh59=standoff is not None)]
     if state.raids is not None:
         state.raids["surprise"] = 0
         state.raids["surprise_by"] = {}

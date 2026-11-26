@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.678, red's stand-off missiles reach under your SAM cover
+Red now fires Kh-59M missiles at supply sites and garrisons under HAWK or Patriot cover too, at every level, coming in on the least defended side. The batteries cannot stop the launch: your fighters have to.
+
 ## v0.41.677, your squadron is offered the most important jobs it can fly
 Your squadron used to be put on a random half of each turn's jobs. It is now offered a seat on the most important ones your jet can fly, about half of them.
 

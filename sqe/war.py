@@ -705,7 +705,7 @@ class WarSimulator:
         bw = state.enemy_air_at(pkg.extra.get("bomber_wing", "")) if pkg.extra else None
         strength = sum(f.count * flight_weight(f) for f in pkg.flights)
         esc = pkg.extra.get("escorts", 0)
-        kh59_ = raids.is_kh59(pkg.extra)                                    # S48: a Kh-59M raid is a standoff raid like the SEAD package
+        kh59_ = raids.is_kh59(pkg.extra)                                    # S48: a Kh-59M raid is a standoff raid like the SEAD package. S209: its figures below are placeholders until the S209 server tests set them
         if pkg.extra.get("land") and not pkg.extra.get("sead") and not kh59_:           # v0.41.30: the batteries round the raid's target fight it too (sams.covering_ad, AD_RAID_WEIGHT); S36b: not a SEAD raid, which fires its Kh-31P from standoff, outside the site's reach; S48: nor a Kh-59M raid, which launches from about 50 nm, outside the point defences
             from .sams import covering_ad, AD_RAID_WEIGHT
             from .raids import aim_xy
