@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.697, guides brought up to date
+The campaign guide gives today's Syria war lengths, and the setup guide covers both maps (jets, year, start hour) and the range red's anti-radiation missiles are fired from.
+
 ## v0.41.696, README screenshots refreshed
 The README's screenshots show the current windows.
 
