@@ -11,6 +11,9 @@ points' waypoint numbers, so the export script can switch to manual the moment t
 The player's calls are F10 > Other > RIO Navigation: "Your Nav" (Jester works the waypoints, as from the mission start) and "My Nav" (he stops). Home base (the RTB leg) ends his work: he goes
 direct to it, holds the F-14B(U) in manual and hands the nav back.
 
+F-14B(U), a point that is gone (a direct to the tanker deletes home base): when the jet refuses a direct-to, he asks the export script to load the flight plan again (command 2, the CDNU's keys,
+probe 2026-11-26) and orders the same point once more. Only while he has the nav, or just after handing it back at TGT, home base or a turnpoint; once for each order.
+
 F-14B(U), probe flown 2026-11-26 and Heatblur's CDNU manual: direct-to a later waypoint DELETES the ones in between (the one you leave goes to history; the last 5 history points can be flown to again).
 Nothing here steers to a station's far end before its near end, so a point still needed is never jumped. In Destination steering the HUD ignores direct-to, so switching on first steps out of it
 (command 1, done by the export script).
@@ -145,6 +148,9 @@ local NM = 1852
 local SEQUENCING, MANUAL, AUTO = 10043, 1.0, 0.33
 local NO_ACCESS = "Waypoint work needs DCS scripting access (SQE Settings, DCS Integration)."
 local release = false                      -- F-14B(U): the waypoint work went off, tell the export script there is nothing left to hold
+local RESTORE, RESTORE_S, REFUSAL_S = 2, 35, 90
+local last_order = nil                     -- F-14B(U): the last direct-to he ordered, so he can order it again after loading the flight plan
+local restoring_until = 0
 local on, started, current, closest, catching, after_target, typed_zone = true, false, 0, nil, false, false, nil
 local outbox, count, last_override = {}, 0, ""
 local selected_at = 0
@@ -223,17 +229,24 @@ local function type_into_fix_point(zone, first_delay)
   typed_zone = zone
 end
 
+-- F-14B(U): go direct to a waypoint, to be held there in manual or flown on in auto sequencing
+local function send_order(order)
+  if order.manual then
+    press(0, SEQUENCING, MANUAL)               -- manual first: the jet must not step past the point
+    press(1, 10037, order.num / 100)
+    press(2, 10042, 1)
+  else
+    press(0, 10037, order.num / 100)
+    press(2, 10042, 1)
+    press(1, SEQUENCING, AUTO)                 -- and from here the jet sequences itself
+  end
+  order.until_s = timer.getTime() + REFUSAL_S  -- a refusal reported until then is about this order
+  last_order = order
+end
+
 local function steer_to(leg)
   if BU then
-    if is_waiting(leg) then
-      press(0, SEQUENCING, MANUAL)             -- manual first: the jet must not step past the point
-      press(1, 10037, leg.num / 100)
-      press(2, 10042, 1)
-    else
-      press(0, 10037, leg.num / 100)
-      press(2, 10042, 1)
-      press(1, SEQUENCING, AUTO)               -- and from here the jet sequences itself
-    end
+    send_order({ num = leg.num, name = leg.name, manual = is_waiting(leg) })
   elseif leg.knob then
     press(0, 10017, leg.knob)
   elseif typed_zone == leg.zone then
@@ -378,12 +391,32 @@ local function off_reason(reason)
   if reason == "button" then return "Your nav. You changed the navigation source." end
   if reason == "unable" then
     local name = "the waypoint"
-    if legs[current] then name = legs[current].name end
-    return "Your nav. The jet did not go direct to " .. name .. " (a waypoint you jump over is gone from the F-14B(U))."
+    if last_order then name = last_order.name end
+    return "Your nav. The jet still will not go direct to " .. name .. "."
   end
+  if reason == "page" then return "Your nav. The CDNU was not on the page I expected, so I stopped the reload." end
   if reason == "mode" then return "Your nav. I could not leave Destination steering." end
   if reason == "sequence" then return "Your nav. The jet did not change between manual and auto sequencing." end
   return "Your nav. You took the steerpoint."
+end
+
+-- the export script says you took over, the jet did not take an order, or the reload stopped
+local function reported(reason)
+  local order = last_order
+  local recent = order ~= nil and timer.getTime() < order.until_s
+  if BU and reason == "unable" and order and not order.retried and (on or recent) then
+    order.retried = true                       -- once for each order
+    say("The jet no longer has " .. order.name .. ". Reloading the flight plan: about half a minute.", 30)
+    press(0, RESTORE, 0)
+    send_order(order)
+    restoring_until = timer.getTime() + RESTORE_S
+  elseif on then
+    turn_off(off_reason(reason))
+    last_order = nil
+  elseif recent and (reason == "unable" or reason == "page") then
+    say(off_reason(reason))                    -- he had handed the nav back (TGT, home base, a turnpoint) and could not get you there
+    last_order = nil
+  end
 end
 
 local function tick()
@@ -393,15 +426,15 @@ local function tick()
     if not started and now >= 30 then
       started = true
       if on then switch_on(now) end
-    elseif started and on then
+    elseif started then
       if can_write() then
         local text = read_file("__OVERRIDE__")
         if text ~= "" and text ~= last_override then
           last_override = text
-          turn_off(off_reason(string.match(text, "(%a+)%s*$")))
+          reported(string.match(text, "(%a+)%s*$"))
         end
       end
-      if on then follow(unit) end
+      if on and now >= restoring_until then follow(unit) end      -- he does not move on while he is reloading
     end
   end
   flush()
@@ -419,6 +452,7 @@ local function your_nav()
     return
   end
   started = true
+  last_order, restoring_until = nil, 0
   last_override = read_file("__OVERRIDE__")
   say("I have the nav.")
   switch_on(timer.getTime())
@@ -427,9 +461,11 @@ end
 
 -- "My Nav": you take them back (said before he starts, he does not start)
 local function my_nav()
+  last_order, restoring_until = nil, 0
   if on then
     turn_off("Your nav.")
   else
+    release = BU                               -- stops a reload he started for TGT, home base or a turnpoint
     say("Your nav.")
   end
 end
@@ -442,8 +478,8 @@ local function turnpoint(item)
   if on then turn_off("Your nav. You picked a turnpoint.") end
   if BU then
     set_up_bu()
-    press(0, 10037, item.num / 100)
-    press(2, 10042, 1)
+    restoring_until = 0
+    send_order({ num = item.num, name = item.label, manual = true })
     say(item.label .. " (" .. item.note .. "): direct to waypoint " .. item.num .. ". The F-14B(U) drops the waypoints you jump over.", 20)
   else
     press(0, 10017, 0.4)

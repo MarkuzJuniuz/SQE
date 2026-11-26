@@ -8,6 +8,8 @@
 --             In auto sequencing the jet moving on to the next waypoint is its own step, not a change of yours.
 -- On the F-14B(U) it first takes the jet out of Destination steering (the PTID's steering push button), sets EGI and manual sequencing.
 -- HOLD lists the waypoints Jester waits at: when the jet steps onto one in auto sequencing, this script switches it to manual so it does not step past.
+-- A direct-to deletes the waypoints it jumps over. When the mission asks, this script loads the mission's flight plan again with the CDNU's keys, reading the screen before each one
+-- and stopping if it is not the page it expects.
 -- What it sends and sees is logged in Logs\SQE_rio_navigation.log (started afresh each flight). It does nothing in any other aircraft.
 --
 -- HOW TO INSTALL: SQE does it for you (Settings > DCS integration > Install RIO Navigation). By hand: copy THIS file to
@@ -24,6 +26,21 @@ local DEST_KNOB, PICK_WAYPOINT, ENTER_FROM_ZONE = 10017, 10018, 10019
 local SELECT_WAYPOINT, DIRECT_TO, STEERING_MODE = 10037, 10042, 10043
 local MANUAL_SEQUENCING = 1.0
 local SETUP_BU = 1                -- not a cockpit command: the mission asks for the F-14B(U) set-up below
+local RESTORE = 2                 -- not a cockpit command: the mission asks for the F-14B(U) flight plan to be loaded again
+local CDNU_DEVICE = 81
+-- the keys that load MAIN FPL again (probe 2026-11-26), each with what the screen must show before it is pressed
+local RESTORE_KEYS = {
+  { key = 3055, screen = {} },                                              -- IDX, from any page
+  { key = 3064, screen = { "Index", "MDL" } },                              -- LSK 5: the data loader
+  { key = 3062, screen = { "LOAD FPLN" } },                                 -- LSK 3: flight plan select
+  { key = 3060, screen = { "Flt Pln Select", "*MAIN FPL" } },               -- LSK 1: the mission's plan, whose data then loads
+  { key = 3067, screen = { "ACTIVATE FPLN", "*MAIN FPL" }, after_s = 7 },   -- LSK 8, once it has loaded (about 4 s in the probe)
+  { key = 3067, screen = { "CONFIRM ACTIVATE" } },                          -- LSK 8 again (the words blink)
+}
+local KEY_GAP_S = 1
+local PAGE_WAIT_S = 15            -- how long after a key the expected page may take
+local AFTER_RELOAD_S = 6
+local LOOK_S = 0.25
 local PTID_DEVICE, PTID_STEERING_BUTTON = 43, 3904   -- the F-14B(U)'s PTID and its push button 9, which steps the steering mode (probe 2026-11-26)
 local DISPLAY_PRESSES_MAX = 5
 local PRESS_RELEASE_S = 0.3
@@ -47,7 +64,7 @@ local previous_after_frame = LuaExportAfterNextFrame
 local function reset()
   state = { next_poll = 0, seen = {}, steps = {}, request_path = nil, expected = nil, sent_at = nil, moved_at = nil, overrides = 0,
             next_due = 0, selected = nil, watch = nil, tid_indication = TID_INDICATION, log_started = false,
-            sequencing = nil, mode_shown = false, mode_check_at = 0, holds = {} }
+            sequencing = nil, mode_shown = false, mode_check_at = 0, holds = {}, held = nil }
 end
 reset()
 
@@ -122,6 +139,25 @@ end
 local function add_step(delay, command, value, device)
   if #state.steps == 0 then state.next_due = (LoGetModelTime() or 0) + delay end
   state.steps[#state.steps + 1] = { delay = delay, command = command, value = value, device = device }
+end
+
+-- a push button: down now, up a moment later
+local function push(device, command, now)
+  GetDevice(device):performClickableAction(command, 1)
+  state.held = { device = device, command = command, up_at = now + PRESS_RELEASE_S }
+end
+
+local function let_go()
+  if state.held then
+    GetDevice(state.held.device):performClickableAction(state.held.command, 0)
+    state.held = nil
+  end
+end
+
+-- forget what is queued, without leaving a button pushed in
+local function drop_steps()
+  let_go()
+  state.steps = {}
 end
 
 -- F-14B(U): the sequencing mode we have set ("MAN" or "AUTO"); the display has ORDER_WAIT_S to show it
@@ -216,7 +252,7 @@ end
 
 -- a mission built before S210 asks for one turnpoint like this (as flown in the test of 2026-11-24)
 local function plan_old_turnpoint(zone)
-  state.steps = {}
+  drop_steps()
   add_step(0, DEST_KNOB, FIX_POINT)
   add_step(3, PICK_WAYPOINT, FIX_POINT)
   add_step(2, ENTER_FROM_ZONE, zone / 100)
@@ -243,15 +279,24 @@ local function poll(now)
       if string.match(text, "^SQERIO ") then
         state.request_path = path
         state.holds = holds_of(text)
-        -- A set-up (switching on, or a turnpoint) starts afresh. Any other order is dropped if you took over just before it arrived.
-        local starting = string.match(text, "^SQERIO %d+ %d+ [%d%.]+," .. SETUP_BU .. ",")
-        if starting then
-          state.watch, state.steps, state.sequencing = nil, {}, nil
-        end
-        if starting or not check_bu(now, true) then
+        -- A line with no commands says the work is off: stop whatever is queued (a flight plan reload included).
+        if string.match(text, "^SQERIO %d+ %d+ +HOLD:[%d/]*%s*$") then
+          drop_steps()
           state.watch = nil
           log("request: " .. text)
-          plan_request(text)
+        else
+          -- A set-up or a reload starts afresh. Any other order is dropped if you took over just before it arrived.
+          local first = tonumber(string.match(text, "^SQERIO %d+ %d+ [%d%.]+,(%d+),"))
+          local starting = first == SETUP_BU or first == RESTORE
+          if starting then
+            drop_steps()
+            state.watch, state.sequencing = nil, nil
+          end
+          if starting or not check_bu(now, true) then
+            state.watch = nil
+            log("request: " .. text)
+            plan_request(text)
+          end
         end
       else
         local zone = tonumber(string.match(text, "^SQETP (%d+) "))
@@ -299,8 +344,7 @@ local function set_up_bu(now, step)
     step.presses = (step.presses or 0) + 1
     if step.presses <= DISPLAY_PRESSES_MAX then
       log("steering shows " .. shown .. ": pressing the steering button")
-      GetDevice(PTID_DEVICE):performClickableAction(PTID_STEERING_BUTTON, 1)
-      step.release_at = now + PRESS_RELEASE_S
+      push(PTID_DEVICE, PTID_STEERING_BUTTON, now)
       state.next_due = now + PRESS_SETTLE_S
       return
     end
@@ -334,19 +378,69 @@ local function send_step(now, step)
   end
 end
 
-local function run_steps(now, in_tomcat)
-  local step = state.steps[1]
-  if not step then return end
-  if step.release_at then
-    if now >= step.release_at then
-      GetDevice(PTID_DEVICE):performClickableAction(PTID_STEERING_BUTTON, 0)
-      step.release_at = nil
+-- is there a display that shows all of these words? (the CDNU: its element ids are random, so match by text)
+local function screen_shows(words)
+  if #words == 0 then return true end
+  for number = 0, LAST_INDICATION do
+    local ok, text = pcall(list_indication, number)
+    if ok and type(text) == "string" then
+      local all = true
+      for _, word in ipairs(words) do
+        if not string.find(text, word, 1, true) then all = false end
+      end
+      if all then return true end
+    end
+  end
+  return false
+end
+
+-- F-14B(U): load the flight plan again, one key at a time
+local function restore_plan(now, step)
+  local stage = step.stage or 1
+  local press = RESTORE_KEYS[stage]
+  if not press then
+    log("the flight plan was loaded again")
+    table.remove(state.steps, 1)
+    state.sequencing = nil
+    if state.steps[1] then state.next_due = now + state.steps[1].delay end
+    return
+  end
+  step.since = step.since or now
+  if now - step.since < (press.after_s or 0) then return end
+  if not screen_shows(press.screen) then
+    state.next_due = now + LOOK_S
+    if now - step.since > PAGE_WAIT_S then
+      log("the CDNU does not show " .. table.concat(press.screen, " + ") .. ": stopping the reload")
+      drop_steps()
+      report_override("page")
     end
     return
   end
+  log("reload: key " .. press.key)
+  push(CDNU_DEVICE, press.key, now)
+  step.stage = stage + 1
+  step.since = now
+  if RESTORE_KEYS[step.stage] then
+    state.next_due = now + KEY_GAP_S
+  else
+    state.next_due = now + AFTER_RELOAD_S
+  end
+end
+
+local function run_steps(now, in_tomcat)
+  if state.held then
+    if now >= state.held.up_at then let_go() end
+    return
+  end
+  local step = state.steps[1]
+  if not step then return end
   if now < state.next_due then return end
   if in_tomcat and step.command == SETUP_BU then
     set_up_bu(now, step)
+    return
+  end
+  if in_tomcat and step.command == RESTORE then
+    restore_plan(now, step)
     return
   end
   table.remove(state.steps, 1)

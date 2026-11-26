@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.692, F-14B(U): Jester brings deleted waypoints back
+A direct to the tanker deletes home base and everything you have not flown from the F-14B(U). Now, when you hand Jester the nav back or pick a turnpoint and the jet no longer has the point, he reloads the mission's flight plan on the CDNU and takes you there. Click Update in Settings if you had installed the script.
+
 ## v0.41.691, F-14 RIO Navigation: Your Nav and My Nav
 The calls are now in F10 > Other > RIO Navigation: Your Nav hands Jester the waypoints, My Nav takes them back, and he tells you whenever the nav is yours again. Home base ends his work: he goes direct to it and, in the F-14B(U), leaves the jet in manual sequencing.
 
