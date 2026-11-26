@@ -23,6 +23,7 @@ from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
 from .loadouts import BOMBER_TYPES, ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_land_bomber_loadout, enemy_standoff_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
+from .raids import KH59_LAUNCH_NM       # S209: the plan needs it too (the way in is measured from the launch point)
 from .red_air_picture import CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, a2a_zone_nm
 from .support_caps import SUPPORT_CAP_ZONE_NM
 from .routes import AVOID_NM, FT, NM, RAID_IP_NEAR_NM, RAID_SA11_NM, Wpt, avoid_circles, bearing, dist, offset
@@ -116,7 +117,6 @@ PATRIOT_FACE_STEP_M = 5000.0  # S179c: the route is sampled this often for that 
 SEAD_ARC_DEG = 40             # S179c: a SEAD package's launch point lies at most this far off the facing of the target's Patriot radar. Measured on the dedicated server (2026-11-24, `.claude/test-runs/S179b-strip/REPORT.md`): a DCS Patriot detects, engages and can be targeted by an ARM only inside its radar's sector: bombers 44 deg off its facing fired, 52 and 65 deg off never did; turned to face them, they fired. The real AN/MPQ-53 searches about 90 deg (public figure, firmness medium). 40 = the measured 44 with a margin
 ARM_IP_NM = 6                 # S179b: the SEAD raid's ARM task starts at an IP this far before the ARM point, on the straight inbound leg (blue's AI HARM flights do the same: `routes.plan_route`, "the IP sits 6 nm before the launch point"; 57 of 82 of them fired in the server runs). Judgment call
 # S48: the switch KH59_RAIDS (and the share, the hit size) live in `raids.py`: the plan reads them too, and `raids` cannot import this module. The spawner reads `raids.KH59_RAIDS` at call time.
-KH59_LAUNCH_NM = 50           # the Kh-59M raid fires from this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M with margin for a low launch, outside HAWK_NM 25 and PATRIOT_NM 40 (judgment call; the probe, 2026-11-12: the Su-34 fired at 54.9 nm, the Su-24M at 58.6 nm, the missiles hit: 50 is safe inside the range)
 KH59_WINDOW_S = 240           # ...and the missile task runs this long after the jets reach the launch point (judgment call, like ARM_WINDOW_S; the probe: the jets turn for home on their own within about 25 s of the second missile, so the window never bites)
 KH59_TASK = "Bombing"         # ...which DCS task carries the launch: "Bombing" on the aim point (probe 2026-11-12: Bombing and AttackMapObject fire the Kh-59M; AttackGroup and AttackUnit never did; the supply sites and garrisons are statics, no group to attack)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s

@@ -72,7 +72,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                           else ("Kh-31P anti-radiation missiles", f" They will fire from about {ARM_LAUNCH_NM} nm out and turn for home; stop them before they launch.")))      # S167: a one-missile raid names its own missile
         sit += ["", (f"Intelligence reports {rtype_n if e.get('pool') else str(e['bombers']) + ' ' + rtype} with {arm_[0] if e.get('sead') else 'Kh-59M cruise missiles' if kh59_ else 'free-fall bombs'} inbound toward {what}, "
                      f"approaching from a bearing of about {e['brg']:.0f} degrees."
-                     + (arm_[1] if e.get("sead") else " They will fire from about 50 nm out and turn for home; stop them before they launch." if kh59_ else "") if e.get("land") else
+                     + (arm_[1] if e.get("sead") else " They will fire from about 55 nm out and turn for home; stop them before they launch." if kh59_ else "") if e.get("land") else
                      f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
                      f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier. They will launch from about 100 nm out and turn for home; stop them before they fire."
                      + ((" The SEAD packages went in the turn before: a SAM site they did not take down is still up and shooting. Hold on your station, outside the SAM rings, and engage what comes to you; "
