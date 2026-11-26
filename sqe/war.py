@@ -104,6 +104,19 @@ WAVE_NEAR_NM = 150.0       # a wave target scores up to x3 when it sits next to 
 # XO's list of the northern (MOUNTAIN front) fields, 2026-11-11: NOT `field_tier` (that puts Sochi, tier 3, with the north; Krymsk, Gelendzhik and Maykop are on the Kuban side, kept as XO listed them: judgment call).
 MOUNTAIN_FIELDS = ("mozdok", "beslan", "nalchik", "maykop", "minvody", "krymsk", "gelen")
 FOLLOW_GAP_MIN = 10     # a follow job starts this long after the SEAD / standoff package of its site (same gap as the Close DEAD stage)
+# S212: a strike or CAS that goes in behind a SEAD, as measured on the dedicated server (2026-11-26, all AI, Level 2 and 3): 9 of 10 damaged their target
+# (the sim's own odds said about 1 in 3), and the 9 took 0.44 of the target's health on average. Level 1 was not measured: the same figures (judgment call).
+FOLLOW_ATTACK_P = 0.8         # the least odds such a job has once it goes in (it is still held when the radars were not suppressed). The compressed dice (`chance`) turn 0.8 into about 9 successes in 10
+FOLLOW_ATTACK_DAMAGE = 0.45   # the health a successful one takes off its target, at every level
+
+
+def is_follow_attack(obj) -> bool:
+    """A bombing job behind a SEAD (no runway or standoff aim): the case the S212 server runs measured."""
+    if obj.type not in (ObjectiveType.STRIKE, ObjectiveType.CAS):
+        return False
+    if obj.aim in ("RUNWAY", "STANDOFF"):
+        return False
+    return len(after_sites(obj)) > 0
 
 
 def after_sites(obj) -> list:
@@ -663,7 +676,10 @@ class WarSimulator:
             p_e = max(p_s, strength / (strength + defense) if strength + defense else 0.0) if cov else (strength / (strength + defense) if strength + defense else 0.0)
             return max(0.02, min(0.98, p_e + tempo.get(state, "STRIKE"))), strength, defense
         p0 = strength / (strength + defense) if strength + defense else 0.0
-        return max(0.02, min(0.98, p0 + tempo.get(state, tempo.kind_of(obj.type)))), strength, defense
+        p = max(0.02, min(0.98, p0 + tempo.get(state, tempo.kind_of(obj.type))))
+        if is_follow_attack(obj):
+            p = max(p, FOLLOW_ATTACK_P)               # S212: measured; the losses still come from strength against defense
+        return p, strength, defense
 
     def _resolve_sweep(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         """A Fighter Sweep fights the enemy fighters near its area; the target itself is not attacked. Kills come off the nearest wings, which
@@ -948,7 +964,12 @@ class WarSimulator:
             if success and obj.aim == "RUNWAY":
                 lines.append("   " + runways.crater(state, t.id))             # v0.41.254: an AI-flown runway strike that succeeds craters the field
             elif success:
-                t.health = max(0.0, t.health - d.base_damage * (0.5 + p) * (ground.AIR_EFFECT if z is not None else 1.0) * works.damage_factor(state, t))
+                hit = d.base_damage * (0.5 + p)
+                if is_follow_attack(obj):
+                    hit = FOLLOW_ATTACK_DAMAGE            # S212: measured
+                if z is not None:
+                    hit = hit * ground.AIR_EFFECT
+                t.health = max(0.0, t.health - hit * works.damage_factor(state, t))
                 lines.append(f"   {t.name}: {strength_word(t.health)}")
                 if obj.type == ObjectiveType.COUNTER_AIR:
                     w = state.enemy_air_at(t.id)
