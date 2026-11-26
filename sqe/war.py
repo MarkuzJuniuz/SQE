@@ -705,7 +705,7 @@ class WarSimulator:
         bw = state.enemy_air_at(pkg.extra.get("bomber_wing", "")) if pkg.extra else None
         strength = sum(f.count * flight_weight(f) for f in pkg.flights)
         esc = pkg.extra.get("escorts", 0)
-        kh59_ = raids.is_kh59(pkg.extra)                                    # S48: a Kh-59M raid is a standoff raid like the SEAD package. S209: its figures below are placeholders until the S209 server tests set them
+        kh59_ = raids.is_kh59(pkg.extra)                                    # S48: a Kh-59M raid is a standoff raid like the SEAD package. S211: stopped before launch, salvo shot down, or arrived (`raids.KH59_*`)
         if pkg.extra.get("land") and not pkg.extra.get("sead") and not kh59_:           # v0.41.30: the batteries round the raid's target fight it too (sams.covering_ad, AD_RAID_WEIGHT); S36b: not a SEAD raid, which fires its Kh-31P from standoff, outside the site's reach; S48: nor a Kh-59M raid, which launches from about 50 nm, outside the point defences
             from .sams import covering_ad, AD_RAID_WEIGHT
             from .raids import aim_xy
@@ -734,8 +734,18 @@ class WarSimulator:
             strength *= max(RAID_SAM_FLOOR, 1.0 - RAID_SAM_PRESSURE * layer_live)
         nb_ = int(pkg.extra.get("bombers", 4)) if pkg.extra else 4
         p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc + 0.25 * max(0, nb_ - 4))     # v0.41.155 (red zerg): a mass raid is harder to stop (judgment call)
-        ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
-        lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'}"]
+        # `ok` = the raid was stopped before it could strike. S211, a Kh-59M raid: it can also launch and have its salvo shot down (`shot_down`); the roll keeps both, the war sim replays rolls
+        shot_down = False
+        if force and "success" in force:
+            shot_down = bool(force.get("shot_down"))
+            ok = bool(force["success"]) and not shot_down
+        else:
+            ok = chance(rng, p, d.variance)
+            if kh59_:
+                ok = ok and rng.random() < raids.KH59_PRELAUNCH_SHARE          # the roll's result, kept this share of the time: halving the odds would cut far more through the compressed dice
+                shot_down = not ok and rng.random() < raids.KH59_SALVO_STOP
+        header = "RAID STOPPED" if ok else ("MISSILES SHOT DOWN" if shot_down else "RAID GOT THROUGH")
+        lines = [f"{pkg.objective.description}: {header}"]
         if pkg.extra.get("unseen_raid"):                                    # v0.41.348 (Phase 7b): no AWACS was up, blue's planned patrols alone met it
             lines.append("   not detected: no AWACS was on orbit, only the planned patrols met it")
             ra_ = state.raids if state.raids is not None else {}
@@ -754,7 +764,11 @@ class WarSimulator:
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") and not kh59_ else "launching their missiles"))
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
-        elif bw is not None and (pkg.extra.get("sead") or kh59_):                  # S36b: a SEAD package that was not stopped fires its Kh-31P (B2: or Kh-58U) from standoff: most of its jets launch (judgment call: 60 to 100 %), and the site takes SEAD_SITE_HIT for each. S48: a Kh-59M raid the same: the jets go home, the hit is `raids.KH59_HIT_EQUIV` per jet
+        elif bw is not None and shot_down:
+            lines.append("   the bombers launched from stand-off range; our fighters shot the missiles down")
+        elif bw is not None and kh59_:                  # S211: the salvo got through: every jet that launched fired its missiles
+            lines += raids_hit(state, pkg.objective.target_id, None, rng, nb_, pkg.objective.aim, pkg.extra.get("raider"), kh59=True)
+        elif bw is not None and (pkg.extra.get("sead")):                  # S36b: a SEAD package that was not stopped fires its Kh-31P (B2: or Kh-58U) from standoff: most of its jets launch (judgment call: 60 to 100 %), and the site takes SEAD_SITE_HIT for each. S48: a Kh-59M raid the same: the jets go home, the hit is `raids.KH59_HIT_EQUIV` per jet
             thr_ = max(2, round(nb_ * rng.uniform(0.6, 1.0)))
             lines += raids_hit(state, pkg.objective.target_id, None, rng, thr_, pkg.objective.aim, pkg.extra.get("raider"), kh59=kh59_)
         elif bw is not None and pkg.extra.get("land"):
@@ -776,7 +790,15 @@ class WarSimulator:
                 lines.append(f"   missiles hit the fleet: {lost} aircraft lost on deck ({sq.name})")
         for ln in lines:
             state.note(ln.strip())
-        return {"success": ok, "odds": p, "lines": lines, "objective": pkg.objective.description, "roll": {"success": ok}}
+        prevented = ok or shot_down                      # for blue it is a success either way: nothing was hit
+        roll = {"success": prevented}
+        if shot_down:
+            roll["shot_down"] = True
+        odds = p
+        if kh59_:
+            stopped_odds = p * raids.KH59_PRELAUNCH_SHARE
+            odds = stopped_odds + (1.0 - stopped_odds) * raids.KH59_SALVO_STOP
+        return {"success": prevented, "odds": odds, "lines": lines, "objective": pkg.objective.description, "roll": roll}
 
     def sead_p(self, state: CampaignState, pkg: Package) -> float:
         """Odds that this package's SEAD flights blind the site's radars."""

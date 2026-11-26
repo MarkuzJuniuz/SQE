@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.682, red's stand-off missiles are less sure
+In the war outside your missions, red's Kh-59M raids now work as they did in DCS tests: some are stopped before launch, most launched salvos are shot down by your fighters, and only some arrive. Red no longer uses them on your troops: they are bombed as before.
+
 ## v0.41.680, red's stand-off missiles reach your SAM sites and troops
 Red now sends Kh-59M missiles at your HAWK and Patriot sites, behind its anti-radiation raid or on their own, and at your troops in contact, at every level. Fixed: a raid that went in behind another one could be missing from the mission when it was the one you flew against.
 
