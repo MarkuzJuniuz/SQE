@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.680, red's stand-off missiles reach your SAM sites and troops
+Red now sends Kh-59M missiles at your HAWK and Patriot sites, behind its anti-radiation raid or on their own, and at your troops in contact, at every level. Fixed: a raid that went in behind another one could be missing from the mission when it was the one you flew against.
+
 ## v0.41.679, red cuts your runways with stand-off missiles
 Red's raids on your airfields now fire Kh-59M missiles along the runway from about 55 nm whenever a bomber wing that carries them can reach, under SAM cover or not. Four or more hits close the field for a day. These raids no longer damage the defences or parked jets.
 

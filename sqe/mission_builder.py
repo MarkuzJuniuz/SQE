@@ -442,6 +442,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._extras = list(extras)
         self._layer_present = {extra_package.objective.id for extra_package in extras}      # S183 rule 2: the objectives in this mission (the anchor and the folded ones): a second SEAD wave is built only when wave 1 is one of them
         self._layer_present.add(package.objective.id)
+        self._anchor_objective_id = package.objective.id      # S209: your own raid is built even when the raid it goes in behind is not in the mission
         kept_ruins = []
         for ruin_package in ruins:
             if _has_untagged_flight(ruin_package):

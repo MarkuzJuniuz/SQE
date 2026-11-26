@@ -1077,7 +1077,8 @@ class RaidSpawns:
             return
         # S183 rule 2: wave 2 of a layered SEAD raid is built only when wave 1 is in this mission (`_layer_present`) and flown (`_layer_gone`: wave 1 had already struck); the war sim resolves it then
         layer_of = ex.get("layer_of") or ex.get("flank_after")          # S186: a flank raid waits for its SEAD raid like a second layer does
-        if layer_of and (layer_of in getattr(self, "_layer_gone", set()) or layer_of not in getattr(self, "_layer_present", {layer_of})):
+        your_own = package.objective.id == getattr(self, "_anchor_objective_id", None)      # S209: the raid you were sent to stop is never left out (you would take off to nothing)
+        if layer_of and not your_own and (layer_of in getattr(self, "_layer_gone", set()) or layer_of not in getattr(self, "_layer_present", {layer_of})):
             self.warns.append(f"package #{package.number}: the second SEAD wave is not in this mission (wave 1 is not flown in it)")
             return
         self._bend_exempt = self._layer_exempt_fields(ex)        # S183 rule 2: the field of the outer Patriot a second wave strips past: the route does not bend round it (that crossing is the point of the layers); every other live Patriot's ring is still avoided
@@ -1448,6 +1449,18 @@ class RaidSpawns:
         lat_ = [(i_ - (len(bent_) - 1) / 2.0) * RAID_ECHELON_NM if len(bent_) > 1 else 0.0 for i_ in range(len(bent_))]         # v0.41.296: echelon, centred on the route
         bsh_, bpa_, bLk_, pk_seen = [], [], [], {}
         runway_points = []
+        if kh59_r and aim.startswith("bsam_"):              # S209: a Kh-59M raid on a SAM site: the flights aim at its radars first, then its launchers
+            site_group = (self.base_ad.get(cvb.id) or {}).get(aim.rsplit("_", 1)[1])
+            if site_group is not None:
+                radars = []
+                others = []
+                for site_unit in site_group.units:
+                    name = str(site_unit.type)
+                    if name == "Patriot str" or name.startswith("Hawk") and name.endswith((" sr", " tr", " cwar", " pcp")):
+                        radars.append((site_unit.position.x, site_unit.position.y))
+                    else:
+                        others.append((site_unit.position.x, site_unit.position.y))
+                runway_points = radars + others
         if kh59_r and not aim:                              # S209: a Kh-59M runway raid: one aim point along the runway for each bomber group
             raided_airport = self.t.airports.get(cvb.airport) if cvb.airport else None
             if raided_airport is not None:
