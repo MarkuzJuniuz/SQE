@@ -163,6 +163,7 @@ AAM_WEAPONS = 264241152       # DCS weapon flags: air-to-air missiles (a Fighter
 # Not guns and not air-to-air missiles, so a flight goes home once its air-to-ground load is gone.
 A2G_WEAPONS = 14 | 240 | 768 | 4161536 | 30720
 # Air-to-ground jets whose loadouts carry radar missiles (AIM-120, AIM-54; checked in loadouts.py): after the attack they may shoot back.
+ECM_READ = {"F-16C", "A-10C", "A-10C2"}      # jets whose jammer `data/sqe_ecm_export.lua` can read (both A-10C keys fly DCS's A-10C II)
 SHOOTS_BACK = {"F-16C", "FA-18C", "F-14BU", "F-14B", "F-15E"}
 RELIEF_BACK_NM = 12            # v0.41.78: a relief sortie appears this far behind its station (toward its base) and flies up to it (judgment call)
 SPAWN_SEP_M = 2000            # airborne flights never appear closer than this to each other (same height band, same minute)
@@ -392,7 +393,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._units_pre_wrecks = 0                                     # S139a: `_counts()["units"]` just before the wrecks
         self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
         self._raid_n = {"bu": 0, "eu": 0, "bg": 0, "sw": 0, "es": 0}            # S47: raid unit numbers (bomber, escort) and group numbers (bomber, sweep, escort), one count per mission so folded raids never repeat a name
-        self._ecm_player = ""                           # v0.41.210: how the hook learns the player's jammer: "live" (F-16C lamp via Export.lua), "f10" (FC3 jet), "" (old attack-leg window)
+        self._ecm_player = ""                           # v0.41.210: how the hook learns the player's jammer: "live" (F-16C lamp, A-10C II window, via Export.lua), "f10" (FC3 jet), "" (old attack-leg window)
         self._raid_xy = []                              # v0.41.220: where each raid scramble's raiders are going (the supply circle runs round these too)
         self._bld_xy = {}                   # v0.41.309: supply site id -> where its buildings stand (`_place_buildings`), the Standoff Strike aims at them
         self._ramp_tasks = []               # v0.41.329: the counter-air Bombing tasks made before the jets spawn; `_retarget_ramp_tasks` re-aims them
@@ -2059,8 +2060,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             p1_ = float(next((w.eta_s for w in wps if w.name == "EGR"), (tot_s if tot_s is not None else push_s) + 900))
             for un_ in names:
                 self._jamw[un_] = (p0_, p1_)
-            if not o.player_is_ai:                                            # v0.41.210 (XO): read the player's own jammer: the F-16C's lamp (Export.lua flag file), or F10 ECM ON / OFF for an FC3 jet
-                self._ecm_player = "live" if f.aircraft == "F-16C" else ("f10" if AIRCRAFT[f.aircraft].fc3 else "")
+            if not o.player_is_ai:                                            # v0.41.210 (XO): read the player's own jammer: the F-16C's lamp or the A-10C II's window (Export.lua flag file), or F10 ECM ON / OFF for an FC3 jet
+                self._ecm_player = "live" if f.aircraft in ECM_READ else ("f10" if AIRCRAFT[f.aircraft].fc3 else "")
         if not f.tag and not f.is_player and (self._jams.get(names[0]) or f.aircraft in NATIVE_ECM):
             run_t0 = float(push_s)                                            # the jammers run for the attack leg only: PUSH to EGR
             run_t1 = float(next((w.eta_s for w in wps if w.name == "EGR"), (tot_s if tot_s is not None else push_s) + 900))
