@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.681, F-14 RIO Navigation (experimental)
+With the script installed, Jester works your F-14B or F-14B(U) steerpoints through the flight, switching off on TGT for a strike, and the Turnpoints menu now serves the B(U) too. The Settings entry is now F-14 RIO Navigation: click Update if you had the Turnpoints script.
+
 ## v0.41.680, red's stand-off missiles reach your SAM sites and troops
 Red now sends Kh-59M missiles at your HAWK and Patriot sites, behind its anti-radiation raid or on their own, and at your troops in contact, at every level. Fixed: a raid that went in behind another one could be missing from the mission when it was the one you flew against.
 

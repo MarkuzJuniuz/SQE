@@ -31,7 +31,7 @@ from . import pydcs_patch
 from . import threatmap as tm
 from . import samtier
 from . import f14_scheme
-from . import turnpoints
+from . import rio_nav, turnpoints
 from .aircraft import AIRCRAFT, F14_KEYS, JDAM_HOGS
 from .words import strength_word
 
@@ -817,9 +817,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                                      "note": "Package ground target (navigation target point)" if code == "ST" else "Hostile area: nearest SAM site (navigation target point)"})
 
         turnpoint_line = ""
-        if self.o.f14_turnpoints and tp_points and self._f14ab_player(pf):
-            self._add_turnpoints_menu(pf, rows, tp_points)
-            turnpoint_line = "F10 > Other > Turnpoints: Jester types a TP into the FP. He is slow: pick it early."
+        if self.o.f14_turnpoints and pf is not None and pf.is_player and not self.o.player_is_ai and pf.aircraft in ("F-14B", "F-14BU"):
+            turnpoint_line = self._add_rio_navigation(pf, rows, tp_points, leave_s)
+            if self.o.f14_script_old:
+                self.warns.append("F-14 RIO Navigation: the installed script is an older copy and will not work your waypoints. Update it in Settings > DCS integration.")
 
         # ---- codes, fuel, text, hook, kneeboard -----------------------------------------------------------------------------
         mode3 = self._mode3(package, pf)
@@ -3025,19 +3026,66 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         s = sum(leg_seconds(a, b) for a, b in zip(pw, pw[1:])) - sum(leg_seconds(a, b) for a, b in zip(straight, straight[1:]))
         return f"Round SAM rings: {n} turnpoint{'s' if n > 1 else ''} (TP), +{nm:.0f} nm, +{s / 60:.0f} min vs straight." if nm >= 1 else ""
 
-    def _add_turnpoints_menu(self, pf, rows, points) -> None:
-        """F10 > Other > Turnpoints for the player's plain F-14B: one trigger zone for each turnpoint (Jester reads the coordinates from `WaypointZoneNN`)
-        and the mission script that writes the request the export script on the player's PC acts on (`turnpoints`)."""
+    def _add_rio_navigation(self, pf, rows, turnpoint_points, leave_s) -> str:
+        """S210: F-14 RIO Navigation for the player's F-14B / F-14B(U): F10 > Other > "Work the waypoints" (on at the start) and "Turnpoints", and the mission script that runs them (`rio_nav`). Which slot or
+        waypoint number each point has is read from the jet's own points as they were built. -> the line for the kneeboard."""
         group = None
         for flight, flight_group in self.flight_groups:
             if flight is pf:
                 group = flight_group
-        for number, point in enumerate(points[:turnpoints.MAX_ZONES], 1):
-            row = rows[point["index"]]
-            self.m.triggers.add_triggerzone(self._pt(row[1], row[2]), radius=500, hidden=False, name=turnpoints.zone_name(number))
-        rule = triggers.TriggerStart(comment="SQE F-14B turnpoints menu")
-        rule.add_action(action.DoScript(String(turnpoints.menu_lua(group.id, points))))
+        if group is None:
+            return ""
+        card_rows = []
+        for row in rows:
+            card_rows.append((row[0], row[1], row[2], row[3]))
+        labels = {}
+        for number, point in enumerate(turnpoint_points, 1):
+            labels[point["index"]] = point["label"]
+        points = []
+        for point in group.points:
+            points.append((point.position.x, point.position.y))
+        bu = pf.aircraft == "F-14BU"
+        zones = []
+        turnpoint_zones = {}
+        if bu:
+            legs = rio_nav.bu_legs(card_rows, labels, points)
+        else:
+            for number, point in enumerate(turnpoint_points[:rio_nav.MAX_ZONES], 1):
+                turnpoint_zones[point["index"]] = number
+                row = card_rows[point["index"]]
+                zones.append((number, row[1], row[2]))
+            nav_points = []
+            for nav in group.nav_target_points:
+                nav_points.append((str(nav.text_comment), nav.position.x, nav.position.y))
+            legs, more_zones = rio_nav.plain_legs(card_rows, labels, points, nav_points, turnpoint_zones)
+            zones += more_zones
+        if not legs:
+            return ""
+        items = []
+        number_by_row = {}
+        for leg in legs:
+            number_by_row[leg["row"]] = leg["num"]
+        for number, point in enumerate(turnpoint_points[:rio_nav.MAX_ZONES], 1):
+            # the entry is the same words in every mission ("Turnpoint 1"), so a voice command can be bound to it; the leg changes and goes in the message
+            item = {"label": "Turnpoint %d" % number, "note": "%s, %s" % (point["label"], point["leg"])}
+            if bu:
+                item["num"] = number_by_row.get(point["index"])
+                if item["num"] is None:
+                    continue
+            else:
+                item["zone"] = turnpoint_zones[point["index"]]
+            items.append(item)
+        for number, x, y in zones:
+            self.m.triggers.add_triggerzone(self._pt(x, y), radius=500, hidden=False, name=rio_nav.zone_name(number))
+        strike = pf.role == Role.STRIKE          # a DEAD package's bombers fly the STRIKE role too (XO: a DEAD run is a strike)
+        script = rio_nav.mission_script(group.id, group.units[0].name, bu, strike, legs, items, leave_s, self._exit_s)
+        rule = triggers.TriggerStart(comment="SQE F-14 RIO navigation")
+        rule.add_action(action.DoScript(String(script)))
         self.m.triggerrules.triggers.append(rule)
+        line = "F10 > Other > Work the waypoints: Jester sets your steerpoint through the flight (on at the start)."
+        if items:
+            line += " Turnpoints: pick a TP and he sets it."
+        return line
 
     def _f14ab_player(self, f) -> bool:
         """Your own flight in the plain F-14B (not the all-AI test, not the B(U), whose X-name scheme stays): the jet has three numbered waypoints."""
