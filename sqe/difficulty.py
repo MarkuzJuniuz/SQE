@@ -53,7 +53,7 @@ class Difficulty:
     sam_rebuild: float = 0.04            # nightly chance (x Red supply) that a destroyed SAM site is replaced (sams.py)
     sam_scoot: float = 0.30              # nightly chance that a hurt mobile SAM site moves
     raid_size: tuple = (2, 2)            # Su-24M in a raid: drawn between these (never more than the wing has)
-    raid_wave: float = 0.0               # v0.41.155 (red zerg): chance that a day is a massed-wave day: that day's raids are `raid_wave_mult` times bigger (judgment call)
+    raid_wave: float = 0.0               # S208: above 0 = red masses raids when it has the jets saved (`raids.wanted_size`); the value itself is no longer a chance. Was: v0.41.155 (red zerg): chance that a day is a massed-wave day: that day's raids are `raid_wave_mult` times bigger (judgment call)
     raid_wave_mult: float = 1.5
     red_supply_strikes: int = 1          # v0.41.155: background strikes red tries a skip day on our depots and fuel (ground.supply_round; judgment call)
     red_surge: float = 0.0               # v0.41.155: red's push, attacks and raids grow by this much for each day beyond SURGE_GRACE_DAYS since your squadron last flew (ground.surge; judgment call)

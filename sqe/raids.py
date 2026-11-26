@@ -99,7 +99,7 @@ SEAD_PATRIOT_WEIGHT = 2.0     # S64 (XO 2026-11-12, run 21-39-54: a raid went at
 SEAD_HAWK_PACKAGES = 2          # S44 (XO 2026-11-12): a HAWK gets two packages too (a Patriot below full strength, or whatever is left of one, still one)
 SEAD_SITE_HIT = 0.15          # ...and a blue SAM site loses this much health per SEAD jet that gets through (a launch of 3 jets takes 0.45 off a HAWK, 6 take 0.9 off a Patriot; judgment call, tuned with the probe `.private/probes/s36`: 0.08 never opened a field, 0.25 wiped the SAMs by day 10, 0.15 sags them and reopens fields)
 KH59_RAIDS = True             # S48 (XO musing 2026-11-12, probe flown 2026-11-12): red's Su-24M raids on an UNCOVERED supply site or garrison fire the Kh-59M from about 50 nm and turn for home (`plan_raid` draws it, `raid_spawns` builds it, `war._resolve_raid` resolves it). False = every raid as S46 left it. Both the plan and the spawner read this module attribute at call time
-KH59_SHARE = {1: 0.0, 2: 0.3, 3: 0.5}   # ...the chance such a raid is a Kh-59M raid, by level (judgment call, XO may change; measured in S48 step 6). L1: none (insurgents have no standoff weapons, and `raid_banzai` raids never are). L2: the Su-24M (24 jets). L3: the Su-34 (60 jets) carries it. Public doctrine: the Kh-59 family is the Russian air force's standoff missile against fixed targets (sources in loadouts.KH59_PER_JET)
+KH59_BY_LEVEL = {1: False, 2: True, 3: True}   # S208 (XO 2026-11-25: no dice): at Levels 2 and 3 a supply-site or garrison raid is a Kh-59M raid whenever a wing that carries it can field it (standoff keeps the jets alive; was a 30 % / 50 % chance). L1: none (insurgents have no standoff weapons)
 KH59_KINDS = ("supply", "garrison")   # ...only these fixed targets (not the runway, troops in contact, SAM sites or the carrier)
 KH59_HIT_EQUIV = 1.0          # ...a Kh-59M jet that launches counts as this many free-fall-bomber jets in `hit()` on a supply site or garrison (judgment call: two 320 kg precision missiles are worth about one jet's load of unguided bombs; red's gain is the missing losses and the safe launch point, not a bigger hit)
 ASSET_HIT = 0.20              # health a supply site or garrison loses per aircraft that gets through
@@ -121,12 +121,15 @@ TU_HIT_EQUIV = 2.0            # aircraft-equivalents one Tu-22M3 that gets throu
                               # few fall on rubble (`eff` already halves them past four); two Tu-22M3 through = 4 = 80% of a site (a second strike finishes it)
 
 
-def wave_mult(state, d) -> float:
-    """v0.41.155 (red zerg): 1.0 on an ordinary day, the level's `raid_wave_mult` on a massed-wave day (chance `raid_wave`; seeded from the campaign and the day)."""
-    p = float(getattr(d, "raid_wave", 0.0))
-    if p <= 0.0:
-        return 1.0
-    return float(getattr(d, "raid_wave_mult", 1.5)) if random.Random(f"{state.campaign_id}:{state.day}:wave").random() < p else 1.0
+def wanted_size(d, credit: float) -> int:
+    """The jets a raid asks for. S208 (XO 2026-11-25: no dice): red masses a raid (`raid_wave_mult` x the typical size) when it has saved up the jets for it, that is when its raid
+    credit covers the massed size; levels whose `raid_wave` is 0 never mass. Red does not hold smaller raids back to save for a big one (judgment call: S207b had only just stopped
+    red sitting idle). The wing still limits what flies (`plan_raid`). Before: a massed-wave day drawn with chance `raid_wave`."""
+    typical = typical_size(d)
+    massed = typical * float(getattr(d, "raid_wave_mult", 1.5))
+    if float(getattr(d, "raid_wave", 0.0)) > 0.0 and credit >= massed:
+        return int(round(massed))
+    return int(round(typical))
 
 
 def eff(k: int) -> float:
@@ -566,7 +569,7 @@ def free_attack_jets(state, turn: int) -> int:
 
 def raid_income(state, d, turn: int) -> float:
     """S37 (replaces the per-turn dice `turn_rate`): the jets of raid credit red earns this turn = `RAID_SHARE` of its free attack jets, times the idle surge (v0.41.155: red raids more while your
-    squadron stands down) and `RED_RAID_NIGHT` on a night turn. A worn-down red (fewer free attack jets) earns less by itself. (The massed-wave day, `wave_mult`, makes the raids themselves bigger, in `plan_raid`.)"""
+    squadron stands down) and `RED_RAID_NIGHT` on a night turn. A worn-down red (fewer free attack jets) earns less by itself. (The massed-wave day, `wanted_size`, makes the raids themselves bigger, in `plan_raid`.)"""
     from . import ground as _gr
     lvl = max(1, min(3, int(getattr(d, "level", 1))))
     return RAID_SHARE[lvl] * free_attack_jets(state, turn) * _gr.push_factor(state, d) * (RED_RAID_NIGHT if clock.is_night_turn(turn) else 1.0)
@@ -845,7 +848,7 @@ def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
     return plan
 
 
-def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool = False):
+def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool = False, credit: float = 0.0):
     """Book one raid out of the turn's free red jets and plan it: the wing and type that fly it, the raiders (`bombers`), the escort wing and type with the escorts, the bearing it arrives on. v0.41.341 (Phase 5b): this was done
     at build time (`PackageBuilder._land_raid_plan`) from the wings' serviceable jets, and a wing that could not reach any more by then left the package with no plan (the KeyError in `raid_spawns._raid_axis`); now the draw,
     the booking and the package agree. -> {extras of the package, "jets": [[squadron id, jets, "raid" | "esc"]]}, or None when no wing can field it (then nothing is booked and there is no raid). S36b (XO 2026-11-11):
@@ -854,11 +857,11 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool 
         return _plan_sead(state, d, base, aim, oid, turn)
     ax, ay = aim_xy(state, aim, base)
     rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:raid")
-    want = int(round(typical_size(d) * wave_mult(state, d)))                              # v0.41.155: a massed-wave day
+    want = wanted_size(d, credit)                                                          # S208: massed when red has saved up the jets
     kh59 = False                                                                            # S48: a Kh-59M raid (fixed target, never covered: `reach_for` is None under cover; never Level 1's banzai raids)
-    share_ = KH59_SHARE.get(max(1, min(3, int(getattr(d, "level", 3)))), 0.0)
+    standoff_ = KH59_BY_LEVEL.get(max(1, min(3, int(getattr(d, "level", 3)))), False)
     r = None
-    if KH59_RAIDS and share_ > 0 and not ignore_cover and aim_kind(aim) in KH59_KINDS and not getattr(d, "raid_banzai", False)             and random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:kh59").random() < share_:      # a NEW stream: `rnd` is not touched, so a plan that is not a Kh-59M raid is what S46 made
+    if KH59_RAIDS and standoff_ and not ignore_cover and aim_kind(aim) in KH59_KINDS and not getattr(d, "raid_banzai", False):
         r = reach_for(state, aim_kind(aim), ax, ay, d=d, want=want, only=bomber_types())       # the Su-25 cannot carry it: no bomber wing that can field it, the ordinary draw below
         kh59 = r is not None
     if r is None and ignore_cover:
@@ -1146,7 +1149,7 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
         o = raid_objective(base, aim, describe(state, base, aim))
         # v0.41.304 (XO 2026-11-05: "no more hidden ones"): an unwarned raid is listed like the others (id ...-s<n>, the package reads "no warning"); it used to be only a count settled overnight
         o.id = f"obj-t{turn}-{'s' if unwarned else 'r'}{len(warned) + 1}"
-        bk = plan_raid(state, d, base, aim, o.id, turn)
+        bk = plan_raid(state, d, base, aim, o.id, turn, credit=credit)
         if bk is None:
             if unwarned:
                 surprise += 1                                # no wing can field it: it still happens, settled overnight as before
@@ -1268,7 +1271,7 @@ def overnight(state, d, rng: random.Random) -> list:
             p_stop = min(0.95, p_stop + blue_barcap.PATROL_STOP)
         from . import tempo as _tp
         p_stop = min(0.95, p_stop + TEMPO_STOP_SHARE * _tp.get(state, "AIR"))      # v0.41.171: the player's air work taught the alert pairs (Tactical Edge off: 0)
-        n_ = sead_jets(state, aim, d) if aim_kind(aim) == "sam" else max(2, int(round(typical_size(d) * wave_mult(state, d))))
+        n_ = sead_jets(state, aim, d) if aim_kind(aim) == "sam" else wanted_size(d, 0.0)
         if n_ <= 4:                                              # a small raid is settled as one lump (all stopped or all through), as before v0.41.155
             if rng.random() < p_stop:
                 k = wing.lose(r[2], rng.randint(1, 3 + round(covering_ad(state, x, y))))
