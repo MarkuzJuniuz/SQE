@@ -232,6 +232,7 @@ fragmentation bomblets each, same pylons); on a supply site FAB-500 bombs on tho
 satellite-guided KAB-500S is planned for supply sites, a Lutorin pull-forward, but the Su-24M's weapon list in pydcs does not
 offer it yet, so the supply kit is still the FAB one.) On Syria the Su-17M4 carries four BetAB-500ShP on a runway, four RBK-500
 (268 PTAB-1M each) on troops and four FAB-500 on a supply site. Red's front-line strike on a blue column carries the troops kit.
+At Levels 2 and 3 a supply-site or garrison raid carries Kh-59M stand-off missiles whenever a bomber wing that has them can reach.
 Kh-59M raids, the Su-25's eight FAB-500 and the Tu-22M3 (three Kh-22 on the carrier raid, four racks of nine OFAB-250 on a land
 strike: DCS's Kh-22 is an anti-ship missile and the AI does not fire it at land) are as before. Red's SEAD packages fire the
 Kh-31P (50 nm), as described below; red's Tu-22M3 fields (Mozdok, Damascus, Bassel Al-Assad) are repaired in two
