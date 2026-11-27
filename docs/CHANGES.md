@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.718, red's carrier raid flies once its runway is repaired
+When blue has cut the Tu-22M3 fields, red no longer sits the whole day out: it plans its carrier raid for the first turn a bomber field is open again, and a staged raid is called off only if no turn of its day opens. More carrier raids reach the fleet at Levels 2 and 3 in the Caucasus.
+
 ## v0.41.717, no red site ends up in the sea
 A red SAM site that pulls back or moves after a hit, and the guard that goes with it, now always lands on dry ground. One road supply spot on the Caucasus coast that lay in the water is no longer used. New Caucasus campaigns lay out their road supply sites a little differently.
 
