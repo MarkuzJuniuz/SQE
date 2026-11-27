@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.711, ground columns stay out of the sea
+No column starts in the sea or drives across it: every straight cross-country leg is checked against the water map. Where the straight way in from our side is water, the friendly task force and its JTAC come round along the coast instead, as far from the enemy as before.
+
 ## v0.41.710, shipped map data only, no terrain scans
 SQE now reads only the map data that ships with it, with a new land and water map of the Caucasus and Syria; a terrain scan in your Saved Games folder is no longer used.
 Sites are placed against the real coast and ground columns drive on the roads for everyone. A campaign you already have may move a few sites back from the shore when you open it.
