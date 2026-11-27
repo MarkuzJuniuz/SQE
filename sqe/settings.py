@@ -314,10 +314,6 @@ def f14_turnpoints_state(saves: str) -> str:
     return _script_state(_F14_TURNPOINTS, saves)
 
 
-def f14_turnpoints_status(saves: str) -> str:
-    return _script_status(f14_turnpoints_state(saves))
-
-
 def f14_turnpoints_installed(saves: str) -> bool:
     """An older copy still counts: the mission only has to know that something on this PC will read its request."""
     return f14_turnpoints_state(saves) in ("ok", "old")
@@ -335,10 +331,6 @@ def f14_radar_state(saves: str) -> str:
     return _script_state(_F14_RADAR, saves)
 
 
-def f14_radar_status(saves: str) -> str:
-    return _script_status(f14_radar_state(saves))
-
-
 def f14_radar_installed(saves: str) -> bool:
     """An older copy still counts: the mission only has to know that something on this PC will read its request."""
     return f14_radar_state(saves) in ("ok", "old")
@@ -350,6 +342,50 @@ def install_f14_radar(saves: str) -> tuple[bool, str]:
 
 def remove_f14_radar(saves: str) -> tuple[bool, str]:
     return _remove_script(_F14_RADAR, saves)
+
+
+# S223: "RIO Enhancements" = the two F-14 scripts (navigation and radar), installed and removed as one. The mission builder still looks at each on its own, so a PC with only one of
+# them keeps that one working until Install is clicked again.
+_RIO_SCRIPTS = (_F14_TURNPOINTS, _F14_RADAR)
+
+
+def rio_state(saves: str) -> str:
+    """The two scripts together, in `_script_state`'s words: 'partial' = something is missing, 'old' = all there but not SQE's current copy."""
+    states = []
+    for script in _RIO_SCRIPTS:
+        states.append(_script_state(script, saves))
+    if "nofolder" in states:
+        return "nofolder"
+    if states.count("none") == len(states):
+        return "none"
+    if states.count("ok") == len(states):
+        return "ok"
+    if "none" in states or "partial" in states:
+        return "partial"
+    return "old"
+
+
+def rio_status(saves: str) -> str:
+    return _script_status(rio_state(saves))
+
+
+def install_rio(saves: str) -> tuple[bool, str]:
+    for script in _RIO_SCRIPTS:
+        ok, message = _install_script(script, saves)
+        if not ok:
+            return ok, message
+    text = "Installed. Restart DCS (or start a new flight) to load it."
+    if (Path(saves) / "Scripts" / "Export.lua.sqe.bak").exists():
+        text += " Export.lua backup: Export.lua.sqe.bak."
+    return True, text
+
+
+def remove_rio(saves: str) -> tuple[bool, str]:
+    for script in _RIO_SCRIPTS:
+        ok, message = _remove_script(script, saves)
+        if not ok:
+            return ok, message
+    return True, "Removed."
 
 
 # ---- MissionScripting.lua: patched while SQE is open, restored on exit -------------------------------------------------

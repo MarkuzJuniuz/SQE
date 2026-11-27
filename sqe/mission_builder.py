@@ -827,13 +827,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if self.o.f14_turnpoints and pf is not None and pf.is_player and not self.o.player_is_ai and pf.aircraft in ("F-14B", "F-14BU"):
             turnpoint_line = self._add_rio_navigation(pf, rows, tp_points, leave_s)
             if self.o.f14_script_old:
-                self.warns.append("F-14 RIO Navigation: the installed script is an older copy and will not work your waypoints. Update it in Settings > DCS integration.")
+                self.warns.append("RIO Enhancements: the installed navigation script is an older copy and will not work your waypoints. Update it in Settings > DCS integration.")
 
         radar_line = ""
         if self._radar_names:
             radar_line = self._add_rio_radar(pf)
             if self.o.f14_radar_old:
-                self.warns.append("F-14 RIO Radar: the installed script is an older copy. Update it in Settings > DCS integration.")
+                self.warns.append("RIO Enhancements: the installed radar script is an older copy. Update it in Settings > DCS integration.")
 
         # ---- codes, fuel, text, hook, kneeboard -----------------------------------------------------------------------------
         mode3 = self._mode3(package, pf)
@@ -1239,7 +1239,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if not self._radar_names:
             return usual
         if self._radar_named >= rio_radar.MAX_NAMES:
-            warning = "F-14 RIO Radar can lock only the first %d enemy aircraft of this mission." % rio_radar.MAX_NAMES
+            warning = "RIO Enhancements: Jester can lock only the first %d enemy aircraft of this mission." % rio_radar.MAX_NAMES
             if warning not in self.warns:
                 self.warns.append(warning)
             return usual
@@ -1247,7 +1247,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         return rio_radar.target_name(self._radar_named)
 
     def _add_rio_radar(self, pf) -> str:
-        """S219: F10 > Other > RIO Radar for the player's F-14 and the mission script that runs it (`rio_radar`). -> the line for the kneeboard."""
+        """S219: the radar calls in F10 > Other > RIO Enhancements for the player's F-14 and the mission script that runs them (`rio_radar`). -> the line for the kneeboard."""
         group = None
         for flight, flight_group in self.flight_groups:
             if flight is pf:
@@ -1258,7 +1258,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         rule = triggers.TriggerStart(comment="SQE F-14 RIO radar")
         rule.add_action(action.DoScript(String(script)))
         self.m.triggerrules.triggers.append(rule)
-        return "F10 > Other > RIO Radar: Hunt Bandit locks one, Hunt Next another, Hunt Off lets go."
+        return "F10 > Other > RIO Enhancements: Hunt Bandit locks a bandit, Hunt Next another, Hunt Off lets go."
 
     def _note_jam(self, u) -> None:
         """Remember what jamming equipment this unit has (ecm.py) for the hook's missile roll."""
@@ -3091,7 +3091,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         return f"Round SAM rings: {n} turnpoint{'s' if n > 1 else ''} (TP), +{nm:.0f} nm, +{s / 60:.0f} min vs straight." if nm >= 1 else ""
 
     def _add_rio_navigation(self, pf, rows, turnpoint_points, leave_s) -> str:
-        """S210: F-14 RIO Navigation for the player's F-14B / F-14B(U): F10 > Other > "RIO Navigation" ("Your Nav" / "My Nav"; Jester has the nav at the start), on the plain F-14B also "Turnpoints", and the mission script that runs them (`rio_nav`). Which slot or
+        """S210: F-14 RIO Navigation for the player's F-14B / F-14B(U): F10 > Other > RIO Enhancements ("Your Nav" / "My Nav"; Jester has the nav at the start), on the plain F-14B also "Turnpoints", and the mission script that runs them (`rio_nav`). Which slot or
         waypoint number each point has is read from the jet's own points as they were built. -> the line for the kneeboard."""
         group = None
         for flight, flight_group in self.flight_groups:
@@ -3137,7 +3137,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         rule = triggers.TriggerStart(comment="SQE F-14 RIO navigation")
         rule.add_action(action.DoScript(String(script)))
         self.m.triggerrules.triggers.append(rule)
-        line = "F10 > Other > RIO Navigation: Jester has the nav from the start. My Nav takes it, Your Nav hands it back."
+        line = "F10 > Other > RIO Enhancements: Jester has the nav from the start. My Nav takes it, Your Nav hands it back."
         if items:
             line += " Turnpoints: pick a TP and he sets it."
         return line

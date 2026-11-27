@@ -8,7 +8,7 @@ F-14B(U) sequencing (S210b): between the points where Jester waits, the jet is l
 where the flight is. At a waiting point (the marshal until its leave time, PUSH until push time, a station until its exit time, TGT on a strike, home base) the jet is held in MANUAL. Each request ends with "HOLD:n/n/n", the waiting
 points' waypoint numbers, so the export script can switch to manual the moment the jet steps onto one.
 
-The player's calls are F10 > Other > RIO Navigation: "Your Nav" (Jester works the waypoints, as from the mission start) and "My Nav" (he stops). Home base (the RTB leg) ends his work: he goes
+The player's calls are in F10 > Other > RIO Enhancements: "Your Nav" (Jester works the waypoints, as from the mission start) and "My Nav" (he stops). Home base (the RTB leg) ends his work: he goes
 direct to it, holds the F-14B(U) in manual and hands the nav back. "Your Nav" said while he already has it orders the current point again.
 The F-14B(U) has no Turnpoints menu: its points are all on Jester's own wheel.
 
@@ -27,7 +27,14 @@ from __future__ import annotations
 
 REQUEST_FILE = "SQE_turnpoints.req"       # the same file as the Turnpoints feature before it: the installed script's Remove button deletes it
 OVERRIDE_FILE = "SQE_turnpoints.ovr"
-MENU_TITLE = "RIO Navigation"
+# S223: RIO Enhancements. Both RIO scripts (navigation here, radar in `rio_radar`) put their calls in this one menu; whichever runs first makes it.
+MENU_TITLE = "RIO Enhancements"
+MENU_LUA = """SQE_RIO_MENUS = SQE_RIO_MENUS or {}
+if not SQE_RIO_MENUS[GROUP] then
+  SQE_RIO_MENUS[GROUP] = missionCommands.addSubMenuForGroup(GROUP, "__MENU_TITLE__")
+end
+local rio_menu = SQE_RIO_MENUS[GROUP]
+"""
 YOUR_NAV_TITLE = "Your Nav"
 MY_NAV_TITLE = "My Nav"
 TURNPOINTS_TITLE = "Turnpoints"
@@ -501,11 +508,10 @@ if can_write() then
   write_file("__REQUEST__", "")
   write_file("__OVERRIDE__", "")
 end
-local nav_menu = missionCommands.addSubMenuForGroup(GROUP, "__MENU_TITLE__")      -- made first, so it is listed above Turnpoints
-missionCommands.addCommandForGroup(GROUP, "__YOUR_NAV__", nav_menu, your_nav)
-missionCommands.addCommandForGroup(GROUP, "__MY_NAV__", nav_menu, my_nav)
+__MENU_LUA__missionCommands.addCommandForGroup(GROUP, "__YOUR_NAV__", rio_menu, your_nav)
+missionCommands.addCommandForGroup(GROUP, "__MY_NAV__", rio_menu, my_nav)
 if #turnpoints > 0 then
-  local menu = missionCommands.addSubMenuForGroup(GROUP, "__TURNPOINTS_TITLE__")
+  local menu = missionCommands.addSubMenuForGroup(GROUP, "__TURNPOINTS_TITLE__", rio_menu)
   local on_page = 0
   for _, item in ipairs(turnpoints) do
     if on_page == __PAGE__ then
@@ -537,7 +543,7 @@ def mission_script(group_id: int, unit_name: str, bu: bool, strike: bool, legs: 
     values = {"__LEGS__": "\n".join(leg_lines), "__TURNPOINTS__": "\n".join(turnpoint_lines), "__GROUP__": str(group_id), "__UNIT__": _lua_value(unit_name), "__BU__": _lua_value(bu),
               "__STRIKE__": _lua_value(strike), "__LEAVE__": _lua_value(None if leave_s is None else int(leave_s)), "__EXIT__": _lua_value(None if exit_s is None else int(exit_s)),
               "__REQUEST__": REQUEST_FILE, "__OVERRIDE__": OVERRIDE_FILE, "__MENU_TITLE__": MENU_TITLE, "__YOUR_NAV__": YOUR_NAV_TITLE, "__MY_NAV__": MY_NAV_TITLE, "__TURNPOINTS_TITLE__": TURNPOINTS_TITLE, "__PAGE__": str(MENU_PAGE)}
-    script = _SCRIPT
+    script = _SCRIPT.replace("__MENU_LUA__", MENU_LUA)          # first: the menu text has a mark of its own
     for mark, value in values.items():
         script = script.replace(mark, value)
     return script
