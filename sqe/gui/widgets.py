@@ -167,9 +167,10 @@ class MapView(QWidget):
                     p.setPen(QPen(QColor(255, 93, 108, int(60 + 110 * h)), 1)); p.setBrush(QBrush(QColor(255, 93, 108, int(8 + 18 * h))))
                     p.drawEllipse(c, r, r)
             from ..raids import PATRIOT_NM, HAWK_NM
+            from .. import battery_parts
             for k, a in (getattr(st, "blue_sams", None) or {}).items():
                 rng = PATRIOT_NM if k.endswith("_pat") else HAWK_NM if k.endswith("_hawk") else 0
-                if rng and not a.destroyed:
+                if rng and battery_parts.can_fire(a):            # S216: no ring for a battery that cannot fire
                     c = P(a.x, a.y); r = rng * 1852 * sc; h = max(0.25, min(1.0, a.health))
                     p.setPen(QPen(QColor(90, 160, 255, int(60 + 110 * h)), 1)); p.setBrush(QBrush(QColor(90, 160, 255, int(8 + 18 * h))))
                     p.drawEllipse(c, r, r)

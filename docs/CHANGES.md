@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.699, your batteries remember what they lost
+A Patriot or HAWK that loses its radar or launchers stays without them: the next mission is built that way. Without a radar it cannot fire until a replacement arrives (5 to 7 days); other parts take about a day. The war's own results take parts the same way.
+
 ## v0.41.698, raids are scored from what they hit
 In a mission you fly, a red raid now costs you what its target really lost: your air-defence units, supply buildings, garrison and troop vehicles. The debrief names what was destroyed. Before, it counted the bombers still alive, whatever they had done.
 

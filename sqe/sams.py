@@ -17,8 +17,10 @@ Blue:
 Everything draws on the campaign's own dice, so a night is repeatable from the same seed.
 """
 from __future__ import annotations
+import copy
 import math
 import random
+from . import battery_parts
 from .models import AssetKind
 from .words import strength_word
 
@@ -146,6 +148,7 @@ def ensure_blue_sams(state) -> bool:
             a = state.blue_sams[blue_site_id(b.id, k)]
             if a.x == b.x and a.y == b.y:
                 a.x, a.y = place_blue_site(state, b, k)
+            battery_parts.start_record(a, state.day)      # S216: a new or older save's Patriot / HAWK gets its parts record from its one figure
         _sync(state, b)
     return added
 
@@ -203,6 +206,10 @@ def shift_field(state, b, delta: float) -> None:
     for a in sites.values():
         if delta > 0 and a.destroyed:
             continue
+        if battery_parts.key_of(a):
+            if delta < 0:                       # S216: damage costs parts; they come back one by one (`blue_defence`), not as a share of a figure
+                battery_parts.set_share(a, battery_parts.share(a) + delta, state.day)
+            continue
         a.health = max(0.0, min(1.0, a.health + delta))
     _sync(state, b)
 
@@ -213,7 +220,10 @@ def set_field(state, b, value: float) -> None:
     sites = blue_sites(state, b)
     v = max(0.0, min(1.0, float(value)))
     for a in sites.values():
-        a.health = v
+        if battery_parts.key_of(a):
+            battery_parts.set_share(a, v, state.day)
+        else:
+            a.health = v
     _sync(state, b)
 
 
@@ -236,8 +246,15 @@ def hit_field(state, b, amount: float) -> list:
         if pool <= 0:
             break
         was = a.destroyed
-        take = min(a.health, pool)
-        a.health -= take; pool -= take
+        if battery_parts.key_of(a):
+            there = battery_parts.share(a)                 # S216: the damage is taken as parts, launchers first
+            take = min(there, pool)
+            if take > 0:
+                battery_parts.set_share(a, there - take, state.day)
+        else:
+            take = min(a.health, pool)
+            a.health -= take
+        pool -= take
         if a.destroyed and not was:
             gone.append(BLUE_SITES[k][1])
     _sync(state, b)
@@ -253,7 +270,16 @@ def blue_battery(b, state=None) -> dict:
     if not sites:
         dv = float(getattr(b, "defense", 0.0) or 0.0)
         return _battery(dv, dv, dv)
-    return _battery(sites["pat"].health if "pat" in sites else 0.0, sites["hawk"].health, sites["aaa"].health)
+    battery = _battery(sites["pat"].health if "pat" in sites else 0.0, sites["hawk"].health, sites["aaa"].health)
+    # S216: a battery with a parts record has what is standing, and nothing when it cannot fire
+    patriot = sites.get("pat")
+    if patriot is not None and patriot.lost_parts is not None:
+        battery["patriot_ln"] = 0
+        if battery_parts.can_fire(patriot):
+            battery["patriot_ln"] = battery_parts.standing(patriot).get("Patriot ln", 0)
+    if sites["hawk"].lost_parts is not None:
+        battery["hawk"] = battery_parts.can_fire(sites["hawk"])
+    return battery
 
 
 def _battery(pat: float, hawk: float, aaa: float) -> dict:
@@ -515,9 +541,20 @@ def blue_defence(state, d) -> list:
     sup = ground.supply(state, "blue") if ground.active(state) else 1.0
     fallen = set((state.ground or {}).get("fallen", [])) | ground.pending_fields(state)          # v0.41.244: a taken field's defences go up on the stage timetable
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in fallen]
+    radar_days = order_days(sup)                          # S216: a lost radar is an order from home; other parts take a day
+    lines = []
     for b in fields:
         shift_field(state, b, BLUE_REPAIR * sup)          # every standing site; a destroyed one waits for rebuild_blue_sites
-    return []
+        for a in blue_sites(state, b).values():
+            if battery_parts.key_of(a) and not a.destroyed:
+                arrived = battery_parts.repair(a, state.day, radar_days)
+                if arrived:
+                    what = "replacement parts"
+                    if "radar" in " ".join(arrived):
+                        what = "a replacement radar and parts"
+                    lines.append(f"{a.name}: {what} arrived")
+        _sync(state, b)
+    return lines
 
 
 def night(state, d, rng: random.Random) -> list:
@@ -551,7 +588,13 @@ def blue_asks(state, d, rng: random.Random) -> list:
         if a is None or b is None:
             continue
         if a.destroyed or a.health < o["health"]:
-            a.health = max(a.health, o["health"])
+            if not battery_parts.key_of(a):
+                a.health = max(a.health, o["health"])
+            elif o.get("parts") is not None:              # S216: the battery that arrives is the one that left, with what it was missing
+                a.lost_parts = copy.deepcopy(o["parts"])
+                battery_parts.refresh(a)
+            else:
+                battery_parts.set_share(a, o["health"], state.day)
             r["down"].pop(a.id, None)
             _sync(state, b)
             lines.append(f"A {BLUE_SITES[o['key']][0]} battery from {o['from_name']} arrived at {b.name}")
@@ -570,9 +613,13 @@ def blue_asks(state, d, rng: random.Random) -> list:
             continue
         f = donors[0][2]
         src = blue_sites(state, f)[k]
-        orders.append({"key": k, "to": b.id, "from": f.id, "from_name": f.name, "due": state.day + transfer_days(sup), "health": round(src.health, 2)})
+        orders.append({"key": k, "to": b.id, "from": f.id, "from_name": f.name, "due": state.day + transfer_days(sup), "health": round(src.health, 2),
+                       "parts": copy.deepcopy(src.lost_parts)})
         add_debt(state, "blue", BLUE_SITES[k][0])
-        src.health = 0.0
+        if battery_parts.key_of(src):
+            battery_parts.set_share(src, 0.0, state.day)
+        else:
+            src.health = 0.0
         vacated.append(src.id)
         _sync(state, f)
         lines.append(f"A {BLUE_SITES[k][0]} battery was ordered from {f.name} to {b.name}")
@@ -599,7 +646,11 @@ def rebuild_blue_sites(state, d, rng: random.Random) -> list:
         if len(lines) >= REBUILD_PER_DAY:
             break
         if rng.random() < p:
-            a.health = REBUILT_HEALTH
+            if battery_parts.key_of(a):                  # S216: half the parts, the radar first; the rest is ordered from today
+                battery_parts.set_share(a, REBUILT_HEALTH, state.day)
+                battery_parts.restamp(a, state.day)
+            else:
+                a.health = REBUILT_HEALTH
             r["down"].pop(a.id, None)
             add_debt(state, "blue", getattr(a, "variant", "") or a.name)
             b = state.bases.get(a.guards)

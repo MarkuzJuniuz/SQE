@@ -15,6 +15,7 @@ Where each number came from (CLAUDE.md doctrine rule):
 """
 from __future__ import annotations
 import math
+from . import battery_parts
 from . import fleet
 from .models import AssetKind, BaseKind
 from .routes import NM, bearing, dist, offset
@@ -84,7 +85,7 @@ def _enemy_rings(state, side: str) -> list:
     """[(x, y, reach_m)] of the SAM sites that would shoot at `side`'s CAP: blue's sites for red's patrols, red's for blue's."""
     from .threatmap import RANGE_NM, SERIOUS_NM
     sites = state.blue_sams.values() if side == "red" else (a for a in state.assets.values() if a.kind == AssetKind.SAM)
-    rings = [(s.x, s.y, RANGE_NM.get(s.variant, 0) * NM) for s in sites if not s.destroyed and RANGE_NM.get(s.variant, 0) >= SERIOUS_NM]
+    rings = [(s.x, s.y, RANGE_NM.get(s.variant, 0) * NM) for s in sites if battery_parts.can_fire(s) and RANGE_NM.get(s.variant, 0) >= SERIOUS_NM]      # S216: a blue battery that cannot fire has no ring
     if side == "red":                                       # v0.41.76: the ships' reach is a ring too (it replaces the old fixed 130 nm keep-out round the boat)
         rings += [(b.x, b.y, FLEET_REACH_NM * NM) for b in state.bases.values() if b.kind == BaseKind.CARRIER and not fleet.is_sunk_base(state, b.id)]
     return rings

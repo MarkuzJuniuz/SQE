@@ -15,6 +15,7 @@ import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from .models import AssetKind
+from . import battery_parts
 from . import refit as _refit
 from .state import CampaignState
 from .runways import RUNWAY_HALF_LEN_M, RUNWAY_HALF_WIDTH_M
@@ -237,9 +238,7 @@ def tally(state: CampaignState, manifest: Manifest, data: dict) -> dict:
 
 
 # S215a: what the debrief calls a unit of a blue air-defence site (DCS type -> words)
-BLUE_UNIT_WORDS = {"Patriot str": "radar", "Patriot ECS": "control station", "Patriot cp": "command post", "Patriot EPP": "power plant", "Patriot ln": "launcher",
-                   "Hawk sr": "search radar", "Hawk tr": "tracking radar", "Hawk cwar": "acquisition radar", "Hawk pcp": "command post", "Hawk ln": "launcher",
-                   "Vulcan": "Vulcan gun", "M1097 Avenger": "Avenger"}
+BLUE_UNIT_WORDS = {**battery_parts.PART_WORDS, "Vulcan": "Vulcan gun", "M1097 Avenger": "Avenger"}
 
 
 def _target_in_mission(manifest: Manifest, ref: str) -> bool:
@@ -276,8 +275,8 @@ def _lost_words(unit_types: list) -> str:
 
 
 def _score_blue_sams(state: CampaignState, manifest: Manifest, lost: set, out: dict) -> None:
-    """S215a: a blue air-defence site is at most as healthy as the share of its units still standing (the rule the supply buildings use), so a site whose units died
-    is hurt even when every raider died too, and a raider that did nothing adds nothing. Applied after any early-exit raid roll, so one raid is not counted twice."""
+    """S215a / S216: what a blue air-defence site lost is what died in the mission. A Patriot or HAWK records the parts (`battery_parts`): the next mission is built without
+    them and they are replaced over time. An AAA site is at most as healthy as the share of its units still standing. Applied after any early-exit raid roll."""
     from . import sams
     for group in manifest.groups:
         if group["kind"] != "blue_sam" or not group["units"]:
@@ -290,11 +289,23 @@ def _score_blue_sams(state: CampaignState, manifest: Manifest, lost: set, out: d
         if not dead_types or site is None:
             continue
         before = site.health
-        standing = len(group["units"]) - len(dead_types)
-        cap = float(group["health_before"]) * standing / len(group["units"])
-        site.health = max(0.0, min(before, cap))
+        could_fire = battery_parts.can_fire(site)
+        if battery_parts.key_of(site):
+            missing = dict(group.get("lost_before") or {})       # what it was missing when built, plus what died here
+            for unit_type in dead_types:
+                missing[unit_type] = missing.get(unit_type, 0) + 1
+            for part, count in missing.items():
+                while battery_parts.lost_count(site, part) < count:
+                    if not battery_parts.lose(site, part, state.day):
+                        break
+        else:
+            standing = len(group["units"]) - len(dead_types)
+            cap = float(group["health_before"]) * standing / len(group["units"])
+            site.health = max(0.0, min(before, cap))
         line = f"{site.name}: {_lost_words(dead_types)} destroyed"
-        if strength_word(site.health) != strength_word(before):
+        if could_fire and not battery_parts.can_fire(site) and not site.destroyed:
+            line += ". It cannot fire until the parts are replaced"
+        elif strength_word(site.health) != strength_word(before):
             line += f" ({strength_word(before)} -> {strength_word(site.health)})"
         out["lines"].append(line)
         base = state.bases.get(group.get("field"))

@@ -127,6 +127,7 @@ class EnemyAsset:
     guards: str = ""                    # GARRISON: id of the SAM site it protects
     suppressed: bool = False            # SAM: radars blinded (SEAD worked, the launchers are still there); since v0.41.338 it clears SUPPRESS_TURNS turns after the turn it was seen set (Session._tick), not overnight
     suppressed_turn: int = -1           # v0.41.338 (Phase 4): the turn the flag was first seen set (Session._tick), -1 = not suppressed; the flag expires SUPPRESS_TURNS later
+    lost_parts: dict | None = None      # S216: blue Patriot / HAWK only: {DCS type: [day each was lost]} (battery_parts.py); `health` is worked out from it. None = no record (an older save, until it is loaded)
 
     def __post_init__(self):
         from .textcase import title_case
