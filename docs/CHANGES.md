@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.719, packages you do not fly lose jets more like they do in DCS
+The war's figures for blue's losses now follow DCS test missions: a plain supply strike loses fewer jets than before, a strike behind a SEAD and a stand-off DEAD package lose more (halfway to what DCS showed). Level 3 gets a little harder; Levels 1 and 2 are unchanged.
+
 ## v0.41.718, red's carrier raid flies once its runway is repaired
 When blue has cut the Tu-22M3 fields, red no longer sits the whole day out: it plans its carrier raid for the first turn a bomber field is open again, and a staged raid is called off only if no turn of its day opens. More carrier raids reach the fleet at Levels 2 and 3 in the Caucasus.
 
