@@ -11,6 +11,7 @@ A package with no stored verdict (an old save, a raid, a patrol) reads as "full"
   multiplies the red air cover by BARCAP_ONLY_AIR and draws no reaction pair from the hold.
 """
 from __future__ import annotations
+import math
 import random
 
 from .models import AssetKind, ObjectiveType
@@ -82,9 +83,98 @@ def is_raid(state, package) -> bool:
     return bool(re.match(r"^obj-t\d+-[rs]\d+$", oid)) and oid in ((getattr(state, "raids", None) or {}).get("booked") or {})
 
 
+# S181 P2: an AWACS sees a raid only within its radar's reach of its own orbit (it was the whole theatre)
+E3_RADAR_NM = 220.0         # the E-3's radar sees low-flying targets beyond 250 statute miles = 217 nm (USAF E-3 Sentry fact sheet; medium to high firmness)
+E2C_RADAR_NM = 160.0        # the E-2C's APS-145: no primary figure found (secondary sources say 300+ miles, low firmness); judgment call, kept well inside the E-3's
+RAID_SEEN_WAY_IN_NM = 100.0 # a raid is seen when its target or any point of this last stretch of its way in lies inside a radar's reach (judgment call: time enough to scramble)
+RADAR_NM = {"bl_e3": E3_RADAR_NM, "bl_e2": E2C_RADAR_NM}
+E3_COVERS_THEATRE = ("bl_e3",)   # these see every raid while up (see raid_covered); E3_RADAR_NM is kept for a later two-orbit E-3
+
+
+def _on_orbit(state, key: str, turn: int) -> bool:
+    """Is an airframe of this asset on orbit at some time in this turn (the day's windows `support_assets.plan` stored)?"""
+    from . import clock
+    fl = (getattr(state, "barcap", None) or {}).get("support_flights") or {}
+    lo = clock.minute(turn) - clock.day_start_minute(clock.day_of(turn))
+    hi = lo + clock.TURN_MIN
+    for start, end in fl.get(key, []):
+        if end > lo and start < hi:
+            return True
+    return False
+
+
+def _station_of(state, key: str):
+    """Where this AWACS orbits -> (x, y) or None: the E-3 on its turn's station (`threatmap.awacs_station`), the E-2C over the carrier."""
+    from . import threatmap
+    from .models import BaseKind
+    if key == "bl_e3":
+        station = threatmap.awacs_station(state)
+        if station is None:
+            return None
+        return station[0], station[1]
+    for base in state.bases.values():
+        if base.kind == BaseKind.CARRIER:
+            return base.x, base.y
+    return None
+
+
+def _distance_to_leg(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
+    """Metres from the point (px, py) to the nearest point of the straight leg a -> b."""
+    dx = bx - ax
+    dy = by - ay
+    squared = dx * dx + dy * dy
+    share = 0.0
+    if squared > 0:
+        share = ((px - ax) * dx + (py - ay) * dy) / squared
+    share = max(0.0, min(1.0, share))
+    return math.hypot(ax + share * dx - px, ay + share * dy - py)
+
+
+def _raid_way_in(state, package):
+    """The raid's last RAID_SEEN_WAY_IN_NM stretch -> (start x, start y, target x, target y), from its bomber wing's field to the booked target; None when it cannot be told."""
+    plan = ((getattr(state, "raids", None) or {}).get("booked") or {}).get(package.objective.id) or {}
+    dest = plan.get("dest")
+    field = state.assets.get(plan.get("bomber_wing") or "")
+    if not dest or field is None:
+        return None
+    tx = float(dest[0])
+    ty = float(dest[1])
+    length = math.hypot(tx - field.x, ty - field.y)
+    stretch = RAID_SEEN_WAY_IN_NM * NM
+    if length <= stretch:
+        return field.x, field.y, tx, ty
+    share = 1.0 - stretch / length
+    return field.x + (tx - field.x) * share, field.y + (ty - field.y) * share, tx, ty
+
+
+def raid_covered(state, package, turn: int) -> bool:
+    """S181 P2: is this raid inside the reach of an AWACS on orbit this turn? No support plan at all (an old save) says covered; a raid whose way in cannot be told falls back to
+    the old rule (any AWACS up covers it)."""
+    fl = (getattr(state, "barcap", None) or {}).get("support_flights")
+    if not fl:
+        return True
+    way_in = _raid_way_in(state, package)
+    for key in BLUE_COVER_KEYS:
+        if not _on_orbit(state, key, turn):
+            continue
+        # The E-3 up covers the whole theatre, as before: SQE flies one E-3 station, kept back for its safety, where an air force would fly a second orbit over a front
+        # this wide (probe 2026-11-27: measured from that one station, 31 to 33 % of Syria's raids went unseen with the E-3 up). Judgment call; only the E-2C is limited.
+        if key in E3_COVERS_THEATRE:
+            return True
+        if way_in is None:
+            return True
+        station = _station_of(state, key)
+        if station is None:
+            continue
+        reach_m = RADAR_NM[key] * NM
+        if _distance_to_leg(station[0], station[1], *way_in) <= reach_m:
+            return True
+    return False
+
+
 def blue_cast(state, package, turn: int) -> str:
-    """"seen" or "unseen" for a red raid. Covered: seen. Not covered: seen anyway with UNSEEN_GUESS (seeded per campaign, turn, raid)."""
-    if blue_covered(state, turn):
+    """"seen" or "unseen" for a red raid. Covered (S181 P2: inside an AWACS's reach): seen. Not covered: seen anyway with UNSEEN_GUESS (seeded per campaign, turn, raid)."""
+    if raid_covered(state, package, turn):
         return "seen"
     rng = random.Random(f"{state.campaign_id}:{turn}:{package.objective.id}:detect")
     return "seen" if rng.random() < UNSEEN_GUESS else "unseen"

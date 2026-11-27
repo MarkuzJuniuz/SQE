@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.713, the Hawkeye alone sees only near the fleet
+With the E-3 up, every red raid is seen as before. When only the carrier's E-2C is up, it sees a raid only when its target or the last 100 nm of its way in lies within 160 nm of the carrier; the others come unseen, so you do not get to intercept them.
+
 ## v0.41.712, a cut runway grounds the AWACS and the tankers
 When red cuts the runway of the field your E-3 and KC-135s fly from, they stay on the ground until it is repaired; one already on station finishes its shift. Without the E-3 up, raids can come unseen. The carrier's E-2C and S-3B are not affected.
 
