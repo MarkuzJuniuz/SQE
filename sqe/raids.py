@@ -1316,7 +1316,7 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
 
 
 def hit(state, base_id: str, wing, rng: random.Random, through: int | None = None, aim: str = "", ac: str | None = None, kh59: bool = False, defences: bool = True) -> list:
-    """Bombs fall on one of our airfields, a supply site, a garrison or on friendly troops. The raiders lose a jet to the defences. Log lines. S48: `kh59` = the jets fired Kh-59M from standoff: each counts `KH59_HIT_EQUIV` bomber jets on a supply site or garrison.
+    """Bombs fall on one of our airfields, a supply site, a garrison or on friendly troops. In an unflown raid the raiders lose a jet to the defences. Log lines. S48: `kh59` = the jets fired Kh-59M from standoff: each counts `KH59_HIT_EQUIV` bomber jets on a supply site or garrison.
     S215a: `defences` False = a flown raid on a field whose air-defence units were in the mission: their losses are read from the mission, only the parked jets are taken here."""
     b = state.bases[base_id]
     k = through if through is not None else rng.randint(1, 3)
@@ -1325,8 +1325,9 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
     ke = eff(k * KH59_HIT_EQUIV if (kh59 and aim_kind(aim) in KH59_KINDS) else k)
     from .sams import covering_ad
     ad = covering_ad(state, *aim_xy(state, aim, b))
-    if wing is not None:                                # v0.41.30: a full Patriot + HAWK takes a second jet (was always one)
-        wing.lose(ac, 1 + (round(ad) if through is None else 0))    # (a flown raid's real kills are counted by the debrief)
+    # v0.41.30: a full Patriot + HAWK takes a second jet. S221: only in a raid nobody flew (`through` not given). A flown raid's dead jets are counted by the debrief, so taking one here too killed a jet that landed.
+    if wing is not None and through is None:
+        wing.lose(ac, 1 + round(ad))
     kind = aim_kind(aim)
     if kind == "sector":
         g, i = state.ground, int(aim.split(":")[1])
