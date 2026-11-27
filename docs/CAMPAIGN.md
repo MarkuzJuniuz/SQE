@@ -169,6 +169,8 @@ The Force Index sets the pace of nearly everything that rebuilds:
 
 Red's road sites are extra supply sites scattered along the roads (15 at Level 1, 30 at Levels 2 and 3, but 20 at Levels 2 and 3 in Syria), some guarded,
 some a parked truck only. Hitting them, and the depots and fuel farms, is how blue lowers red's Force Index.
+A depot, fuel farm or plant is its buildings: the share you destroy is the share of its health it loses, and with none left it is destroyed.
+The vehicles guarding it do not count.
 
 ### Air defence
 

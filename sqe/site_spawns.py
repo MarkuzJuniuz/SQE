@@ -485,7 +485,7 @@ class SiteSpawns:
         self.groups_by_asset[a.id] = g
         if a.kind == AssetKind.ARMOR:
             self.armor_id, self.armor_center = a.id, (cx, cy)
-        self._site_manifest(a, g, names, base_count, primary, manifest)
+        self._site_manifest(a, g, names, base_count, primary, manifest, bld)
 
     def _site_heading_form(self, a, garrison, cx, cy):
         """The heading and formation of a site's group (draws from `vrng`): a column or garrison faces the nearest blue airfield, anything else points at random."""
@@ -499,13 +499,17 @@ class SiteSpawns:
             return int(bearing(cx, cy, fb.x, fb.y)), r.choice([F.Line, F.Rectangle, F.Line])
         return r.randint(0, 359), r.choice([F.Star, F.Scattered, F.Rectangle])
 
-    def _site_manifest(self, a, g, names, base_count, primary, manifest):
-        """The manifest row of a built site group: its unit names, the count at full health, and which of them are track / search radars."""
+    def _site_manifest(self, a, g, names, base_count, primary, manifest, buildings=None):
+        """The manifest row of a built site group: its unit names, the count at full health, and which of them are track / search radars. S224: `buildings` = the statics of a
+        supply site: the site IS its buildings (`debrief.site_targets`), the guard vehicles around them do not count."""
         from .mission_builder import TRACK_RADARS, SEARCH_RADARS  # the builder's module imports this one
         mine = bool(primary) and (not manifest.cur_pkg or manifest.cur_pkg == self._anchor_id)
         def utype(u):
             return str(getattr(u, "type", ""))
         trk = [u.name for u in g.units if utype(u) in TRACK_RADARS]
         srch = [u.name for u in g.units if utype(u) in SEARCH_RADARS]
-        manifest.add("asset", a.id, names, base_count=base_count, health_before=a.health, primary=mine, label=a.name, trk=trk, srch=srch,
-                     primary_pkgs=[manifest.cur_pkg] if (primary and manifest.cur_pkg) else [])
+        row = {"base_count": base_count, "health_before": a.health, "primary": mine, "label": a.name, "trk": trk, "srch": srch,
+               "primary_pkgs": [manifest.cur_pkg] if (primary and manifest.cur_pkg) else []}
+        if buildings:
+            row["buildings"] = list(buildings)
+        manifest.add("asset", a.id, names, **row)
