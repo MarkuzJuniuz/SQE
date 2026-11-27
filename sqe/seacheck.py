@@ -69,18 +69,27 @@ def clear_run(x, y, hdg_deg, length_m, clearance_m, step_m=9260):
     return True
 
 
-SITE_MARGIN = 1500.0                 # metres a ground site keeps from the sea (rivers: terrainmask.RIVER_MARGIN); set from Settings
+SITE_MARGIN = 1500.0                 # metres a ground site keeps from the sea (rivers: watermap.RIVER_MARGIN) (judgment call)
 
 
 def site_ok(x, y, margin=None):
-    """True when a ground site can sit here: on land, clear of the sea by `margin`. Uses the map DCS measured (terrainmask) when the terrain
-    scan has been run and covers the point, otherwise the coarse built-in coastline."""
+    """True when a ground site can sit here: on land, clear of the sea by `margin`. Uses the shipped water map (watermap) where it covers
+    the point, otherwise the coarse built-in coastline."""
     margin = SITE_MARGIN if margin is None else margin
-    from . import terrainmask
-    r = terrainmask.land_ok(x, y, margin)
+    from . import watermap
+    r = watermap.land_ok(x, y, margin)
     if r is not None:
         return r
     return is_land(x, y) and coast_distance(x, y) >= margin
+
+
+def in_sea(x, y):
+    """True when the point is in the sea or a big lake: the shipped water map where it covers the point, else the coarse built-in coastline."""
+    from . import watermap
+    mapped = watermap.is_sea(x, y)
+    if mapped is not None:
+        return mapped
+    return not is_land(x, y)
 
 
 def snap_to_land(x, y, margin_m=None, max_m=40000.0):

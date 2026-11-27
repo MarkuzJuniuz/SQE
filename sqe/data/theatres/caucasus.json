@@ -26,15 +26,6 @@
         8
     ],
     "geo": "caucasus_geo.json",
-    "scan": {
-        "file": "SQE_terrain_caucasus.json",
-        "x0": -430000,
-        "x1": 70000,
-        "y0": 190000,
-        "y1": 970000,
-        "step": 250,
-        "probe_airport": "Sochi-Adler"
-    },
     "carrier": {
         "id": "cvn74",
         "name": "USS Stennis (CVN-74)",

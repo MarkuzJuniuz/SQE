@@ -1178,8 +1178,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     def _dry_pass(self) -> None:
         """Last step before saving: any ground group with a unit (or a driving destination) in the water is moved as a whole, as little as possible,
-        to where all of it is on dry land. The JTAC moves with its task force. Uses the DCS terrain scan when present, otherwise the rough coastline."""
-        from . import seacheck, terrainmask
+        to where all of it is on dry land. The JTAC moves with its task force. Uses the shipped water map, otherwise the rough coastline."""
+        from . import seacheck
         def dry(x, y):
             return seacheck.site_ok(x, y, 150.0)
         groups = []
@@ -2781,7 +2781,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """S140d2 (plan 2.8 first bullet, XO answer 4; ladder rung 3): each detour (a run of AVD points between two other points) whose straight leg crosses only rings a low flight can pass under is replaced by that straight
         leg flown low: UDSC (cruise height, `UNDER_BRACKET_NM` before the ring) - UIN (low, 2 nm before the first ring) - UOUT (low, 2 nm after the last) - UCLB (cruise height again). Height = the lowest `profiles.ENVELOPE` floor
         among the crossed rings minus `UNDER_MARGIN_FT` (a ring with a floor under 1,000 ft is passable only as a radar SAM whose reach halves against a low flight, `profiles.LOW_RADAR_FACTOR`: the leg must stay outside half the
-        ring); at least `UNDER_MIN_FT`. The low leg must keep out of every live short-range air-defence ring (`HOME_SAM_VARIANTS`, + `HOME_RING_MARGIN_NM`) whose ceiling is above it, needs the ground-height scan, and leaves
+        ring); at least `UNDER_MIN_FT`. The low leg must keep out of every live short-range air-defence ring (`HOME_SAM_VARIANTS`, + `HOME_RING_MARGIN_NM`) whose ceiling is above it, needs the ground-height grid, and leaves
         room in the airframe's point list. A run that fails any of these keeps its detour. The points are radio-altitude (they follow the ground, like the LOW tier). Route shape only: no task."""
         if not relief.available():
             return wps

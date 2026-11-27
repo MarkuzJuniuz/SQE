@@ -2,7 +2,7 @@
 
 Bundled packs are in sqe/data/theatres/<id>.json. Your own packs go in %APPDATA%\\SQE\\theatres\\<id>.json (a pack with the same id
 replaces the bundled one). A pack names the DCS terrain, the airfields and who holds them, the depth tiers, the squadrons, the carrier
-station, the sun position and time zone, the monthly temperatures, the terrain scan area and the scenario text. See docs/THEATRES.md.
+station, the sun position and time zone, the monthly temperatures, and the scenario text. See docs/THEATRES.md.
 
 `use(id)` makes a pack the active one; the rest of SQE reads it through `active()`. Coordinates in a pack are DCS's: x north, y east, metres.
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 DATA = Path(__file__).resolve().parent / "data" / "theatres"
 DEFAULT = "caucasus"
 
-REQUIRED = ("id", "name", "dcs_terrain", "lat", "lon", "tz", "temp_c", "geo", "scan", "carrier", "blue_fields", "red_fields",
+REQUIRED = ("id", "name", "dcs_terrain", "lat", "lon", "tz", "temp_c", "geo", "carrier", "blue_fields", "red_fields",
             "wing_weight", "field_tier", "squadrons", "front", "tier_labels", "front_names", "front_desc", "title", "stories")
 
 # S90 P4: the pack's `sam_tier` block names the long-range SAM systems of the theatre: {"umbrella": ["SA-5", "SA-10"], "gate": ["SA-2", "SA-3", "SA-6", "SA-5", ...]} (samtier.py holds the
@@ -292,7 +292,7 @@ def load(tid: str) -> dict:
 
 
 def use(tid: str) -> dict:
-    """Make `tid` the active theatre and re-point the terrain scan at it."""
+    """Make `tid` the active theatre and drop the shipped map data loaded for another one."""
     global _ACTIVE
     d = load(tid)
     changed = _ACTIVE is None or _ACTIVE["id"] != d["id"]
@@ -301,9 +301,9 @@ def use(tid: str) -> dict:
     samtier.configure(d.get("sam_tier"))               # S90 P4: the long-range tier of this theatre (in place: every module sees it)
     if changed:
         try:
-            from . import relief, roads, seacheck, terrainmask
+            from . import relief, roads, seacheck, watermap
             seacheck.reset()
-            terrainmask.theatre_changed()
+            watermap.theatre_changed()
             relief.theatre_changed()
             roads.theatre_changed()
         except Exception:

@@ -101,16 +101,6 @@ class Session(Merging, SeadTiming):
         self.ai_test = False                                  # launch option --ai-test: your own flight is built as an AI flight (see run() in gui/app.py)
         self.late_sead_min = 0                                # launch option --late-sead: SEAD-stage packages go in LATE_SEAD_MIN later (forces the DEAD hold; a test)
         self.loadouts = LoadoutLibrary(Path(settings.sqe_dir) / "loadouts.json" if settings.dcs_saves else None)
-        self.sync_terrain()
-
-    def sync_terrain(self) -> None:
-        """Point the land / water checks at the terrain scan DCS measured (if it has been run) and at the shore margin from Settings."""
-        from . import relief, roads, seacheck, terrainmask
-        seacheck.SITE_MARGIN = float(getattr(self.settings, "shore_margin_m", 1500))
-        terrainmask.RIVER_MARGIN = float(getattr(self.settings, "river_margin_m", 100))
-        terrainmask.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
-        relief.configure(self.settings.sqe_dir if self.settings.dcs_saves else None, builtin=True)
-        roads.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
 
     # ---- persistence ---------------------------------------------------------------------------
     @property
@@ -128,7 +118,6 @@ class Session(Merging, SeadTiming):
             squadron: str | None = None, theatre: str = "caucasus", tactical_edge: bool = False, tactical_edge_decay: bool = False,
             a10_variant: str | None = None, f14_variant: str | None = None, link16: bool | None = None) -> None:
         theatres.use(theatre)
-        self.sync_terrain()
         self.state = new_campaign(name, aircraft, level, theatre=theatre, seed=seed, start_date=start_date, night_ops=night_ops, player_squadron=squadron,
                                   a10_variant=a10_variant, f14_variant=f14_variant, link16=link16)                  # S103a: Era Equipment (None = the theatre's era values)
         self.state.ground["tactical_edge"] = bool(tactical_edge)                                          # S88 R3: the two Tactical Edge switches belong to the campaign (they were app settings copied in on every open)
@@ -173,7 +162,6 @@ class Session(Merging, SeadTiming):
         self.state = loaded
         theatres.use(self.state.theatre)
         clock.use(self.state.start_hour)                 # S90 J5b: this campaign's Day 1 hour (an old save: 8)
-        self.sync_terrain()
         self.path = Path(path)
         self.settings.last_campaign = str(path)
         self.settings.save()
@@ -230,7 +218,6 @@ class Session(Merging, SeadTiming):
         ground.ensure_blue_garrisons(st)                # older saves: a friendly garrison at every airfield
         ground.ensure_forward_garrisons(st)             # v0.41.102: a forward garrison for each side in every sector (older saves too)
         sams.ensure_blue_sams(st)                       # v0.41.62: blue's three air-defence sites at every airfield (older saves: from the field's `defense`)
-        ground.snap_roads(st)                           # once, as soon as a road scan exists: columns and supply sites sit on a road
         from . import carrier_pos, fleet as _fleet
         for _ln in _fleet.step(st):                     # v0.41.257: a sunk carrier comes back as new on its day; sunk escorts are replaced
             st.note(_ln)

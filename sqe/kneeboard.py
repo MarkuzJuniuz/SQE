@@ -1,5 +1,5 @@
 """Kneeboard pages (PNG 768x1024), laid out like a printed form: shaded section bands, ruled rows, and exactly three type sizes.
-Page 1: comms ladder + waypoints (numbered the way YOUR jet's cockpit numbers them), the tolerances, the time zone and the minimum safe altitude (with the ground-height scan).
+Page 1: comms ladder + waypoints (numbered the way YOUR jet's cockpit numbers them), the tolerances, the time zone and the minimum safe altitude (with the ground-height grid).
 Page 1 (plain F-14A / B, S175): a route point the jet cannot hold has its position on a line under its row; Page 1b only when those lines do not fit.
 Page 2: fuel, codes, weather, target lat/long, bullseye, package who's-who (with Link 16 STNs).
 Page 3: the other packages in the mission (own push / TOT), threats near the target, intelligence.

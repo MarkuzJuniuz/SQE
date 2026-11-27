@@ -1,6 +1,6 @@
-"""The condensed site list (sqe/data/theatres/<theatre>_sites.json, written by tools/sqe_scan.py condense from a DCS terrain scan).
+"""The condensed site list (sqe/data/theatres/<theatre>_sites.json, condensed from DCS's own answers about the map).
 
-v0.41.199 (XO 2026-10-30): players must not have to run scans, and early flights had SAMs floating in the sea. The file holds ready-made spots on dry,
+v0.41.199 (XO 2026-10-30): early flights had SAMs floating in the sea. The file holds ready-made spots on dry,
 flat ground near roads: per ground-war sector (ground, SAM, supply) and per red airfield (SAM, supply). A new campaign builds its layout as before
 (doctrinal bearings, the pack's offsets, the sector centres) and `apply` then moves each red SAM site, fuel farm / depot and front-line column to the nearest
 unused spot of its kind within reach. No random draw is made, so the campaign's other draws are unchanged. A site with no spot in reach stays where it is
@@ -15,7 +15,7 @@ from pathlib import Path
 SAM_REACH_M = 12000.0         # a SAM site moves to a spot at most this far from where the doctrinal placement put it (judgment call)
 SUPPLY_REACH_M = 12000.0      # same for a fuel farm / depot
 FOLLOWER_REACH_M = 3000.0     # a garrison / a column's air defence moves to a spot at most this far from where it stood next to its parent
-COLUMN_REACH_M = 12000.0      # a front-line column moves onto a scanned road point at most this far away (sectors are 20 to 60 km apart)
+COLUMN_REACH_M = 12000.0      # a front-line column moves onto a road point at most this far away (sectors are 20 to 60 km apart)
 _CACHE: dict = {}
 
 
