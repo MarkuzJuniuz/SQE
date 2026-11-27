@@ -79,7 +79,10 @@ def _umbrella_lua(x: dict) -> str:
     return ", ux=%.1f, uz=%.1f, um=%d" % (float(x["ux"]), float(x["uz"]), int(x["um"]))
 
 
-BOMB_FAR_KM = 20     # S149 (XO 2026-11-22: a jumped AI striker dumps its bombs and the hook called "Bombs away"): a bomb that leaves farther than this from its flight's target point is a jettison. SQE's strikers release inside 5 nm (JDAM, `routes.JDAM_RELEASE_NM`) to the point itself; 20 km is a judgment call with margin for a CAS target that moves
+# S149 (XO 2026-11-22: a jumped AI striker dumps its bombs and the hook called "Bombs away"): a bomb that leaves farther than this from its flight's target point is a jettison: no call, no runway hit.
+# S220: was 20, and real releases were thrown away with it. Measured over the saved server runs (377 bombs): AI JDAM releases reach 23.9 km (32 over 20 km); jettisons were seen from 26 km and mostly
+# past 60. 35 km is a judgment call above any release seen, with room for a player's high, fast JDAM.
+BOMB_FAR_KM = 35
 
 
 # S184: the SA number a MAGNUM call names, by a part of the DCS type name of the radar or launcher the missile goes for (first match wins).

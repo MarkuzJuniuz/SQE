@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.703, a long bomb release counts again
+A bomb released more than 20 km from its target was treated as thrown away: no "Bombs away" call, and its hits on a runway did not count. Long JDAM releases are normal, so a runway could be hit and stay open. The limit is now 35 km.
+
 ## v0.41.702, F-14 RIO Radar (experimental): Hunt Bandit
 A new option for the F-14: F10 > Other > RIO Radar. Hunt Bandit has Jester lock an enemy aircraft (never a friendly) and tells you what it is; Hunt Next takes another, Hunt Off lets go. Install it in Settings > DCS Integration.
 
