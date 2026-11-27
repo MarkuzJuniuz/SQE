@@ -171,6 +171,8 @@ Red's road sites are extra supply sites scattered along the roads (15 at Level 1
 some a parked truck only. Hitting them, and the depots and fuel farms, is how blue lowers red's Force Index.
 A depot, fuel farm or plant is its buildings: the share you destroy is the share of its health it loses, and with none left it is destroyed.
 The vehicles guarding it do not count.
+A strike on a depot or fuel farm with no SEAD in or before it, resolved by the war (not flown by you), damages it about nine times in ten and takes
+four fifths of a full site's health (measured in DCS test missions). The Lutorin works are resolved as before.
 
 ### Air defence
 

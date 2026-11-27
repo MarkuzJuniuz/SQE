@@ -108,6 +108,11 @@ FOLLOW_GAP_MIN = 10     # a follow job starts this long after the SEAD / standof
 # (the sim's own odds said about 1 in 3), and the 9 took 0.44 of the target's health on average. Level 1 was not measured: the same figures (judgment call).
 FOLLOW_ATTACK_P = 0.8         # the least odds such a job has once it goes in (it is still held when the radars were not suppressed). The compressed dice (`chance`) turn 0.8 into about 9 successes in 10
 FOLLOW_ATTACK_DAMAGE = 0.45   # the health a successful one takes off its target, at every level
+# S215c: a bombing strike on a supply site with no SAM job in front of it, as measured on the dedicated server (2026-11-27, all AI, Caucasus Level 1 to 3 and Syria Level 2): all 18 with a good aim
+# burned buildings, and on the 12 against sites at 65% health or more they took 0.79 of a site's health on average (the sim expected 0.27, odds included). XO chose these figures. The Lutorin
+# works (2 packages only) keep the old rule. Blue only: red's raids on blue supply were not measured.
+PLAIN_STRIKE_P = 0.8          # the least odds such a strike has
+PLAIN_STRIKE_DAMAGE = 0.8     # the health a successful one takes off its target, at every level
 
 
 def is_follow_attack(obj) -> bool:
@@ -122,6 +127,15 @@ def is_follow_attack(obj) -> bool:
 def after_sites(obj) -> list:
     """The long-reach SAM sites a follow job (a STRIKE / CAS with `after` set) waits on."""
     return [x for x in (getattr(obj, "after", "") or "").split(",") if x]
+
+
+def is_plain_supply_strike(state, obj) -> bool:
+    """S215c: a bombing strike on a depot or fuel farm: no stand-off or runway aim, no SEAD in the package or in front of it. The Lutorin works are not supply sites here."""
+    if obj.type != ObjectiveType.STRIKE:
+        return False
+    if obj.aim or after_sites(obj):
+        return False
+    return ground.is_supply(state.assets[obj.target_id])
 
 
 def follow_split(cov: list) -> tuple:
@@ -683,6 +697,8 @@ class WarSimulator:
         p = max(0.02, min(0.98, p0 + tempo.get(state, tempo.kind_of(obj.type))))
         if is_follow_attack(obj):
             p = max(p, FOLLOW_ATTACK_P)               # S212: measured; the losses still come from strength against defense
+        if is_plain_supply_strike(state, obj):
+            p = max(p, PLAIN_STRIKE_P)                # S215c: measured
         return p, strength, defense
 
     def _resolve_sweep(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
@@ -997,6 +1013,8 @@ class WarSimulator:
                 hit = d.base_damage * (0.5 + p)
                 if is_follow_attack(obj):
                     hit = FOLLOW_ATTACK_DAMAGE            # S212: measured
+                if is_plain_supply_strike(state, obj):
+                    hit = PLAIN_STRIKE_DAMAGE             # S215c: measured
                 if z is not None:
                     hit = hit * ground.AIR_EFFECT
                 t.health = max(0.0, t.health - hit * works.damage_factor(state, t))
