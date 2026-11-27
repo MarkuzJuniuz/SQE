@@ -139,7 +139,37 @@ class SiteSpawns:
 
     def _base_def_group(self, keep, base, label, comp, x, y, ang, form, ring, spacing=None):
         """One blue base-defence group (`BASEDEF <field> <label>`, always Excellent) handed to `keep`, which records it with its ring; returns what `keep` returns."""
-        return keep(self._platoon(self.usa, f"BASEDEF {base.name} {label}", comp, x, y, ang, form, spacing=spacing, base_def=True), x, y, ring)
+        group = self._platoon(self.usa, f"BASEDEF {base.name} {label}", comp, x, y, ang, form, spacing=spacing, base_def=True)
+        # S215a: remember which of the campaign's blue sites this group is, so the debrief can read its losses
+        if group is not None:
+            site_key = "aaa"
+            if label == "Patriot":
+                site_key = "pat"
+            elif label == "HAWK":
+                site_key = "hawk"
+            self._blue_site_groups.append((base.id, site_key, group))
+        return keep(group, x, y, ring)
+
+    def _record_blue_sites(self, manifest):
+        """S215a: one manifest row for each blue air-defence site this mission built: its unit names and DCS types, the site's health at build and its field.
+        The debrief takes health off a site from the units of the row that died. The two AAA groups of a field are one site."""
+        names_by_site = {}
+        types_by_site = {}
+        field_by_site = {}
+        for base_id, site_key, group in self._blue_site_groups:
+            site_id = sams.blue_site_id(base_id, site_key)
+            if site_id not in names_by_site:
+                names_by_site[site_id] = []
+                types_by_site[site_id] = []
+                field_by_site[site_id] = base_id
+            for unit in group.units:
+                names_by_site[site_id].append(str(unit.name))
+                types_by_site[site_id].append(str(unit.type))
+        for site_id, names in names_by_site.items():
+            site = (self.state.blue_sams or {}).get(site_id)
+            if site is None:
+                continue
+            manifest.add("blue_sam", site_id, names, types=types_by_site[site_id], health_before=site.health, label=site.name, field=field_by_site[site_id])
 
     def _place_airfield_defences(self, base, tx, ty, near, keep):
         """The Patriot, the AAA pair and the HAWK of one blue airfield (`bt` from `sams.blue_battery`; a covering neighbour (`near`) only gets what reaches the raid's target)."""

@@ -516,6 +516,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._hvaa_groups = []                         # S176b: the group names of blue's tankers and AWACS in this mission (they may pull back from enemy fighters)
         self._patriot_faced = {}                       # S179c: Patriot group id -> "target" / "cover": the sites already turned to face a red raid of this mission
         self.base_ad = {}                              # v0.41.84: base id -> {"pat": group, "hawk": group} (blue field air defence, the targets of a red SEAD pair)
+        self._blue_site_groups = []                    # S215a: (field id, site key, group) of every blue air-defence group built (`_record_blue_sites`)
 
         # ---- bases, base defenses, carrier + escorts --------------------------------------------------------
         self.ship, self.apt = {}, {}
@@ -763,7 +764,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._dormant_red_extras(tx, ty, manifest, (AssetKind.SAM,))      # S89 F: the rest of red's SAM sites, asleep
         self._units_pre_wrecks = self._counts()["units"]
         self._place_carcasses()
-        manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s", "rtb_s", "unseen")} for m_ in merged if not m_.get("struck")]
+        self._record_blue_sites(manifest)               # S215a: after the last blue field is placed: the debrief reads the sites' losses
+        manifest.merged =[{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s", "rtb_s", "unseen")} for m_ in merged if not m_.get("struck")]
         bx, by = geom.push
         m.coalition["blue"].bullseye = {"x": bx, "y": by}
 

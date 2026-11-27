@@ -354,6 +354,10 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
   shape.
 * The mission hook writes an `SQE_state.json` of what happened: aircraft lost and landed, ground units destroyed, where bombs
   fell, runway hits. **Accept results** applies exactly that to the war; **Abort** discards the sortie.
+* **A red raid in your mission** is scored from what its target lost (your air-defence units, the buildings of a supply site, a garrison's or your
+  troops' vehicles, the hits on a runway), not from how many attackers survived: bombers shot down after their missiles left can still have cost you,
+  and a raid that got through and hit nothing costs you nothing there. Only what the mission cannot count (aircraft parked on a raided field, hits on
+  the carrier) is still judged by the attackers that got through, and so is a target whose weapons had not landed when you left.
 * **Scrubs.** If the strikers or the cover of an AI package have lost half their jets, the rest of the package goes home.
 * After Accept you get a **debrief**: what was destroyed, your package's success, and the story line for the turn. A SAM
   left suppressed counts as a win for the package (its radars are out).

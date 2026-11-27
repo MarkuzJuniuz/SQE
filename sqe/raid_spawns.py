@@ -23,7 +23,7 @@ from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
 from .loadouts import BOMBER_TYPES, ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_land_bomber_loadout, enemy_standoff_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
-from .raids import KH59_LAUNCH_NM       # S209: the plan needs it too (the way in is measured from the launch point)
+from .raids import KH59_FLY_S, KH59_LAUNCH_NM       # S209: the plan needs it too (the way in is measured from the launch point)
 from .red_air_picture import CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, a2a_zone_nm
 from .support_caps import SUPPORT_CAP_ZONE_NM
 from .routes import AVOID_NM, FT, NM, RAID_IP_NEAR_NM, RAID_SA11_NM, Wpt, avoid_circles, bearing, dist, offset
@@ -1482,12 +1482,18 @@ class RaidSpawns:
                 aim_at = runway_points[gi % len(runway_points)]
             g = build_group(f"Raid Bomber {rn_['bg'] + 1}", cls_b, n_, task_b, bomber=True, shift=bsh_[gi], lateral_nm=lat_[gi], home=home_of(aid_), path_=bpa_[gi], L_=bLk_[gi], aim_at=aim_at)
             rn_["bg"] += 1
+            # S215a: how long its weapons fly after it launches or bombs, so the debrief knows when the target can show the damage
+            weapons_fly_s = 0.0
+            if sead_r:
+                weapons_fly_s = float(arm_fly_s(pk_kind[bpk_[gi]]))
+            elif kh59_r:
+                weapons_fly_s = float(KH59_FLY_S)
             names = []
             for u in g.units:
                 rn_["bu"] += 1
                 u.name = f"RAID-B-{rn_['bu']}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", aid_, names, ac=t_, raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
-                         raid_arrive_s=float(hit_s + bsh_[gi]), raid_group=g.name, raid_kh59=kh59_r, **({"raid_pkg": int(bpk_[gi])} if sead_r else {}))          # S46: each group is charged to its own wing and type (the debrief takes a loss off that squadron)
+                         raid_arrive_s=float(hit_s + bsh_[gi]), raid_group=g.name, raid_kh59=kh59_r, raid_weapons_s=weapons_fly_s, **({"raid_pkg": int(bpk_[gi])} if sead_r else {}))          # S46: each group is charged to its own wing and type (the debrief takes a loss off that squadron)
             bomber_gs.append(g)
         self.sead_report = sead_rep                                # B2: read by the checks
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
