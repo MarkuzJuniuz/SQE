@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.702, F-14 RIO Radar (experimental): Hunt Bandit
+A new option for the F-14: F10 > Other > RIO Radar. Hunt Bandit has Jester lock an enemy aircraft (never a friendly) and tells you what it is; Hunt Next takes another, Hunt Off lets go. Install it in Settings > DCS Integration.
+
 ## v0.41.701, strikes on a single building aim at it
 A supply site with one building was bombed at the middle of the site, which is empty ground up to 145 m away. The AI now bombs the building, and your target steerpoint and the kneeboard's coordinates are on it.
 

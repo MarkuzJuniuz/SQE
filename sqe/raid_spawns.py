@@ -715,7 +715,7 @@ class RaidSpawns:
             self._commit_register("red", g, blue_commit.red_reach_nm(pk["type"]), 0, tot_s + 3600)      # S160: a red raid-defence pair commits once airborne
             names = []
             for j, u in enumerate(g.units, 1):
-                u.name = f"ENM-{a.id}-R{k}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+                u.name = self._red_unit_name(f"ENM-{a.id}-R{k}-{j}"); u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             g.set_skill(skill)
             if o.enemy_unlimited_fuel:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
@@ -1491,7 +1491,7 @@ class RaidSpawns:
             names = []
             for u in g.units:
                 rn_["bu"] += 1
-                u.name = f"RAID-B-{rn_['bu']}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+                u.name = self._red_unit_name(f"RAID-B-{rn_['bu']}"); u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", aid_, names, ac=t_, raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
                          raid_arrive_s=float(hit_s + bsh_[gi]), raid_group=g.name, raid_kh59=kh59_r, raid_weapons_s=weapons_fly_s, **({"raid_pkg": int(bpk_[gi])} if sead_r else {}))          # S46: each group is charged to its own wing and type (the debrief takes a loss off that squadron)
             bomber_gs.append(g)
@@ -1541,6 +1541,6 @@ class RaidSpawns:
                 en = []
                 for u in eg.units:
                     rn_["eu"] += 1
-                    u.name = f"RAID-E-{rn_['eu']}"; u.pylons = copy.deepcopy(eload); en.append(u.name); self._note_jam(u)
+                    u.name = self._red_unit_name(f"RAID-E-{rn_['eu']}"); u.pylons = copy.deepcopy(eload); en.append(u.name); self._note_jam(u)
                 manifest.add("enemy_air", eaid_, en, ac=et_)                    # S46: charged to the escort member's own wing and type
         self._raid_asm_triggers(asm, path, pt)

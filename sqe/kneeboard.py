@@ -196,6 +196,8 @@ def render_pages(outdir, ctx: dict) -> list:
             notes.append(ctx["detour_line"])                # S140c: the detour round the SAM rings (the TP rows above)
         if ctx.get("turnpoint_line"):
             notes.append(ctx["turnpoint_line"])             # the plain F-14B with the Turnpoints script: how to load one
+        if ctx.get("radar_line"):
+            notes.append(ctx["radar_line"])                 # S219: RIO Radar's three calls
         if ctx.get("msa"):
             notes.append(f"MSA {int(ctx['msa']):,} ft along the route.")
         for note in notes:

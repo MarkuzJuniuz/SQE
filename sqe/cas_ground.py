@@ -40,11 +40,14 @@ def _full_strength_count(names, strength):
     return max(len(names), round(len(names) / max(0.05, strength / ground.MAX_FORCE)))
 
 
-def _arm_group(g, load, prefix):
+def _arm_group(g, load, prefix, rename=None):
     """Name a strike group's units `<prefix>1`, `<prefix>2`, ... and give each its own copy of the loadout -> the names, in order."""
     names = []
     for j, u in enumerate(g.units, 1):
-        u.name = f"{prefix}{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
+        wanted = f"{prefix}{j}"
+        if rename is not None:                      # S219: red's aircraft may get Jester's names
+            wanted = rename(wanted)
+        u.name = wanted; u.pylons = copy.deepcopy(load); names.append(u.name)
     return names
 
 
@@ -329,7 +332,7 @@ class CasGround:
                                 maintask=task.CAS, group_size=2)
         g.set_skill(skill_r)
         _commit(used, ("w", s_["wing"], at_))
-        names = _arm_group(g, enemy_strike_loadout(at_, "troops"), f"ENM-FS-{s_['wing']}-{i}-")          # B3: red's front-line strike goes at blue troops: the cluster-bomb kit of `loadouts.STRIKE_KITS`
+        names = _arm_group(g, enemy_strike_loadout(at_, "troops"), f"ENM-FS-{s_['wing']}-{i}-", self._red_unit_name)          # B3: red's front-line strike goes at blue troops: the cluster-bomb kit of `loadouts.STRIKE_KITS`
         tw = g.add_waypoint(pt(bx, by), 9000 * FT, 450 * KPH)
         tw.tasks.append(task.AttackGroup(blue_g.id, group_attack=True))
         apt_r = self.t.airports.get(getattr(st.assets.get(s_["wing"]), "airport", None) or "")
@@ -354,7 +357,7 @@ class CasGround:
             eg = self.m.flight_group(self.red, f"Red Cover {i + 1}", getattr(planes, s_["esc_type"]), None, pt(*offset(rx, ry, bearing(bx, by, rx, ry), 15 * NM)),
                                      altitude=20000 * FT, speed=420 * KPH, maintask=task.CAP, group_size=2)
             eg.set_skill(skill_r)
-            en_ = _arm_group(eg, enemy_cap_loadout(s_["esc_type"]), f"ENM-FC-{s_['esc']}-{i}-")
+            en_ = _arm_group(eg, enemy_cap_loadout(s_["esc_type"]), f"ENM-FC-{s_['esc']}-{i}-", self._red_unit_name)
             ew_ = eg.add_waypoint(pt(*offset(bx, by, bearing(rx, ry, bx, by) + 180, 5 * NM)), 20000 * FT, 450 * KPH)
             ew_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(bx, by), int(25 * NM), [task.Targets.All.Air]))
             self._late(eg, t0, "front cover")

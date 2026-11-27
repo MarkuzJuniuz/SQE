@@ -31,7 +31,7 @@ from . import pydcs_patch
 from . import threatmap as tm
 from . import samtier
 from . import f14_scheme
-from . import rio_nav, turnpoints
+from . import rio_nav, rio_radar, turnpoints
 from .aircraft import AIRCRAFT, F14_KEYS, JDAM_HOGS
 from .words import strength_word
 
@@ -420,6 +420,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             raise ValueError("choose your flight first")
         warns: list = []
         self.warns = warns
+        # S219: RIO Radar in this mission: airborne red aircraft are named for Jester's lock order as they are made (`_red_unit_name`)
+        self._radar_names = bool(o.f14_radar and pf.is_player and not o.player_is_ai and pf.aircraft in ("F-14B", "F-14BU"))
+        self._radar_named = 0
         self._anchor_id = package.id
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
         self._bomb_tgt = {}                                             # S149: striker unit name -> (x, y) of its target point (the hook's jettison test)
@@ -826,6 +829,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if self.o.f14_script_old:
                 self.warns.append("F-14 RIO Navigation: the installed script is an older copy and will not work your waypoints. Update it in Settings > DCS integration.")
 
+        radar_line = ""
+        if self._radar_names:
+            radar_line = self._add_rio_radar(pf)
+            if self.o.f14_radar_old:
+                self.warns.append("F-14 RIO Radar: the installed script is an older copy. Update it in Settings > DCS integration.")
+
         # ---- codes, fuel, text, hook, kneeboard -----------------------------------------------------------------------------
         mode3 = self._mode3(package, pf)
         laser = self._laser(package, pf)
@@ -896,6 +905,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                    "intel": [l_.replace(" are within reach of the target area and may be sent to reinforce.", " may reinforce.").replace(" are on cockpit alert and may launch to help.", " on alert, may launch.") for l_ in self._intel],
                    "zulu_note": self._zulu_note(), "msa": relief.msa_ft(polyline), "detour_line": self._detour_line(pw),
                    "turnpoint_line": turnpoint_line,
+                   "radar_line": radar_line,
                    "hand_table": hand_rows,
                    "nav": [ln_ for ln_ in (self._nav_row("HOME", pbase), self._nav_row("DIVERT", div)) if ln_]}
             for pg in render_pages(td, ctx):
@@ -1223,6 +1233,32 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     @property
     def _jamw(self) -> dict:
         return self.__dict__.setdefault("_jamw_d", {})
+
+    def _red_unit_name(self, usual: str) -> str:
+        """S219: the name of an airborne red aircraft: `AirTargetNN` when this mission has RIO Radar (the first `rio_radar.MAX_NAMES` made), else `usual`."""
+        if not self._radar_names:
+            return usual
+        if self._radar_named >= rio_radar.MAX_NAMES:
+            warning = "F-14 RIO Radar can lock only the first %d enemy aircraft of this mission." % rio_radar.MAX_NAMES
+            if warning not in self.warns:
+                self.warns.append(warning)
+            return usual
+        self._radar_named += 1
+        return rio_radar.target_name(self._radar_named)
+
+    def _add_rio_radar(self, pf) -> str:
+        """S219: F10 > Other > RIO Radar for the player's F-14 and the mission script that runs it (`rio_radar`). -> the line for the kneeboard."""
+        group = None
+        for flight, flight_group in self.flight_groups:
+            if flight is pf:
+                group = flight_group
+        if group is None:
+            return ""
+        script = rio_radar.mission_script(group.id, group.units[0].name, runways.mag_var_deg())
+        rule = triggers.TriggerStart(comment="SQE F-14 RIO radar")
+        rule.add_action(action.DoScript(String(script)))
+        self.m.triggerrules.triggers.append(rule)
+        return "F10 > Other > RIO Radar: Hunt Bandit locks one, Hunt Next another, Hunt Off lets go."
 
     def _note_jam(self, u) -> None:
         """Remember what jamming equipment this unit has (ecm.py) for the hook's missile roll."""
