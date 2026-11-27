@@ -1338,9 +1338,74 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
                 booked[flank_obj.id] = flank_plan
                 warned.append(flank_obj)
                 credit -= flank_plan["bombers"]
+    if planned:
+        plan_awacs_dash(state, d, turn, warned, booked)
     if state.raids is not None:
         state.raids["credit"] = credit
     return warned, surprise
+
+
+# S181 P3b (XO 2026-11-24, red goes after blue's AWACS; Crew Chief's option 1 under XO's autonomy 2026-11-27): ahead of a big raid, at Levels 2 and 3, a pair (L2) or a four-ship (L3) of
+# MiG-31s / MiG-25PDs dashes high and fast at the E-3 on orbit, fires its long-range missiles (R-33 / R-40) and turns home. Soviet planning of the 1980s had MiG-25 / MiG-31 dashes against AWACS
+# (ausairpower.net "Counter ISR Programs"; secondary, firmness low to medium). At most one a day; it rides with the biggest raid of the turn (its intercept mission), so no new kind of job.
+AWACS_DASH_TYPES = ("MiG_31", "MiG_25PD", "Su_27")    # in this order: the first type a wing can field flies (the Caucasus Level 3 roster has no MiG-31: its Su-27s go, as the Su-27 sweeps at high-value air assets of the plan doc)
+AWACS_DASH_JETS = {2: 2, 3: 4}           # judgment call (plan doc `s181-red-awacs-shot-plan.md`)
+AWACS_DASH_MIN_BOMBERS = 4               # the raid it rides with (a SEAD raid too) must have at least this many bombers (a big raid: the dash opens the way; judgment call)
+AWACS_DASH_MIN_JETS = 2                  # a pair at least; fewer free than AWACS_DASH_JETS: it flies with what is free
+
+
+def plan_awacs_dash(state, d, turn: int, warned: list, booked: dict) -> None:
+    """Attach the AWACS dash to the biggest raid booked this turn: when an E-3 is on orbit, the level has a dash, none flew today and a wing has the jets in reach of the E-3's station.
+    Books the jets off the wing like any raid (`redair.take_ready`, `spend`) and adds plan["awacs_dash"] = {wing, type, n, station}. No dice: it follows from the state."""
+    from . import detection, redair, threatmap
+    from .loadouts import ENEMY_RADIUS_NM
+    n_wanted = AWACS_DASH_JETS.get(int(getattr(d, "level", 1)), 0)
+    if n_wanted <= 0 or state.raids is None:
+        return
+    if int(state.raids.get("dash_day", -1)) == state.day:
+        return
+    from . import support_assets
+    support_assets.plan(state, turn)                     # this turn's AWACS windows (the planner plans them right after the raids; planning a turn twice replaces its windows)
+    if not detection._on_orbit(state, "bl_e3", turn):
+        return
+    biggest = None
+    for objective in warned:
+        plan = booked.get(objective.id) or {}
+        if int(plan.get("bombers", 0)) < AWACS_DASH_MIN_BOMBERS:
+            continue
+        if biggest is None or int(plan["bombers"]) > int(booked[biggest.id]["bombers"]):
+            biggest = objective
+    if biggest is None:
+        return
+    station = threatmap.awacs_station(state)
+    if station is None:
+        return
+    best = None
+    for aircraft in AWACS_DASH_TYPES:
+        for wing in state.enemy_air:
+            field = state.assets.get(wing.base_asset_id)
+            if field is None or field.destroyed or runways.is_closed(state, wing.base_asset_id, turn):
+                continue
+            ready = redair.ready_of(state, wing, (aircraft,))
+            reach_nm = ENEMY_RADIUS_NM.get(aircraft, 0)
+            distance_nm = math.hypot(station[0] - field.x, station[1] - field.y) / NM
+            if ready < AWACS_DASH_MIN_JETS or distance_nm > reach_nm:
+                continue
+            if best is None or ready > best[0]:
+                best = (ready, wing, aircraft)
+        if best is not None:
+            break                                          # the first type in the list that a wing can field
+    if best is None:
+        return
+    ready, wing, aircraft = best
+    n_wanted = min(n_wanted, ready - ready % 2)             # a pair at least; what the wing has free, in pairs
+    taken = redair.take_ready(state, wing, (aircraft,), n_wanted)
+    plan = booked[biggest.id]
+    for sid, n in taken:
+        plan.setdefault("jets", []).append([sid, n, "dash"])
+    redair.spend(state, wing.base_asset_id, n_wanted)
+    plan["awacs_dash"] = {"wing": wing.base_asset_id, "type": aircraft, "n": n_wanted, "station": [round(station[0]), round(station[1])]}
+    state.raids["dash_day"] = state.day
 
 
 def hit(state, base_id: str, wing, rng: random.Random, through: int | None = None, aim: str = "", ac: str | None = None, kh59: bool = False, defences: bool = True) -> list:

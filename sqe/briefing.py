@@ -82,6 +82,13 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     + (f" A fighter sweep of {e['sweeps']} goes in ahead of them." if e.get("sweeps") and e.get("sead") else "")
                     + (f" They are escorted by {e['escorts']} fighters{esc_n}." if e.get("escorts") else
                        (" They have no escort." if e.get("land") else " They have no escort: the enemy cannot reach this far with fighters. It is a last throw of the dice."))]
+        # S181 P3b: the AWACS dash that rides with this raid (`raids.plan_awacs_dash`) is named, so the flight knows what the fast high pair is after
+        dash = e.get("awacs_dash")
+        if dash:
+            dash_names = {"MiG_31": "MiG-31s", "MiG_25PD": "MiG-25PDs", "Su_27": "Su-27s"}
+            dash_name = dash_names.get(dash.get("type", ""), "fighters")
+            sit += ["", f"Ahead of the raid, {dash.get('n', 2)} {dash_name} are going for the AWACS: high and fast, straight at its orbit, "
+                        "firing long-range missiles from about 60 nm, then turning for home. Any you can reach, shoot."]
     n_def = x.get("n_def", pkg.n_def)
     inc = (" (counting the packages flown with this one: " + ", ".join(f"#{n}" for n in x["merged_nums"]) + ")") if x.get("merged_nums") else ""
     sit += ["", (f"Expect about {n_def} hostile fighters to contest the target{inc}; command is committing enough fighters to answer them."

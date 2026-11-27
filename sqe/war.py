@@ -653,6 +653,8 @@ RAID_SAM_FLOOR = 0.4         # ...never below this share
 # Syria, many packages at once, which may overstate them); XO chose the measured figures. The raiders' own losses already matched DCS and are unchanged.
 INTERCEPT_BLUE_LOSS_P = 0.23     # each intercepting jet (28 of 120 lost)
 INTERCEPT_ESCORT_LOSS_P = 0.59   # each red escort and sweep fighter (84 of 142 lost)
+AWACS_DASH_KILL_P = 0.15         # S181 P3b: each interceptor of the AWACS dash that gets past the guard kills the E-3 with this chance (it retreats from fighters, S176b; judgment call, to be measured on the server)
+AWACS_DASH_KILL_P_ALONE = 0.35   # ...when no guard flew that turn (judgment call)
 
 
 class WarSimulator:
@@ -787,6 +789,7 @@ class WarSimulator:
                 shot_down = not ok and rng.random() < raids.KH59_SALVO_STOP
         header = "RAID STOPPED" if ok else ("MISSILES SHOT DOWN" if shot_down else "RAID GOT THROUGH")
         lines = [f"{pkg.objective.description}: {header}"]
+        lines += self._awacs_dash(state, pkg)
         if pkg.extra.get("unseen_raid"):                                    # v0.41.348 (Phase 7b): no AWACS was up, blue's planned patrols alone met it
             lines.append("   not detected: no AWACS was on orbit, only the planned patrols met it")
             ra_ = state.raids if state.raids is not None else {}
@@ -843,6 +846,40 @@ class WarSimulator:
             stopped_odds = p * raids.KH59_PRELAUNCH_SHARE
             odds = stopped_odds + (1.0 - stopped_odds) * raids.KH59_SALVO_STOP
         return {"success": prevented, "odds": odds, "lines": lines, "objective": pkg.objective.description, "roll": roll, "lost_by": lost_by}
+
+    def _awacs_dash(self, state: CampaignState, pkg: Package) -> list:
+        """S181 P3b: the MiG-31 / MiG-25PD dash at the E-3 that rides with this raid (`raids.plan_awacs_dash`), settled on its own seeded dice (campaign, turn, raid) so no other
+        result moves. The E-3's guard (an HVAACAP pair or four-ship this turn) shoots some down (INTERCEPT_ESCORT_LOSS_P each, as the interceptors do against escorts); every survivor
+        then gets one shot at the E-3, which is lost with AWACS_DASH_KILL_P (guarded) or AWACS_DASH_KILL_P_ALONE. Blue's own losses to the dash are not modelled (judgment call). -> log lines."""
+        dash = (pkg.extra or {}).get("awacs_dash")
+        if not dash:
+            return []
+        from . import support_assets
+        rng = random.Random(f"{state.campaign_id}:{state.turn}:{pkg.objective.id}:dash")
+        guards = (getattr(state, "barcap", None) or {}).get("blue_flights") or []
+        guarded = False
+        for flight in guards:
+            if flight.get("turn") == state.turn and flight.get("kind") == "HVAACAP" and flight.get("asset") == "bl_e3":
+                guarded = True
+        wing = state.enemy_air_at(dash.get("wing", ""))
+        n = int(dash.get("n", 0))
+        lost = 0
+        if guarded and wing is not None:
+            lost = wing.lose(dash.get("type", ""), count_roll(rng, n, INTERCEPT_ESCORT_LOSS_P, self.d.variance))
+        survivors = max(0, n - lost)
+        lines = []
+        if lost:
+            lines.append(f"   the E-3's guard shot down {lost} of the {n} interceptors that went for it")
+        kill_p = AWACS_DASH_KILL_P if guarded else AWACS_DASH_KILL_P_ALONE
+        e3 = support_assets.ensure(state).get("bl_e3")
+        if survivors > 0 and e3 is not None and int(e3.get("available", 0)) > 0:
+            if rng.random() < 1.0 - (1.0 - kill_p) ** survivors:
+                line = support_assets.lose(state, e3["label"])
+                if line:
+                    lines.append("   " + line.replace("shot down", "shot down by red interceptors"))
+            else:
+                lines.append("   red interceptors went for the E-3 and missed")
+        return lines
 
     def _escort_fight(self, state: CampaignState, pkg: Package, lines: list) -> dict:
         """S215b: the interceptors and the raid's escorts and sweep fight each other. Nothing happens without red fighters, or with no blue flight to meet them.

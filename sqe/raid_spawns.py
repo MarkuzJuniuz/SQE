@@ -35,6 +35,12 @@ BLUE_CALLIN_CV_NM = 60        # the carrier BARCAP answers a hotspot at most thi
 RAID_PUSH_NM = 10             # v0.41.29: a raid's PUSH, this far from its marshal toward the target (blue's is up to 10 nm)
 RAID_MSHL_MIN_NM = 60         # ...its marshal is at least this far from the target (judgment call: well outside blue's Patriot reach)
 RAID_MPS = 232.0              # a red raid's speed (450 kts), the same figure its placement always used
+# S181 P3b: the AWACS dash (judgment calls from the plan doc; the MiG-31's R-33 / the MiG-25PD's R-40 reach of about 60 nm and the high, fast profile: public data sheets, from memory, firmness low)
+AWACS_DASH_ALT_FT = 40000
+AWACS_DASH_KPH = 1500         # about Mach 1.4 at 40,000 ft (what DCS's AI will hold for a long dash is to be measured)
+AWACS_DASH_HOME_KPH = 900
+AWACS_DASH_LAUNCH_NM = 60     # its launch point, this far from the E-3's station on the line from its field
+AWACS_DASH_LEAD_S = 480       # it is at its launch point this long before the raid's time over target (the E-3 is the first thing to go)
 RAID_MIN_NM = 40              # ...a raid with no time to hold starts no closer than this to its target (it is late instead)
 RAID_ESCORT_AHEAD_NM = 4.0    # v0.41.296 (XO 2026-11-05: "the Su-27s are in front of their package"; he first thought 10 nm too much): the fleet raid's escort group flies this far AHEAD of the bomber group it guards. JUDGMENT CALL: no public source gives a spacing (Chipman 1990 says Su-27s "may be tasked to escort" Badgers / Backfires; CIMSEC's Backfire piece has no formation detail)
 RAID_ECHELON_NM = 1.5         # ...and the bomber groups of the fleet raid fly in a loose echelon: group by group this far to the side of the line (centred on it), each one RAID_GROUP_GAP_S behind the last. JUDGMENT CALL, same as above
@@ -1070,11 +1076,68 @@ class RaidSpawns:
             return
 
     # ---- bomber raid on the fleet: already en route from the first second, along a real path from their base ----------------
+    def _blue_e3_group(self):
+        """The E-3's group in this mission, or None (no AWACS on station, or the carrier's E-2C only)."""
+        for country in self.m.coalition["blue"].countries.values():
+            for group in country.plane_group:
+                if group.units and group.units[0].type == "E-3A":
+                    return group
+        return None
+
+    def _spawn_awacs_dash(self, package, tot_s, manifest):
+        """S181 P3b: the MiG-31 / MiG-25PD dash that rides with this raid (`raids.plan_awacs_dash`): high and fast from its field straight at the E-3's station, so that it is
+        AWACS_DASH_LAUNCH_NM from the station AWACS_DASH_LEAD_S before the raid's time over target; it attacks the E-3's group (an AttackGroup task, when the E-3 is in the mission,
+        else a fighter sweep through the station), then flies home. Late-activated when it would start before the mission does. The player's own flight is never scripted by this."""
+        dash = (package.extra or {}).get("awacs_dash")
+        if not dash:
+            return
+        field = self.state.assets.get(dash.get("wing", ""))
+        cls = getattr(planes, str(dash.get("type", "")), None)
+        if field is None or cls is None:
+            return
+        sx, sy = float(dash["station"][0]), float(dash["station"][1])
+        speed_ms = AWACS_DASH_KPH / 3.6
+        alt = AWACS_DASH_ALT_FT * FT
+        launch = offset(sx, sy, bearing(sx, sy, field.x, field.y), AWACS_DASH_LAUNCH_NM * NM)
+        arrive_s = max(60.0, float(tot_s) - AWACS_DASH_LEAD_S)
+        to_launch = dist(field.x, field.y, launch[0], launch[1])
+        start_s = arrive_s - to_launch / speed_ms
+        start = (field.x, field.y)
+        if start_s < 0:
+            start = offset(launch[0], launch[1], bearing(launch[0], launch[1], field.x, field.y), speed_ms * arrive_s)
+            start_s = 0.0
+
+        def pt(x, y):
+            return mapping.Point(x, y, self.t)
+
+        name = f"Raid Dash {package.number}"
+        g = self.m.flight_group_inflight(self.red, name, cls, pt(*start), int(alt), int(AWACS_DASH_KPH), task.FighterSweep, group_size=int(dash.get("n", 2)))
+        g.points[0].tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+        g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
+        e3 = self._blue_e3_group()
+        g.add_waypoint(pt(*launch), int(alt), int(AWACS_DASH_KPH), "LAUNCH")
+        if e3 is not None:
+            g.points[-1].tasks.append(task.AttackGroup(e3.id))
+        g.add_waypoint(pt(sx, sy), int(alt), int(AWACS_DASH_KPH), "STN")
+        g.add_waypoint(pt(field.x, field.y), int(alt), int(AWACS_DASH_HOME_KPH), "RTB")
+        load = enemy_cap_loadout(dash["type"])
+        names = []
+        for k, u in enumerate(g.units, 1):
+            u.name = self._red_unit_name(f"RAID-D{package.number}-{k}")
+            u.pylons = copy.deepcopy(load)
+            names.append(u.name)
+            self._note_jam(u)
+        g.set_skill(getattr(Skill, ai_skill(self.o, "red", self.d), Skill.High))
+        if start_s >= 30:
+            self._late(g, start_s)
+        manifest.add("enemy_air", field.id, names, ac=dash["type"])          # charged to its own wing and type
+
     def _spawn_raid(self, package, sx_, sy_, tot_s, geom, manifest):
         st, d, r = self.state, self.d, self.vrng
         ex = package.extra
         if not ex:
             return
+        self._spawn_awacs_dash(package, tot_s, manifest)                 # S181 P3b
         # S183 rule 2: wave 2 of a layered SEAD raid is built only when wave 1 is in this mission (`_layer_present`) and flown (`_layer_gone`: wave 1 had already struck); the war sim resolves it then
         layer_of = ex.get("layer_of") or ex.get("flank_after")          # S186: a flank raid waits for its SEAD raid like a second layer does
         your_own = package.objective.id == getattr(self, "_anchor_objective_id", None)      # S209: the raid you were sent to stop is never left out (you would take off to nothing)
