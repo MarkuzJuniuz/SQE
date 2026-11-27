@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.701, strikes on a single building aim at it
+A supply site with one building was bombed at the middle of the site, which is empty ground up to 145 m away. The AI now bombs the building, and your target steerpoint and the kneeboard's coordinates are on it.
+
 ## v0.41.700, intercepts you do not fly cost fighters
 When the war settles an intercept of an escorted raid, your interceptors and red's escorts now shoot each other down, at the rates measured in DCS. Red loses more, so Level 3 is easier than before.
 
