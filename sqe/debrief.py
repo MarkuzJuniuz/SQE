@@ -219,6 +219,12 @@ def read_state_file(path: Path, manifest: Manifest, min_mtime: float | None = No
     return "ok", data
 
 
+def site_targets(group: dict) -> list:
+    """S224 (XO 2026-11-27: "the guard doesn't count, only the buildings / depots themselves"): the units a red site is made of: its buildings where it has them (a supply
+    site), else every unit of its group. A mission built before S224 has no list of buildings: every unit, as before."""
+    return group.get("buildings") or group["units"]
+
+
 def tally(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     """Live casualty counts for the waiting window."""
     lost = set(data.get("dead", [])) | set(data.get("ejected", []))
@@ -405,9 +411,14 @@ def _status_of(obj: dict, manifest: Manifest, data: dict) -> tuple:
             txt += "; radar gate clear"
         return txt, n_dead > 0 or r_dead > 0
     if typ in ("STRIKE", "CAS") and site is not None:
-        n_dead = sum(1 for u in site["units"] if u in lost)
-        what = "vehicles" if typ == "CAS" else "target units"
-        return f"{n_dead} of {len(site['units'])} {what} destroyed", n_dead > 0
+        units = site_targets(site)
+        n_dead = sum(1 for u in units if u in lost)
+        what = "target units"
+        if typ == "CAS":
+            what = "vehicles"
+        if site.get("buildings"):
+            what = "buildings"
+        return f"{n_dead} of {len(units)} {what} destroyed", n_dead > 0
     if typ in ("BARCAP", "FLEET_DEFENSE", "COUNTER_AIR"):
         red = [u for g in manifest.groups if g["kind"] == "enemy_air" for u in g["units"]]
         n_dead = sum(1 for u in red if u in lost)
@@ -650,10 +661,18 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                         out["lines"].append(f"The position was overrun; the column presses on toward {nb.name}")
         elif g["kind"] == "asset":
             a = state.assets[g["ref"]]
-            frac = (len(g["units"]) - len(dead)) / max(1, g["base_count"])
             before = a.health
             from . import ground as _gr2
-            a.health = _gr2.column_health(state, a, before, frac)
+            buildings = g.get("buildings")
+            if buildings:                                    # S224: the site loses the share of its standing buildings that burned; the guard does not count
+                standing = 0
+                for unit_name in buildings:
+                    if unit_name not in lost:
+                        standing += 1
+                a.health = before * standing / len(buildings)
+            else:
+                frac = (len(g["units"]) - len(dead)) / max(1, g["base_count"])
+                a.health = _gr2.column_health(state, a, before, frac)
             from . import works as _wk
             if _wk.is_works(a):                                         # S111: a works takes only a share of what the same bombs take off a depot
                 a.health = before - (before - a.health) * _wk.damage_factor(state, a)

@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.707, a supply site is its buildings
+Destroying all the buildings of a depot, fuel farm or plant now destroys it. Before, the guard vehicle counted as part of the site, so a site with every building burned could keep a fifth of its health. The guards no longer count either way.
+
 ## v0.41.706, F-14 RIO Enhancements (experimental)
 RIO Navigation and RIO Radar are now one: one Install button in Settings > DCS Integration, and one menu, F10 > Other > RIO Enhancements (Your Nav, My Nav, Turnpoints, Hunt Bandit, Hunt Next, Hunt Off). If you had one of them installed, click Install again to get both.
 
