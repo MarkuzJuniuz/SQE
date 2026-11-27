@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.705, supply strikes aim at a building
+On a supply site with several buildings, the target point was open ground between them, so bombs dropped on it hit nothing. It is now the building nearest that spot: your target steerpoint and kneeboard coordinates too. AI jets with GPS bombs still spread them over all the buildings.
+
 ## v0.41.704, red no longer loses a jet that flew home
 After a mission, a red raid that got through to its target still cost red one aircraft, even when every one of them survived. Only the jets really shot down are taken off now. Raids nobody flew are unchanged.
 
