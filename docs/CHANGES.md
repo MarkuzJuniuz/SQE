@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.709, three hits cut a runway
+A runway is now cut when 3 bombs or missiles hit it (it was 4), so a two-jet flight with 4 GBUs can afford one miss. The same rule holds for red's Kh-59M raids on your fields.
+
 ## v0.41.708, supply strikes you do not fly hit as hard as they do in DCS
 A strike on a depot or fuel farm with no air defence job in front of it, resolved by the war, now succeeds about nine times in ten and takes four fifths of a full site, as measured in DCS test missions. Before, it took about a third. The Lutorin works are unchanged. Level 3 is a little easier for blue.
 

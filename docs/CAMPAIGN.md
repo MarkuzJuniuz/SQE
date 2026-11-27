@@ -210,7 +210,7 @@ fighter goes after one only once its own radar has picked it up.
 
 ### Runways
 
-A runway strike that lands at least 4 of its bombs on the runway **craters the field** (fewer is damage the repair crews fix overnight): nothing launches from it, scrambles or lands there for 6
+A runway strike that lands at least 3 of its bombs on the runway **craters the field** (fewer is damage the repair crews fix overnight): nothing launches from it, scrambles or lands there for 6
 turns (24 hours); a field that holds a Tu-22M3 squadron (Mozdok, Damascus, Bassel Al-Assad) is repaired in 2 turns (8 hours), because red's bomber fields are its
 best-repaired. A closed field's squadrons cannot fly from it and red's wings skip it.
 
