@@ -451,15 +451,15 @@ def relocate(state, d, rng: random.Random) -> list:
         for _try in range(6):
             ang = math.radians(rng.uniform(0, 360)); step = rng.uniform(*STEP_NM) * NM
             nx, ny = seacheck.snap_to_land(a.x + step * math.cos(ang), a.y + step * math.sin(ang))
+            if not seacheck.site_ok(nx, ny):                             # S229: snap_to_land hands back the wet point itself when it finds no land
+                continue
             if math.hypot(nx - hx, ny - hy) <= MAX_DRIFT_NM * NM and math.hypot(nx - a.x, ny - a.y) > 1500:
                 break
         else:
             continue
         dx, dy = nx - a.x, ny - a.y
         a.x, a.y = nx, ny
-        for g in state.assets.values():                                     # the dug-in garrison goes with it
-            if g.guards == a.id:
-                g.x, g.y = g.x + dx, g.y + dy
+        _move_guards(state, a, dx, dy)                                      # the dug-in garrison goes with it
         r["moves"][a.id] = r["moves"].get(a.id, 0) + 1
         lines.append(f"{a.name} was hit and has moved about {math.hypot(dx, dy) / NM:.0f} nm")
     return lines
@@ -478,9 +478,27 @@ def _long_range(state, a) -> bool:
 
 def _shift(state, a, dx: float, dy: float) -> None:
     a.x, a.y = a.x + dx, a.y + dy
-    for g in state.assets.values():                                     # the dug-in garrison goes with it
-        if g.guards == a.id:
-            g.x, g.y = g.x + dx, g.y + dy
+    _move_guards(state, a, dx, dy)                                      # the dug-in garrison goes with it
+
+
+GUARD_LAND_SEARCH_M = 5000.0    # S229: a guard whose moved spot is in the sea goes to the nearest dry spot within this far of it (judgment call); none found: it stays where it was
+
+
+def _move_guards(state, a, dx: float, dy: float) -> None:
+    """Every asset guarding `a` moves by (dx, dy) with it. S229: a guard whose new spot would be in the sea takes the nearest dry spot to it instead
+    (`seacheck.snap_to_land`, fixed 1 km rings, no dice); with none within GUARD_LAND_SEARCH_M it stays where it was (Syria L3 seed 44: `sam_bassel_2` went into the sea)."""
+    from . import seacheck
+    for g in state.assets.values():
+        if g.guards != a.id:
+            continue
+        nx = g.x + dx
+        ny = g.y + dy
+        if seacheck.in_sea(nx, ny):
+            nx, ny = seacheck.snap_to_land(nx, ny, max_m=GUARD_LAND_SEARCH_M)
+            if seacheck.in_sea(nx, ny):
+                continue
+        g.x = nx
+        g.y = ny
 
 
 def retreat(state, d, rng: random.Random) -> list:
@@ -523,6 +541,8 @@ def retreat(state, d, rng: random.Random) -> list:
         for da in (0, 25, -25, 50, -50):
             ang = away + math.radians(da)
             nx, ny = seacheck.snap_to_land(a.x + step * math.cos(ang), a.y + step * math.sin(ang))
+            if not seacheck.site_ok(nx, ny):                             # S229: snap_to_land hands back the wet point itself when it finds no land
+                continue
             if math.hypot(nx - a.x, ny - a.y) >= 0.6 * step:
                 break
         else:

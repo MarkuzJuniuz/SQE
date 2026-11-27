@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.717, no red site ends up in the sea
+A red SAM site that pulls back or moves after a hit, and the guard that goes with it, now always lands on dry ground. One road supply spot on the Caucasus coast that lay in the water is no longer used. New Caucasus campaigns lay out their road supply sites a little differently.
+
 ## v0.41.716, the ground fight starts when the CAS flight arrives
 In a CAS mission both columns now reach their meeting point about a minute before your time on target. They used to get there 5 to 15 minutes early, because DCS skipped the short detour meant to delay them. A column with time to spare waits where it starts, then drives in slowly.
 

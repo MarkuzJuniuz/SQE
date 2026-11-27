@@ -220,7 +220,12 @@ def build(st, th: dict, d, ap: dict, rng: random.Random | None = None) -> dict:
     skipped = {s: {"cap": 0, "sep": 0, "order": 0} for s in ("red", "blue")}
     rts = road_front.routes(th)
     rsides = road_front.route_sides(st, th, rts) if rts else None
+    from . import seacheck
     for x, y in spots:
+        # S229: a shipped road spot the water map puts in the sea is not used (Caucasus: 1 of 447, it became rsup_027 / rsup_028 in five of 40 wars)
+        if seacheck.in_sea(x, y):
+            continue
+
         def distance_to_airport(name):
             return math.hypot(ap[name][0] - x, ap[name][1] - y)
 
