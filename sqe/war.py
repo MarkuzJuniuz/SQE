@@ -630,6 +630,10 @@ def flight_weight(f) -> float:
 
 RAID_SAM_PRESSURE = 0.12     # v0.41.305: blue's intercept strength lost per live SAM site that still threatens the carrier raid's lane (judgment call, no source: three live sites cost about a third)
 RAID_SAM_FLOOR = 0.4         # ...never below this share
+# S215b: what the fighters lose in an intercept of an escorted raid the player did not fly, stopped or not. Measured in 15 intercepts on the dedicated server (2026-11-26, all AI, Caucasus and
+# Syria, many packages at once, which may overstate them); XO chose the measured figures. The raiders' own losses already matched DCS and are unchanged.
+INTERCEPT_BLUE_LOSS_P = 0.23     # each intercepting jet (28 of 120 lost)
+INTERCEPT_ESCORT_LOSS_P = 0.59   # each red escort and sweep fighter (84 of 142 lost)
 
 
 class WarSimulator:
@@ -804,6 +808,9 @@ class WarSimulator:
             elif carriers:
                 sq = rng.choice(carriers); lost = rng.randint(1, 3); sq.available = max(0, sq.available - lost)
                 lines.append(f"   missiles hit the fleet: {lost} aircraft lost on deck ({sq.name})")
+        lost_by = {}
+        if bw is not None:
+            lost_by = self._escort_fight(state, pkg, lines)
         for ln in lines:
             state.note(ln.strip())
         prevented = ok or shot_down                      # for blue it is a success either way: nothing was hit
@@ -814,7 +821,30 @@ class WarSimulator:
         if kh59_:
             stopped_odds = p * raids.KH59_PRELAUNCH_SHARE
             odds = stopped_odds + (1.0 - stopped_odds) * raids.KH59_SALVO_STOP
-        return {"success": prevented, "odds": odds, "lines": lines, "objective": pkg.objective.description, "roll": roll}
+        return {"success": prevented, "odds": odds, "lines": lines, "objective": pkg.objective.description, "roll": roll, "lost_by": lost_by}
+
+    def _escort_fight(self, state: CampaignState, pkg: Package, lines: list) -> dict:
+        """S215b: the interceptors and the raid's escorts and sweep fight each other. Nothing happens without red fighters, or with no blue flight to meet them.
+        Adds its log lines to `lines`. -> {flight id: jets blue lost} (the sortie book counts them)."""
+        fighters = raids.escort_members(pkg.extra) + raids.sweep_members(pkg.extra)
+        if not fighters or not pkg.flights:
+            return {}
+        red_lost = 0
+        for wing_id, aircraft_type, count in fighters:
+            wing = state.enemy_air_at(wing_id)
+            if wing is not None:
+                red_lost += wing.lose(aircraft_type, count_roll(self.rng, count, INTERCEPT_ESCORT_LOSS_P, self.d.variance))
+        if red_lost:
+            lines.append(f"   {red_lost} escorting fighters shot down")
+        lost_by = {}
+        for flight in pkg.flights:
+            lost = count_roll(self.rng, flight.count, INTERCEPT_BLUE_LOSS_P, self.d.variance)
+            squadron = state.squadrons.get(flight.squadron_id)
+            if lost and squadron is not None:
+                squadron.available = max(0, squadron.available - lost)
+                lost_by[flight.id] = lost
+                lines.append(f"   {flight.callsign} lost {lost} aircraft")
+        return lost_by
 
     def sead_p(self, state: CampaignState, pkg: Package) -> float:
         """Odds that this package's SEAD flights blind the site's radars."""
