@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.714, red goes for the AWACS's runway first
+At Levels 2 and 3, when red raids one of your airfields, it now goes first for the field your E-3 flies from, as long as an E-3 can still take off there.
+
 ## v0.41.713, the Hawkeye alone sees only near the fleet
 With the E-3 up, every red raid is seen as before. When only the carrier's E-2C is up, it sees a raid only when its target or the last 100 nm of its way in lies within 160 nm of the carrier; the others come unseen, so you do not get to intercept them.
 
