@@ -79,7 +79,7 @@ def road_spots(routes, existing=(), spacing: float = SPOT_SPACING_M, min_sep: fl
 
 
 def routes_from_raw(raw) -> list:
-    """The raw scan file (a list of {"pair", "kind", "pts"}) -> simplified road routes (railroads and empty answers skipped), longest first."""
+    """The raw road probe file (a list of {"pair", "kind", "pts"}) -> simplified road routes (railroads and empty answers skipped), longest first."""
     out = []
     for o in raw:
         if o.get("kind") != "roads" or len(o.get("pts") or []) < 2:

@@ -16,7 +16,6 @@ You still need the map installed in DCS to fly it, and pydcs must know the terra
 | `lat`, `lon`, `tz` | sun times and local time (`tz` = hours from UTC) |
 | `temp_c` | 12 monthly mean temperatures for the mission weather |
 | `geo` | coarse coastline / lakes / borders file for the map view (file in the same folder; `land`, `lakes`, `borders` as lists of [x, y] points, x north, y east, metres) |
-| `scan` | required. The terrain-scan settings: `file` (the scan's file name in `Saved Games\SQE`), the area `x0 x1 y0 y1` in metres, `step`, and `probe_airport`. Optional: `height_step` and `relief_file`. A scan is not needed to play: the pack folder can ship the results (see "Data files" below) |
 | `carrier` | `id`, `name`, optional `short` (the label), and the station: `from_airport`, `heading` and `distance_m` out to sea. Optional `carrier_band_km` (80: how far from the best station the seeded pick may range) and `carrier_evade_nm` (215: how far from every enemy airfield the fleet sails on a staged raid). Optional `carrier_standoff_nm`: how far the fleet stays from every enemy airfield |
 | `blue_fields` | friendly airfields: `id`, `name`, `airport` (the pydcs airport name); optional `"divert": true` = a landing and recovery field with no squadron, no patrol and no Patriot battery (HAWK and AAA only); optional `"patriot": true` on a divert field gives it its Patriot too (Syria: Hatay) |
 | `support_base` | optional. Blue field id that hosts the AWACS and tankers |
@@ -68,7 +67,15 @@ You still need the map installed in DCS to fly it, and pydcs must know the terra
 
 ## Data files
 
-Next to `<id>.json` in the pack folder SQE reads, when they exist: `<id>_geo.json` (the `geo` file), `<id>_relief.json` (ground height, 2 km cells), `<id>_sites.json` (the condensed ground, SAM and supply spots) and `<id>_roads_net.json` (the road net). They are built from a DCS terrain scan by `tools/sqe_scan.py`. A pack without them still loads: SQE falls back to a coarse coastline, a flat height estimate for low flights, and its own site placement.
+Next to `<id>.json` in the pack folder SQE reads, when they exist:
+
+* `<id>_geo.json` (the `geo` file);
+* `<id>_water.json`: where the land and the water are. `x0`, `y0`, `step` (metres), `nx` (cells north), `ny` (cells east) and `cells`: one byte per cell, rows along x one after the other, zlib then base64. Codes: 0 land, 1 small water, 2 shallows or river, 3 sea or a big lake;
+* `<id>_relief.json`: ground height, 2 km cells;
+* `<id>_sites.json`: the condensed ground, SAM and supply spots;
+* `<id>_roads_net.json`: the road net. Ground columns drive on it.
+
+SQE reads nothing else about the map: a player has nothing to scan. A pack without these files still loads: SQE falls back to the coarse coastline, a flat height estimate for low flights, its own site placement, and columns that drive across country.
 
 Order matters in `wing_weight` and `red_fields` (they decide the order random choices are made in, so the same seed gives the same campaign).
 SQE refuses a pack with a missing key and says which one.

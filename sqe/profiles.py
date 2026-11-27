@@ -5,7 +5,7 @@ the egress (their ring, from threatmap.RANGE_NM), asks whether each of them can 
 is least exposed. With no threat, or when nothing is better, the profile is exactly what it was before (the role altitude).
 
   * PUSH stays at the role altitude (the long cruise, easy on fuel); the tier applies from the IP to the egress.
-  * With the ground-height scan (relief.py) a LOW flight is judged against what each radar can really see over the terrain, and MED is never planned below
+  * With the ground-height grid (relief.py) a LOW flight is judged against what each radar can really see over the terrain, and MED is never planned below
     the minimum safe altitude of the IP-to-egress legs. Without it the old flat estimate applies.
   * A lower profile has to be clearly safer (MIN_GAIN) to be chosen; radar SAMs count half against a LOW flight (terrain masking, radar horizon).
   * LOW is flown as height above the ground (DCS "radio altitude"), so the flight follows the terrain.
@@ -105,7 +105,7 @@ def hits(v: str, alt_ft: int) -> bool:
 
 def low_factor(a, v: str, route, agl_ft: float) -> float:
     """How much of its weight a radar SAM keeps against a LOW flight: the share of the route it can actually see (ground height measured by the
-    scan, so a ridge in the way counts), never below 0.2; the flat LOW_RADAR_FACTOR when there is no relief file."""
+    grid, so a ridge in the way counts), never below 0.2; the flat LOW_RADAR_FACTOR when there is no relief file."""
     if route:
         f = relief.visible_fraction((a.x, a.y), route, agl_ft, tm.RANGE_NM.get(v, 0) * NM)
         if f is not None:

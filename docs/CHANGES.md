@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.710, shipped map data only, no terrain scans
+SQE now reads only the map data that ships with it, with a new land and water map of the Caucasus and Syria; a terrain scan in your Saved Games folder is no longer used.
+Sites are placed against the real coast and ground columns drive on the roads for everyone. A campaign you already have may move a few sites back from the shore when you open it.
+
 ## v0.41.709, three hits cut a runway
 A runway is now cut when 3 bombs or missiles hit it (it was 4), so a two-jet flight with 4 GBUs can afford one miss. The same rule holds for red's Kh-59M raids on your fields.
 

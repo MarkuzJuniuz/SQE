@@ -326,50 +326,6 @@ def ensure_blue_garrisons(state) -> bool:
     return added
 
 
-ROAD_SNAP_M = 3000.0                     # a column or supply site moves onto a road if one is this close
-
-
-ROAD_SNAP_COLUMN_M = 6000.0           # v0.41.186 (XO 2026-10-28): a front-line COLUMN moves onto a road this close (judgment call: XO's 2026-10-28 CAS runs: two of five contact points had the nearest scanned road 3.4 to 5.2 km away, and the scan's biggest gap is 5.8 km)
-
-
-def _is_column(a) -> bool:
-    return a.kind == AssetKind.ARMOR and a.variant != "GARRISON"
-
-
-def snap_roads(state) -> int:
-    """Once, as soon as a road scan exists: front-line columns, fuel farms and depots (both sides) move onto the nearest road point (<= ROAD_SNAP_COLUMN_M, and still on land); a column's air defence and anything guarding a moved site moves with it. Garrisons stay off the road, dug in.
-    v0.41.186: older saves (snapped before, at 3 km) get ONE more pass for the columns that were out of reach, at ROAD_SNAP_COLUMN_M. Returns how many moved."""
-    from . import roads, seacheck
-    g = getattr(state, "ground", None)
-    if not g or not roads.available():
-        return 0
-    first = not g.get("roads")
-    if not first and g.get("roads_wide"):
-        return 0
-    g["roads"] = True
-    g["roads_wide"] = True
-    moved = 0
-    pool = list(state.assets.values()) + list((getattr(state, "blue_assets", None) or {}).values())
-    for a in pool:
-        col = _is_column(a)
-        if not (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or col) or a.id.startswith(("rsup_", "bsup_")):
-            continue                                                       # v0.41.241: the road sites already sit beside a road (road_sites.py)
-        if not first and a.kind in (AssetKind.FUEL, AssetKind.DEPOT) and roads.snap(a.x, a.y, ROAD_SNAP_M) is not None:
-            continue                                                       # the extra pass: columns and supply sites the 3 km pass could not reach
-        p = roads.snap(a.x, a.y, ROAD_SNAP_COLUMN_M)                                  # v0.41.187: depots and fuel farms reach as far as columns (a supply site must be reachable by road)
-        if p is None or p == (a.x, a.y) or not seacheck.site_ok(*p):
-            continue
-        dx, dy = p[0] - a.x, p[1] - a.y
-        a.x, a.y = p
-        moved += 1
-        for c in state.assets.values():                                   # followers
-            if c.guards == a.id or (a.id.startswith("armor_") and c.id == "fsam_" + a.id[6:]):
-                c.x, c.y = c.x + dx, c.y + dy
-    if moved:
-        state.note(f"{moved} columns and supply sites now sit on roads.")
-    return moved
-
-
 def rebuild_blue(state, d, rng) -> list:
     """Overnight: a destroyed friendly supply site or garrison is replaced with a chance that follows friendly supply (the enemy's SAM sites rebuild the same way)."""
     out = []

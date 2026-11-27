@@ -785,7 +785,7 @@ def objective_wp(wps: list[Wpt]) -> Wpt | None:
 
 
 def _floor_ft(x: float, y: float) -> int:
-    """Lowest altitude (MSL) a flight may be spawned at: 1,500 ft over the highest ground near that point, or 6,000 ft without a ground-height scan."""
+    """Lowest altitude (MSL) a flight may be spawned at: 1,500 ft over the highest ground near that point, or 6,000 ft without a ground-height grid."""
     from . import relief
     h = relief.max_near_m(x, y, 5 * NM)
     return 6000 if h is None else int(math.ceil((h / FT + 1500) / 500.0) * 500)
@@ -795,7 +795,7 @@ def terrain_clear(wps: list[Wpt]) -> int:
     """AI flights hold the altitude of their last waypoint until they get to the next one, so a leg over mountains needs its START altitude above
     the ridges on it. Lifts every waypoint (not the LOW tier, which follows the ground, and not a ground point) to the minimum safe altitude of
     the leg it starts, and the end of the leg to the same, so a descent never ends in a hillside. Returns how many waypoints it lifted.
-    Without a ground-height scan nothing changes. A person flying the flight reads the MSA on the kneeboard instead."""
+    Without a ground-height grid nothing changes. A person flying the flight reads the MSA on the kneeboard instead."""
     from . import relief
     if not relief.available():
         return 0
@@ -817,7 +817,7 @@ def home_leg_ft(a: tuple, b: tuple, alt_ft: float) -> int:
     """v0.41.49: the altitude an AI flight's recovery point (RCV) needs so the leg a -> b home clears the ground. The RCV point is added after
     terrain_clear runs, at a fixed 3,000-6,000 ft, and an AI flight drops to the next point's altitude right after the last one: XO's 2026-10-20
     run had Venom 5-2 level at 3,000 ft MSL for 100 nm over rising ground and lost with nobody shooting. Same margin as terrain_clear (1,000 ft, 2,000 ft over
-    mountains), capped at 20,000 ft. Without a ground-height scan the altitude is unchanged."""
+    mountains), capped at 20,000 ft. Without a ground-height grid the altitude is unchanged."""
     from . import relief
     h = relief.leg_max_ft(a, b)
     if h is None:

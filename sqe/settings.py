@@ -83,8 +83,6 @@ class AppSettings:
     situation_open: bool = True          # v0.41.149: the Overview's Situation panel is open (day 1 starts open; it remembers the last state)
     list_filter: str = "squadron"        # v0.41.93: the Missions page list: "squadron" (packages with a flight of yours) or "all" (every package, for looking only)
     merge_mode: str = "area"              # "off" | "area" (default): fold packages in the same area, starting within 30 min, into one mission
-    shore_margin_m: int = 1500            # ground sites keep this far from the sea and lakes
-    river_margin_m: int = 100             # ...and this far from rivers and shallow water (terrain scan only)
     ai_skill_red: str = "level"            # v0.41.70: "level" (the difficulty level decides) or Average / Good / High / Excellent: Red's pilots and ground units
     ai_skill_blue: str = "level"           # ...and Blue's AI flights ("level" = High); see difficulty.ai_skill
     # S88 R3 (XO 2026-11-18): the two Tactical Edge switches are per campaign now (`state.ground`), no longer settings; an old settings file's keys for them are ignored on load (the load filter drops unknown keys)
@@ -114,7 +112,6 @@ class AppSettings:
     fighter_standoff: bool = True         # AI escorts and sweeps stop short of live SAM cover
     auto_patch_scripting: bool = False    # patch DCS MissionScripting.lua when SQE starts, restore it when SQE exits. Off until the user agrees on first run
     patch_asked: bool = False
-    terrain_asked: bool = False           # the one-time 'scan the map?' offer has been shown
     autoskip_stand_down: bool = False     # Phase 11 (XO): AUTOMATICALLY SKIP under Skip Turn: keep skipping turns with nothing to fly
     autoskip_night: bool = False          # ...also night turns, even when a flight is on offer
     autoskip_crew_rest: bool = False      # ...stop after autoskip_crew_rest_hours of campaign time (unticked: no limit, a week at most)

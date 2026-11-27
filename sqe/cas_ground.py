@@ -81,7 +81,7 @@ class CasGround:
         self._ground_orders(g)
 
     def _road_pt(self, x, y):
-        """v0.41.180: the nearest road point within CAS_ROAD_SNAP_M, else None (no road scan, or no road that close)."""
+        """v0.41.180: the nearest road point within CAS_ROAD_SNAP_M, else None (the theatre ships no road net, or no road that close)."""
         from . import roads
         return roads.snap(x, y, self.CAS_ROAD_SNAP_M) if roads.available() else None
 

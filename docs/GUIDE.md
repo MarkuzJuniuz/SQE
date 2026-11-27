@@ -175,8 +175,7 @@ Releases are built by `.github/workflows/release.yml` (Python 3.14).
 
 ## 6. Terrain data
 
-SQE ships relief data and site lists for the Caucasus and for Syria (a Syria campaign needs the DCS Syria map), so no terrain scan is needed to play. `tools/sqe_scan.py` rebuilds them
-after a DCS terrain update (for developers).
+SQE ships its own map data for the Caucasus and for Syria (a Syria campaign needs the DCS Syria map): where the land and the water are, the ground height, the road net and ready-made spots for ground sites. There is nothing to scan or set up.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -201,4 +200,4 @@ after a DCS terrain update (for developers).
 * `docs/CAMPAIGN.md`: how the campaign works and what its rules are.
 * `docs/CHANGES.md`: what changed in every version, newest first.
 * `docs/THEATRES.md`: how a map pack is built.
-* `tools/`: `smoke_test.py` (the self-test), `hook_lua_sim.py` (its Lua check), `sqe_scan.py` (the terrain scan) and `capture_loadouts.py` (the loadout capture). Crew Chief's other test and probe scripts are not in Git.
+* `tools/`: `smoke_test.py` (the self-test), `hook_lua_sim.py` (its Lua check) and `capture_loadouts.py` (the loadout capture). Crew Chief's other test and probe scripts are not in Git.
