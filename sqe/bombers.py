@@ -138,10 +138,11 @@ def carrier_claim(state, d, turn: int) -> tuple:
     return (int(dec["n"]), int(dec["escorts"])) if dec["mode"] != "hold" else (0, 0)
 
 
-def bomber_wings(state) -> list:
-    """B1: every Tu-22M3 wing whose field is up (not destroyed, runway not cut), in the pack's `bomber_bases` order (`bomber_base_ids`): the lead first. One entry in the Caucasus. A closed field is skipped."""
+def bomber_wings(state, turn: int | None = None) -> list:
+    """B1: every Tu-22M3 wing whose field is up (not destroyed, runway not cut), in the pack's `bomber_bases` order (`bomber_base_ids`): the lead first. One entry in the Caucasus. A closed field is skipped.
+    S232: `turn` = the turn to ask about (default: now); a runway cut now may be repaired by a later turn of the day."""
     order = {a: i for i, a in enumerate(bomber_base_ids())}
-    ws = [w for w in state.enemy_air if "Tu_22M3" in w.types and not state.assets[w.base_asset_id].destroyed and not runways.is_closed(state, w.base_asset_id)]
+    ws = [w for w in state.enemy_air if "Tu_22M3" in w.types and not state.assets[w.base_asset_id].destroyed and not runways.is_closed(state, w.base_asset_id, turn)]
     # The pack's bomber_bases order; a field not in it goes last.
     def field_order(wing):
         return order.get(wing.base_asset_id, len(order))
@@ -247,7 +248,15 @@ def estimated_stop(state, d, n, cv) -> float:
     return s / (s + 2.5 + 2.0 * d.iads + 0.4 * escorts_for(n))
 
 
-def decide(state, d) -> dict:
+def first_open_turn(state, turns) -> int | None:
+    """S232: the first of these turns in which a bomber field is open (its runway repaired), else None."""
+    for turn in turns:
+        if bomber_wings(state, turn):
+            return turn
+    return None
+
+
+def decide(state, d, turn: int | None = None) -> dict:
     """Today's call on the carrier raid: {"mode": "hold" | "safe" | "desperate", "n": bombers, "escorts", "wing", "type", "why"}. Pure: the same state gives
     the same answer, so the planner and the raid plan agree. v0.41.109: a raid is STAGED the day before (QUIET_DAYS): the day red decides to go it only
     holds ("quiet": True, "stage": {...}; the planner records it with `note_stage`), and the raid launches on the staged day."""
@@ -255,7 +264,7 @@ def decide(state, d) -> dict:
     def hold(why):
         return {"mode": "hold", "n": 0, "escorts": 0, "wing": "", "type": "", "why": why}
 
-    bws, cv = bomber_wings(state), _carrier(state)                # B1: every bomber field that is up; a cut or destroyed one is skipped
+    bws, cv = bomber_wings(state, turn), _carrier(state)          # B1: every bomber field that is up; a cut or destroyed one is skipped (S232: at `turn`, default now)
     bw = bws[0] if bws else None
     if getattr(d, "bomber_policy", "none") == "none" or bw is None or cv is None:
         return hold("no bomber wing or no carrier")
@@ -385,6 +394,10 @@ def cancel_if_cut(state) -> str | None:
     cleared) and today's banner says so (`raids["bomber_off"]`). -> the war-log line, else None."""
     stage = (state.raids or {}).get("bomber_stage") or {}
     if QUIET_DAYS <= 0 or int(stage.get("launch", -1)) < state.day or bomber_wings(state):
+        return None
+    # S232: a runway cut now is repaired by a set turn: the raid stays staged while a bomber field opens again by the end of its launch day
+    launch_day = int(stage["launch"])
+    if first_open_turn(state, range(state.turn, clock.first_turn(launch_day + 1))) is not None:
         return None
     wh, why = _bomber_field(state)
     state.raids.pop("bomber_stage", None)
