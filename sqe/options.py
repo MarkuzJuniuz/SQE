@@ -43,7 +43,7 @@ class MissionOptions:
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
     f14_turnpoints: bool = False        # the F-14 RIO Navigation export script is installed: the player's F-14B / F-14B(U) gets the F10 entries (`rio_nav`)
     f14_script_old: bool = False        # ...but the installed copy is older than SQE's: it cannot work the waypoints (the build warns)
-    f14_radar: bool = False             # S219: the F-14 RIO Radar export script is installed: the player's F-14 gets F10 > RIO Radar and red aircraft are named for Jester
+    f14_radar: bool = False             # S219: the F-14 RIO Radar export script is installed: the player's F-14 gets F10 > RIO Enhancements radar calls and red aircraft are named for Jester
     f14_radar_old: bool = False         # ...but the installed copy is older than SQE's (the build warns)
     dormant_sites: bool = False         # S89: red SAM sites on the route start late-activated and wake by detector (see `_wire_dormant`)
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)

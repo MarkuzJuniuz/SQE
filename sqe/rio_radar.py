@@ -1,7 +1,7 @@
 """F-14 RIO Radar (experimental, S219): "Hunt Bandit" has Jester lock a red aircraft for the player.
 
 The mission names the red aircraft `AirTarget01` to `AirTarget99`, because Jester's lock order takes only such a name (set command 10024, Heatblur manual "Jester / Iceman set commands"). The
-player calls F10 > Other > RIO Radar; this mission script picks the nearest red aircraft the radar should be able to see and asks the export script on the player's PC
+player calls from F10 > Other > RIO Enhancements; this mission script picks the nearest red aircraft the radar should be able to see and asks the export script on the player's PC
 (`data/sqe_f14_radar_export.lua`) to send the order. The export script reports from the radar display whether it locked. Flown facts (probe 2026-11-26): the order locks the named aircraft only,
 within a few seconds, and does not lock what the radar cannot see (out of range, behind); it takes the radar out of TWS into PD-STT; and it appears to stay armed, so every hunt ends with a release.
 
@@ -9,9 +9,10 @@ Pure functions, no pydcs.
 """
 from __future__ import annotations
 
+from .rio_nav import MENU_LUA, MENU_TITLE
+
 REQUEST_FILE = "SQE_radar.req"
 RESULT_FILE = "SQE_radar.res"
-MENU_TITLE = "RIO Radar"
 # The three calls were checked against a VAICOM phrase list (2026-11-26): no phrase starts with "Hunt"; "Break Lock", "Lock Target", "Next Target" and "Bandit" are all taken.
 HUNT_TITLE = "Hunt Bandit"
 NEXT_TITLE = "Hunt Next"
@@ -26,7 +27,7 @@ MAX_TRIES = 4
 _SCRIPT = r"""
 -- SQE F-14 RIO Radar (S219). Reads and writes plain text files only; nothing read is run as code.
 if not (io and lfs) then
-  trigger.action.outTextForGroup(__GROUP__, "RIO Radar needs mission scripting access: open SQE before the mission.", 20)
+  trigger.action.outTextForGroup(__GROUP__, "RIO: the radar calls need mission scripting access. Open SQE before the mission.", 20)
   return
 end
 
@@ -176,10 +177,9 @@ for _, path in ipairs({ request_path, result_path }) do
   local file = io.open(path, "w")
   if file then file:close() end
 end
-local menu = missionCommands.addSubMenuForGroup(GROUP, "__MENU_TITLE__")
-missionCommands.addCommandForGroup(GROUP, "__HUNT__", menu, hunt_bandit)
-missionCommands.addCommandForGroup(GROUP, "__NEXT__", menu, hunt_next)
-missionCommands.addCommandForGroup(GROUP, "__OFF__", menu, hunt_off)
+__MENU_LUA__missionCommands.addCommandForGroup(GROUP, "__HUNT__", rio_menu, hunt_bandit)
+missionCommands.addCommandForGroup(GROUP, "__NEXT__", rio_menu, hunt_next)
+missionCommands.addCommandForGroup(GROUP, "__OFF__", rio_menu, hunt_off)
 timer.scheduleFunction(function(_, t)
   local ok, problem = pcall(tick)
   if not ok then env.info("SQE RIO radar: " .. tostring(problem)) end
@@ -198,7 +198,7 @@ def mission_script(group_id: int, unit_name: str, magvar_deg: float) -> str:
               "__REQUEST__": REQUEST_FILE, "__RESULT__": RESULT_FILE, "__MENU_TITLE__": MENU_TITLE, "__HUNT__": HUNT_TITLE, "__NEXT__": NEXT_TITLE, "__OFF__": OFF_TITLE,
               "__MAX_NAMES__": str(MAX_NAMES), "__AZIMUTH__": str(AZIMUTH_DEG), "__ELEVATION__": str(ELEVATION_DEG), "__RANGE__": str(RANGE_NM),
               "__LOCK_WAIT__": str(LOCK_WAIT_S), "__MAX_TRIES__": str(MAX_TRIES)}
-    script = _SCRIPT
+    script = _SCRIPT.replace("__MENU_LUA__", MENU_LUA)          # first: the menu text has a mark of its own
     for mark, value in values.items():
         script = script.replace(mark, value)
     return script

@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.706, F-14 RIO Enhancements (experimental)
+RIO Navigation and RIO Radar are now one: one Install button in Settings > DCS Integration, and one menu, F10 > Other > RIO Enhancements (Your Nav, My Nav, Turnpoints, Hunt Bandit, Hunt Next, Hunt Off). If you had one of them installed, click Install again to get both.
+
 ## v0.41.705, supply strikes aim at a building
 On a supply site with several buildings, the target point was open ground between them, so bombs dropped on it hit nothing. It is now the building nearest that spot: your target steerpoint and kneeboard coordinates too. AI jets with GPS bombs still spread them over all the buildings.
 
