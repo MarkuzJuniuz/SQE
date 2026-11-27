@@ -113,6 +113,11 @@ FOLLOW_ATTACK_DAMAGE = 0.45   # the health a successful one takes off its target
 # works (2 packages only) keep the old rule. Blue only: red's raids on blue supply were not measured.
 PLAIN_STRIKE_P = 0.8          # the least odds such a strike has
 PLAIN_STRIKE_DAMAGE = 0.8     # the health a successful one takes off its target, at every level
+# S230 (Crew Chief under XO's autonomy, 2026-11-27): blue jets lost per package, flown in DCS against the war sim's figure for the same packages (S215c table, `test-runs/S215c/REPORT.md`;
+# server runs 2026-11-26 / 27, all AI). Each factor multiplies the sim's loss chance for that kind, so the defence still matters as before.
+PLAIN_STRIKE_LOSS_FACTOR = 0.39      # plain supply strike, n 18: DCS 0.17 a package, sim 0.44
+FOLLOW_ATTACK_LOSS_FACTOR = 1.41     # strike behind a SEAD, n 8: DCS 1.75, sim 0.88 (x 1.99); XO 2026-11-27 chose B, halfway: the square root of the measured ratio
+STANDOFF_DEAD_LOSS_FACTOR = 1.75     # XO 2026-11-27 chose B, halfway (the square root of 3.07): standoff DEAD, n 17: DCS 3.24 less the 18 % of recorded deaths with no weapon (crash, ground, fuel; 3 of 17 with a record, `probes/s230/dead_causes.py`) = 2.67, sim 0.87
 
 
 def is_follow_attack(obj) -> bool:
@@ -918,6 +923,8 @@ class WarSimulator:
                 lines.append("   DEAD: no effect observed")
         success = (killed if dead else blinded)
         loss_base = d.loss_rate * 2
+        if pkg.objective.aim == "STANDOFF":
+            loss_base = loss_base * STANDOFF_DEAD_LOSS_FACTOR      # S230: as flown in DCS
         lost_by = {}                                            # v0.41.337: losses by flight id, for Session's refit commit (refit.commit_turn)
         for f in pkg.flights:
             if f.tag:
@@ -1034,6 +1041,12 @@ class WarSimulator:
                 w.available -= k
                 lines.append(f"   {k} enemy fighters shot down by the patrol")
         loss_p = d.loss_rate * 2 * (defense / (strength + defense) if strength + defense else 0.0)
+        # S230: the two kinds of strike measured in DCS lose jets as they did there
+        if is_plain_supply_strike(state, obj):
+            loss_p = loss_p * PLAIN_STRIKE_LOSS_FACTOR
+        elif is_follow_attack(obj):
+            loss_p = loss_p * FOLLOW_ATTACK_LOSS_FACTOR
+        loss_p = min(0.9, loss_p)
         lost_by = {}
         for f in pkg.flights:
             lost = count_roll(rng, f.count, loss_p, d.variance)
