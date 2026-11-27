@@ -587,7 +587,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         polyline = [(pbase.x, pbase.y), geom.mshl, geom.push, geom.ip, (tx, ty), geom.egr]
         self._poly = polyline
         self._spawn_opfor_ground(package, tx, ty, manifest, polyline)
-        tx, ty = self._aim_at_single_building(package, geom, tx, ty)       # S218: now that the buildings stand
+        tx, ty = self._aim_at_a_building(package, geom, tx, ty)           # S218 / S222: now that the buildings stand
         if o.full_map:
             self._spawn_everything(package, manifest, tx, ty)
 
@@ -1062,7 +1062,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 continue
             if not ruined and not raid2:
                 self._spawn_opfor_ground(xp, tx2, ty2, manifest, [(base2.x, base2.y), geom2.mshl, geom2.push, geom2.ip, (tx2, ty2), geom2.egr])
-                tx2, ty2 = self._aim_at_single_building(xp, geom2, tx2, ty2)       # S218
+                tx2, ty2 = self._aim_at_a_building(xp, geom2, tx2, ty2)            # S218 / S222
                 self._cas_floor_for(geom2, xp, tx2, ty2)                 # S92: the target column is live now, so its own air defence counts in the floor
             freqs = [SimpleNamespace(callsign=f.callsign, mhz=round(128.0 + 0.5 * ((k * 7 + i * 3) % 18), 1)) for i, f in enumerate(xp.flights)]
             def package_freq(slot, _k=k):
@@ -1348,19 +1348,27 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         st_ = int(math.ceil((w + n_s) * self.o.wreck_static_weight))
         return {"groups": g, "units": int(math.ceil(round(u_w, 6))) + st_, "units_total": u + st_, "wrecks": w, "statics": n_s}
 
-    def _aim_at_single_building(self, package, geom, tx, ty) -> tuple:
-        """S218: a strike on a supply site with ONE building aims at that building. The site's centre is empty ground 40 to 145 m from it (the building block stands beside
-        the road, and its first building is off the block's own centre), so bombs aimed there missed (server runs 2026-11-26: six such sites, no bomb within 20 m of the building).
-        A site with several buildings spreads its JDAMs over them already (`_gbu_spread_tasks`). Returns the target point and moves `geom` to it: the AI's bomb task, your
-        target steerpoint and the kneeboard's coordinates alike. Runway, stand-off and sweep jobs aim their own way."""
+    def _aim_at_a_building(self, package, geom, tx, ty) -> tuple:
+        """S218 / S222: a strike on a supply site aims at one of its buildings, the one nearest the site's centre. The centre itself is empty ground (the building block stands
+        beside the road, and its first building is off the block's own centre): 40 to 145 m from a lone building (server runs 2026-11-26: six such sites, no bomb within
+        20 m of it), and 40 to 108 m from the nearest of several on 12 of 13 sites measured. Returns the target point and moves `geom` to it: the AI's bomb task, your target
+        steerpoint and the kneeboard's coordinates alike. An AI JDAM flight still spreads its bombs over all the buildings (`_gbu_spread_tasks`). Runway, stand-off and
+        sweep jobs aim their own way."""
         objective = package.objective
         if objective.type != ObjectiveType.STRIKE or objective.aim in ("RUNWAY", "STANDOFF", "SWEEP"):
             return tx, ty
         spots = self._bld_xy.get(objective.target_id) or []
-        if len(spots) != 1:
+        if not spots:
             return tx, ty
-        geom.tx, geom.ty = spots[0]
-        return spots[0]
+        nearest_spot = None
+        nearest_gap = None
+        for spot in spots:
+            gap = dist(spot[0], spot[1], tx, ty)
+            if nearest_gap is None or gap < nearest_gap:
+                nearest_spot = spot
+                nearest_gap = gap
+        geom.tx, geom.ty = nearest_spot
+        return nearest_spot
 
     def _target_xy(self, package):
         o = package.objective
