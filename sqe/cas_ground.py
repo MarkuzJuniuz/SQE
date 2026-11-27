@@ -109,6 +109,22 @@ class CasGround:
             length += math.hypot(there.x - here.x, there.y - here.y)
         return length
 
+    def _dcs_share(self, set_ms: float) -> float:
+        """S228: the share of its set speed DCS really drives a column at: CAS_DCS_LOW_SHARE up to CAS_DCS_FULL_SPEED_MS, CAS_DCS_SPEED_SHARE from CAS_DCS_SLOW_FROM_MS, a straight line between."""
+        if set_ms <= self.CAS_DCS_FULL_SPEED_MS:
+            return self.CAS_DCS_LOW_SHARE
+        if set_ms >= self.CAS_DCS_SLOW_FROM_MS:
+            return self.CAS_DCS_SPEED_SHARE
+        part = (set_ms - self.CAS_DCS_FULL_SPEED_MS) / (self.CAS_DCS_SLOW_FROM_MS - self.CAS_DCS_FULL_SPEED_MS)
+        return self.CAS_DCS_LOW_SHARE - part * (self.CAS_DCS_LOW_SHARE - self.CAS_DCS_SPEED_SHARE)
+
+    def _set_speed_for(self, wanted_ms: float) -> float:
+        """S228: the speed to set so DCS really drives at wanted_ms (the inverse of _dcs_share, found by a few rounds of set = wanted / share(set))."""
+        speed = wanted_ms
+        for _round in range(30):
+            speed = wanted_ms / self._dcs_share(speed)
+        return speed
+
     def _time_column(self, g, t_arrive, top_ms):
         """S228 (v0.41.190's out-and-back patrol leg was skipped by DCS): set the group's driving speed so it reaches its last point at about mission second
         t_arrive in DCS: the route as built divided by t_arrive, divided again by CAS_DCS_SPEED_SHARE (DCS drives slower than set), never above top_ms
@@ -119,12 +135,12 @@ class CasGround:
         length = self._route_length(g)
         speed = top_ms
         if t_arrive > 0:
-            speed = length / t_arrive / self.CAS_DCS_SPEED_SHARE
+            speed = self._set_speed_for(length / t_arrive)
             speed = min(top_ms, speed)
             speed = max(self.CAS_COLUMN_MIN_MS, speed)
         for point in g.points[1:]:
             point.speed = speed
-        drive_s = length / (speed * self.CAS_DCS_SPEED_SHARE)
+        drive_s = length / (speed * self._dcs_share(speed))
         wait_s = t_arrive - drive_s
         if wait_s < self.CAS_HOLD_MIN_S:
             return
