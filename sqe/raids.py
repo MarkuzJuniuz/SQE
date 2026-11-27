@@ -17,6 +17,7 @@ import math
 import random
 from .models import Objective, ObjectiveType, BaseKind, Role, AssetKind
 from .words import strength_word
+from . import battery_parts
 from . import clock, fraction, redair, runways, theatres
 from .loadouts import BOMBER_TYPES
 
@@ -401,6 +402,8 @@ def candidates(state, kind: str, tu: bool = False, d_=None) -> list:
         sam_cover = []                  # S183: per candidate, how many other live Patriots reach its attack point
         for a in sorted((getattr(state, "blue_sams", None) or {}).values(), key=_asset_id):          # S36b: a blue Patriot or HAWK site a SEAD package can fire on (the AAA is not a target)
             if a.destroyed or a.id.rsplit("_", 1)[1] not in ("pat", "hawk"):
+                continue
+            if not battery_parts.can_fire(a):          # S216: a battery that cannot fire shows red no radar: not a SEAD target
                 continue
             home = state.bases.get(a.guards)
             if home is None or home.id in fallen:
@@ -1331,10 +1334,19 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
         return [f"   {g['names'][i]}: friendly strength down to {g['blue'][i]:.0f} after the air attack"]
     if kind == "sam":                                   # S36b: Kh-31P from a SEAD package that got through: the site's health, the field's defence follows
         from .sams import _sync
+        from . import battery_parts
         a = state.blue_sams[aim]
-        a.health = max(0.0, a.health - SEAD_SITE_HIT * k)
+        if battery_parts.key_of(a):                    # S216: the missiles that get through take parts, the radars first
+            battery_parts.set_share(a, battery_parts.share(a) - SEAD_SITE_HIT * k, state.day, battery_parts.ARM_ORDER)
+        else:
+            a.health = max(0.0, a.health - SEAD_SITE_HIT * k)
         _sync(state, b)
-        return [f"   {a.name} {'destroyed' if a.destroyed else strength_word(a.health)}"]
+        word = strength_word(a.health)
+        if a.destroyed:
+            word = "destroyed"
+        elif not battery_parts.can_fire(a):
+            word = "cannot fire"
+        return [f"   {a.name} {word}"]
     if kind in ("supply", "garrison"):
         a = state.blue_assets[aim]
         a.health = max(0.0, a.health - ASSET_HIT * ke)

@@ -11,6 +11,7 @@ import math
 
 from dcs import mapping, planes, ships, task
 
+from . import battery_parts
 from . import carcass, ground, road_sites, sams
 from . import seacheck as seac
 from . import threatmap as tm
@@ -19,6 +20,23 @@ from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType
 from .raid_spawns import supply_parts
 from .routes import FT, NM, bearing, dist, offset
 from .strike_tasks import KPH
+
+
+# S216: [(pydcs vehicle name, how many)] of one blue Patriot or HAWK: the parts standing by the site's record; without a record, the full set when the old rule
+# (`wanted`, from sams.blue_battery) says one stands, a Patriot with the launchers it says.
+def _battery_units(site, key: str, wanted) -> list:
+    units = []
+    if site is not None and site.lost_parts is not None:
+        for part, count in battery_parts.standing(site).items():
+            units.append((part.replace(" ", "_"), count))
+        return units
+    if not wanted:
+        return units
+    for part, count in battery_parts.full_parts(key):
+        if part == "Patriot ln":
+            count = int(wanted)
+        units.append((part.replace(" ", "_"), count))
+    return units
 
 
 class SiteSpawns:
@@ -169,7 +187,11 @@ class SiteSpawns:
             site = (self.state.blue_sams or {}).get(site_id)
             if site is None:
                 continue
-            manifest.add("blue_sam", site_id, names, types=types_by_site[site_id], health_before=site.health, label=site.name, field=field_by_site[site_id])
+            lost_before = {}                              # S216: what the battery was already missing when the mission was built
+            for part, days in (site.lost_parts or {}).items():
+                lost_before[part] = len(days)
+            manifest.add("blue_sam", site_id, names, types=types_by_site[site_id], health_before=site.health, label=site.name, field=field_by_site[site_id],
+                         lost_before=lost_before)
 
     def _place_airfield_defences(self, base, tx, ty, near, keep):
         """The Patriot, the AAA pair and the HAWK of one blue airfield (`bt` from `sams.blue_battery`; a covering neighbour (`near`) only gets what reaches the raid's target)."""
@@ -186,7 +208,16 @@ class SiteSpawns:
                 bt["hawk"] = False
             if dn_ > COVER_AAA_NM:
                 bt["aaa"] = 0
-        if o.base_defenses and (bt["patriot_ln"] or bt["aaa"] or bt["hawk"]):
+        # S216: a Patriot or HAWK is built from the parts standing, also one that cannot fire (what is left of it is on the map)
+        sites_now = sams.blue_sites(self.state, base)
+        patriot_units = _battery_units(sites_now.get("pat"), "pat", bt["patriot_ln"])
+        hawk_units = _battery_units(sites_now.get("hawk"), "hawk", bt["hawk"])
+        if near is not None:
+            if dist(base.x, base.y, near[0], near[1]) / NM > PATRIOT_NM:
+                patriot_units = []
+            if dist(base.x, base.y, near[0], near[1]) / NM > HAWK_NM:
+                hawk_units = []
+        if o.base_defenses and (patriot_units or bt["aaa"] or hawk_units):
             p = self.apt[base.id].position
             # v0.41.7: the Patriot faces the threat (the nearest enemy fighter field; was a direction picked from the base's name: a Patriot
             # radar covers about 120 degrees, so a raid from the wrong side met none). Short-range sites on both sides of the field, and a
@@ -208,19 +239,19 @@ class SiteSpawns:
                 px, py = (a_.x, a_.y) if a_ is not None else sams.place_blue_site(self.state, base, key)
                 return (px, py) if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0) else dry(a0, d0)
             x, y = site_at("pat", ang, 4500)
-            if bt["patriot_ln"]:
-                self.base_ad.setdefault(base.id, {})["pat"] = self._base_def_group(keep, base, "Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
-                              ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, PATRIOT_NM, spacing=sams.BLUE_SPACING_M)
+            if patriot_units:
+                self.base_ad.setdefault(base.id, {})["pat"] = self._base_def_group(keep, base, "Patriot", patriot_units, x, y, ang, F.Star, PATRIOT_NM,
+                                                                                   spacing=sams.BLUE_SPACING_M)
             x, y = site_at("aaa", ang + 120, 3500)
             if bt["aaa"]:
                 self._base_def_group(keep, base, "AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line, BLUE_AAA_NM)
             if bt["aaa"] >= 2:
                 x, y = site_at("aaa2", ang - 120, 3500)
                 self._base_def_group(keep, base, "AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line, BLUE_AAA_NM)
-            if bt["hawk"]:
+            if hawk_units:
                 x, y = site_at("hawk", ang + 50, 6000)
-                self.base_ad.setdefault(base.id, {})["hawk"] = self._base_def_group(keep, base, "HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
-                              ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, HAWK_NM, spacing=sams.BLUE_SPACING_M)
+                self.base_ad.setdefault(base.id, {})["hawk"] = self._base_def_group(keep, base, "HAWK", hawk_units, x, y, ang, F.Star, HAWK_NM,
+                                                                                   spacing=sams.BLUE_SPACING_M)
 
     def _place_carrier_group(self, base, tx, ty):
         """The carrier (legacy free CVN-74: no deck crew) under way with its beacon, ICLS, Link 4 and ACLS, and the cruiser and two escorts station-keeping on it."""

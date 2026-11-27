@@ -179,6 +179,12 @@ times in ten and takes a little under half of the target's health (measured in D
 sites protects what is behind it: a site inside an intact belt cannot be offered as a target until the belt site covering
 it falls.
 
+**Your Patriot and HAWK batteries keep count of their parts.** Each radar, launcher, control station, command post and power plant that is destroyed, in your mission or in the
+war's own results, stays destroyed: the next mission is built without it. A Patriot with no radar, or a HAWK with no tracking radar (or nothing to search with), **cannot fire**: it
+does not count as cover, red does not send anti-radiation missiles at it, and the Overview says "no radar". A replacement radar is an order from home (5 to 7 days by your Force
+Index); anything else is back in about a day. Anti-radiation and stand-off missiles that get through take the radars first; bombs wear the launchers down first. A battery with
+nothing left is destroyed and rebuilt as before. AAA sites keep a single figure, as do red's sites.
+
 The planner runs **SAM waves**: on every planned day turn it first takes a fixed number of SAM jobs (Level 3: two on the sea side, one on the
 mountain side, one runway crater; Level 2: two, two, one; Level 1: one). The SEAD stages of a turn go in at least five
 minutes apart, nearest first. Two axes are kept apart. The **mountain axis** is red's northern fields (Mozdok, Beslan, Nalchik, Maykop,

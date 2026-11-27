@@ -1011,6 +1011,8 @@ def taken_fields_step(state) -> list:
         while rec["stage"] < len(TAKEN_STAGES) and age >= TAKEN_STAGES[rec["stage"]][1] and sites:
             key = TAKEN_STAGES[rec["stage"]][0]
             sites[key].health = 1.0
+            if sites[key].lost_parts is not None:          # S216: the new battery goes up whole
+                sites[key].lost_parts = {}
             sams._sync(state, b)
             lines.append(f"{b.name}: {sams.BLUE_SITES[key][0]} in place" + (" (the field's defences are complete)" if rec["stage"] == len(TAKEN_STAGES) - 1 else ""))
             rec["stage"] += 1

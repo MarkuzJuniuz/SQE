@@ -2,6 +2,7 @@
 Like posture.py it only READS the state."""
 from __future__ import annotations
 import re
+from . import battery_parts
 from . import ground, posture, tempo, narrative, sams, story
 from .models import AssetKind
 
@@ -110,7 +111,14 @@ def air_defence_rows(state) -> list:
             st_ = "destroyed" if a.destroyed else ("radars blinded today" if getattr(a, "suppressed", False) else "operational")
             out.append((story.enemy(state), a.name, a.variant or a.kind.value, round(100 * a.health), st_))
     for a in sorted((getattr(state, "blue_sams", None) or {}).values(), key=_asset_name):
-        out.append(("Coalition", a.name, a.variant or "SAM", round(100 * a.health), "destroyed" if a.destroyed else "operational"))
+        status = "operational"
+        if a.destroyed:
+            status = "destroyed"
+        elif not battery_parts.can_fire(a):                # S216
+            status = "cannot fire (parts lost)"
+            if not battery_parts.standing(a).get("Patriot str" if a.id.endswith("_pat") else "Hawk tr"):
+                status = "no radar"
+        out.append(("Coalition", a.name, a.variant or "SAM", round(100 * a.health), status))
     return out
 
 
