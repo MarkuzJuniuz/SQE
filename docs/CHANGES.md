@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.700, intercepts you do not fly cost fighters
+When the war settles an intercept of an escorted raid, your interceptors and red's escorts now shoot each other down, at the rates measured in DCS. Red loses more, so Level 3 is easier than before.
+
 ## v0.41.699, your batteries remember what they lost
 A Patriot or HAWK that loses its radar or launchers stays without them: the next mission is built that way. Without a radar it cannot fire until a replacement arrives (5 to 7 days); other parts take about a day. The war's own results take parts the same way.
 

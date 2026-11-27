@@ -236,6 +236,9 @@ Fly. Some raids are **unwarned** (25%, 35% and 45% at Levels 1, 2, 3) and come w
 (the E-3 or the E-2C) is on orbit that turn; with none up it still sees one in a quarter of cases. A raid blue does not see
 is not listed as an Intercept job and is settled by the war simulation against blue's planned patrols alone.
 
+An intercept you do not fly is a fighter fight when the raid has an escort: about a quarter of the intercepting jets are lost, and well over half of red's escorts and
+sweep, whether or not the bombers get through (the figures measured in DCS test missions).
+
 **What red carries.** A raid's kit follows what it attacks. A Su-24M raid on a runway carries four BetAB-500ShP (rocket-boosted
 concrete-piercing bombs, on pylons 2, 3, 6 and 7); on troops or a garrison four RBK-500U cluster bombs (126 OAB-2.5RT
 fragmentation bomblets each, same pylons); on a supply site FAB-500 bombs on those four pylons and FAB-250 on the other four. (A
@@ -409,7 +412,7 @@ then on the squadron flies as described in section 5. You do not fly it; you wil
 
 ### Winning and losing in Syria
 
-* **Level 1:** victory is the ground war, as in section 6, a march through the cities in three stages: take **Bassel Al-Assad** (the Latakia coast), then **Rene Mouawad**, then **Shayrat** (the Homs gap). After a city falls the next push waits only one day (the takeover is 9 days at the other levels). With nobody flying (v0.41.696, 60 simulated wars a level) the war is won in about 11 days at Level 1 and 17 days at Level 2. At Level 3 it can go either way: a little over half are won, in about seven weeks, and most of the rest are lost, in about three. Your flying is what tips it.
+* **Level 1:** victory is the ground war, as in section 6, a march through the cities in three stages: take **Bassel Al-Assad** (the Latakia coast), then **Rene Mouawad**, then **Shayrat** (the Homs gap). After a city falls the next push waits only one day (the takeover is 9 days at the other levels). With nobody flying (v0.41.700, 60 simulated wars a level) the war is won in about 12 days at Level 1 and 16 days at Level 2. At Level 3 it can still go either way: about seven in ten are won, in about eight weeks, and most of the rest are lost, in about three and a half. Your flying is what tips it.
 * **Levels 2 and 3:** no ground victory. The war is won in one of two ways, neither of them a conquest. **Lutorin Works** (below): all of them destroyed at the same time. Or **red's Force Index** (its supply, section 5) at or below 40% for **three nights in a row** (the Overview shows how close it is in a word: distant, approaching, close, under way); that is the depots, fuel farms and road sites, not the cities. The coalition's stated intent is to break Syria's supply and air defence. With red's air defence as strong as it is, the works are the more likely way.
 * **Defeat:** the coalition's air component below 15% of its strength (as in section 6), or **one** airfield of yours lost (the Caucasus allows three).
 
