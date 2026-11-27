@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.704, red no longer loses a jet that flew home
+After a mission, a red raid that got through to its target still cost red one aircraft, even when every one of them survived. Only the jets really shot down are taken off now. Raids nobody flew are unchanged.
+
 ## v0.41.703, a long bomb release counts again
 A bomb released more than 20 km from its target was treated as thrown away: no "Bombs away" call, and its hits on a runway did not count. Long JDAM releases are normal, so a runway could be hit and stay open. The limit is now 35 km.
 
