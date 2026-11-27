@@ -16,7 +16,7 @@ Saved in `state.support_assets` (older saves get the table on first use) and the
 from __future__ import annotations
 import math
 
-from . import barcap
+from . import barcap, runways
 from .models import BaseKind
 
 NM = 1852.0
@@ -114,9 +114,10 @@ def _trim(orbit: list, refit: list, n: int) -> None:
             orbit.remove(min(orbit))
 
 
-def _run(a: dict, orbit: list, refit: list, t0: int, t1: int) -> tuple:
+def _run(a: dict, orbit: list, refit: list, t0: int, t1: int, launch_ok: bool = True) -> tuple:
     """One turn [t0, t1) (absolute minutes) of an asset's airframes. `orbit` / `refit`: the clock at t0. Each airframe flies `sortie_min` on orbit, then `turnaround_min` in refit; when the
     one on orbit has HANDOVER_MIN left a ready airframe goes up (it covers from then on, so a change of aircraft has no gap); with nobody on orbit the first ready airframe goes up now.
+    S181 P1: with `launch_ok` False (its field's runway is cut this turn) nothing takes off; an airframe already up finishes its shift (it lands elsewhere, then goes to refit as usual).
     -> ([(start, end)] windows of the airframes on orbit in this turn (the end is the airframe's own, it may be past t1), the orbit list at t1, the refit list at t1)."""
     e, rest = int(a["sortie_min"]), int(a["turnaround_min"])
     n = max(0, int(a["available"]))
@@ -127,6 +128,8 @@ def _run(a: dict, orbit: list, refit: list, t0: int, t1: int) -> tuple:
         for o in [o for o in orbit if o <= t]:                           # time on orbit is over: the airframe goes to refit
             orbit.remove(o)
             refit.append(o + rest)
+        if not launch_ok:
+            break
         launch = t if not orbit else max(t, max(orbit) - HANDOVER_MIN)
         if launch >= t1:
             break
@@ -195,7 +198,9 @@ def plan(state, turn: int | None = None) -> dict:
             out[k] = []
             continue
         orbit, refit = _start(a, turn)
-        win, o2, r2 = _run(a, orbit, refit, t0, t1)
+        # S181 P1: a cratered home field grounds the E-3 and the land tankers for the turn (the carrier's E-2C and S-3 have no runway to cut)
+        launch_ok = not runways.is_closed(state, a.get("base_id", ""), turn)
+        win, o2, r2 = _run(a, orbit, refit, t0, t1, launch_ok)
         a["clk"] = {"turn": turn, "orbit": orbit, "refit": refit, "next": [o2, r2]}
         out[k] = [(s - base, e - base) for s, e in _merge(win)]
     fl = bc.setdefault("support_flights", {})
