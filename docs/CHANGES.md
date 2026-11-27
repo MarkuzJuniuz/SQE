@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.712, a cut runway grounds the AWACS and the tankers
+When red cuts the runway of the field your E-3 and KC-135s fly from, they stay on the ground until it is repaired; one already on station finishes its shift. Without the E-3 up, raids can come unseen. The carrier's E-2C and S-3B are not affected.
+
 ## v0.41.711, ground columns stay out of the sea
 No column starts in the sea or drives across it: every straight cross-country leg is checked against the water map. Where the straight way in from our side is water, the friendly task force and its JTAC come round along the coast instead, as far from the enemy as before.
 
