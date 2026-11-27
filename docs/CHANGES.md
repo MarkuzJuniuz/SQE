@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.708, supply strikes you do not fly hit as hard as they do in DCS
+A strike on a depot or fuel farm with no air defence job in front of it, resolved by the war, now succeeds about nine times in ten and takes four fifths of a full site, as measured in DCS test missions. Before, it took about a third. The Lutorin works are unchanged. Level 3 is a little easier for blue.
+
 ## v0.41.707, a supply site is its buildings
 Destroying all the buildings of a depot, fuel farm or plant now destroys it. Before, the guard vehicle counted as part of the site, so a site with every building burned could keep a fifth of its health. The guards no longer count either way.
 
