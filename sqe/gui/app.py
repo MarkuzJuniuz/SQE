@@ -1196,6 +1196,10 @@ class MainWindow(QMainWindow):
         self.banner.setVisible(bool(self.banner.text()))
         from .. import bombers as _bombers
         it = _bombers.intel(st) if st.status == "ACTIVE" else None          # S115: the staged carrier raid's intelligence pickup (None: no banner, no space)
+        if not it:
+            # S181 P4: else the runway banner (your field or the E-3's field: a raid expected, or the runway cut)
+            from .. import runway_intel
+            it = runway_intel.intel(st)
         if it:
             self.intel_head.setText(it["head"]); self.intel_text.setText(it["text"]); self.intel_sub.setText(it["sub"])
             for p, t in zip(self.intel_pills, it["pills"]):

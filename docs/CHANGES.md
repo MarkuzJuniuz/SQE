@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.715, a warning when red goes for your runway or the AWACS's
+The red intelligence strip at the top (the one the carrier raid uses) now also shows when a red raid you can see is expected on your own field's runway or on the E-3's. While such a runway is cut, it says what that means: why you cannot fly from your field and for how long, or that no E-3 can take off and raids beyond the Hawkeye's reach may come unseen.
+
 ## v0.41.714, red goes for the AWACS's runway first
 At Levels 2 and 3, when red raids one of your airfields, it now goes first for the field your E-3 flies from, as long as an E-3 can still take off there.
 
