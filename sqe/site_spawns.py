@@ -340,7 +340,7 @@ class SiteSpawns:
             load = enemy_cap_loadout(pf["type"])
             names = []
             for j, u in enumerate(g.units, 1):
-                u.name = f"ENM-FM-{pf['wing']}-{n}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+                u.name = self._red_unit_name(f"ENM-FM-{pf['wing']}-{n}-{j}"); u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", pf["wing"], names, ac=pf["type"])
 
     def _blind_sites_for(self, package):

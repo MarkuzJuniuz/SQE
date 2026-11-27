@@ -215,6 +215,7 @@ class _ExportScript:
 
 _ECM = _ExportScript("--[[SQE ECM EXPORT]]", "sqe_ecm_export.lua", "SQE_ecm.flag")
 _F14_TURNPOINTS = _ExportScript("--[[SQE F14 TURNPOINTS EXPORT]]", "sqe_f14_turnpoints_export.lua", "SQE_turnpoints.req")
+_F14_RADAR = _ExportScript("--[[SQE F14 RADAR EXPORT]]", "sqe_f14_radar_export.lua", "SQE_radar.req")      # S219: RIO Radar ("Hunt Bandit")
 ECM_LINE = _ECM.line
 
 
@@ -328,6 +329,27 @@ def install_f14_turnpoints(saves: str) -> tuple[bool, str]:
 
 def remove_f14_turnpoints(saves: str) -> tuple[bool, str]:
     return _remove_script(_F14_TURNPOINTS, saves)
+
+
+def f14_radar_state(saves: str) -> str:
+    return _script_state(_F14_RADAR, saves)
+
+
+def f14_radar_status(saves: str) -> str:
+    return _script_status(f14_radar_state(saves))
+
+
+def f14_radar_installed(saves: str) -> bool:
+    """An older copy still counts: the mission only has to know that something on this PC will read its request."""
+    return f14_radar_state(saves) in ("ok", "old")
+
+
+def install_f14_radar(saves: str) -> tuple[bool, str]:
+    return _install_script(_F14_RADAR, saves)
+
+
+def remove_f14_radar(saves: str) -> tuple[bool, str]:
+    return _remove_script(_F14_RADAR, saves)
 
 
 # ---- MissionScripting.lua: patched while SQE is open, restored on exit -------------------------------------------------

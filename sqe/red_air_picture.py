@@ -162,7 +162,7 @@ class RedAirPicture:
         self._limit_engage(g, 0, None, (gx, gy, min(a2a_zone_nm(tname), self.o.enemy_cap_engage_nm or 999)))
         names = []
         for j, u in enumerate(g.units, 1):
-            u.name = f"ENM-{a.id}-R{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+            u.name = self._red_unit_name(f"ENM-{a.id}-R{i}-{j}"); u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
         g.set_skill(skill)
         if self.o.enemy_unlimited_fuel:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
@@ -207,7 +207,7 @@ class RedAirPicture:
         self._limit_engage(g, 0, None, (sx, sy, min(a2a_zone_nm(tname), self.o.enemy_cap_engage_nm or 999)))
         names = []
         for j, u in enumerate(g.units, 1):
-            u.name = f"ENM-{a.id}-S{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+            u.name = self._red_unit_name(f"ENM-{a.id}-S{i}-{j}"); u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
         g.set_skill(skill)
         if self.o.enemy_unlimited_fuel:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
@@ -498,7 +498,7 @@ class RedAirPicture:
                 self._land_home(g, ap)
             names = []
             for j, u in enumerate(g.units, 1):
-                u.name = f"ENM-{a.id}-{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+                u.name = self._red_unit_name(f"ENM-{a.id}-{i}-{j}"); u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             g.set_skill(skill)
             if self.o.enemy_unlimited_fuel:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))

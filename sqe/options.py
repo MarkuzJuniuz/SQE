@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .radio import RadioLayout
-from .settings import f14_turnpoints_installed, f14_turnpoints_state
+from .settings import f14_radar_installed, f14_radar_state, f14_turnpoints_installed, f14_turnpoints_state
 
 
 @dataclass
@@ -43,6 +43,8 @@ class MissionOptions:
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
     f14_turnpoints: bool = False        # the F-14 RIO Navigation export script is installed: the player's F-14B / F-14B(U) gets the F10 entries (`rio_nav`)
     f14_script_old: bool = False        # ...but the installed copy is older than SQE's: it cannot work the waypoints (the build warns)
+    f14_radar: bool = False             # S219: the F-14 RIO Radar export script is installed: the player's F-14 gets F10 > RIO Radar and red aircraft are named for Jester
+    f14_radar_old: bool = False         # ...but the installed copy is older than SQE's (the build warns)
     dormant_sites: bool = False         # S89: red SAM sites on the route start late-activated and wake by detector (see `_wire_dormant`)
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
     wreck_static_weight: float = 0.25   # how much of a live unit one wreck or one live static building counts toward the unit limit (v0.41.221: the buildings too; renamed in S88 R2)
@@ -104,6 +106,8 @@ def options_from_settings(options: MissionOptions, settings, *, ai_test: bool, f
     # not a saved setting: installed or not, on this PC, when the mission is built
     options.f14_turnpoints = f14_turnpoints_installed(getattr(settings, "dcs_saves", ""))
     options.f14_script_old = f14_turnpoints_state(getattr(settings, "dcs_saves", "")) == "old"
+    options.f14_radar = f14_radar_installed(getattr(settings, "dcs_saves", ""))                  # S219
+    options.f14_radar_old = f14_radar_state(getattr(settings, "dcs_saves", "")) == "old"
     options.player_is_ai = bool(ai_test)
     options.full_map = bool(full_map)
     if full_map:

@@ -402,6 +402,31 @@ class SettingsDialog(QDialog):
                 "It copies sqe_f14_turnpoints_export.lua into Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there (a backup, "
                 "Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. Without it missions have no such menus: install it before you generate the mission. "
                 "Works in single player and with the dedicated server on this PC, not on another computer's server. Takes effect when DCS starts.")
+        # F-14 RIO Radar (S219): its own script, so it cannot disturb RIO Navigation.
+        v.addSpacing(10)
+        v.addWidget(QLabel("F-14 RIO Radar (Experimental)"))
+        self.radar_state = QLabel(); v.addWidget(self.radar_state)
+        self.radar_inst = QPushButton("Install RIO Radar"); self.radar_rem = QPushButton("Remove")
+        # Fixed width, for the same reason as the jammer button above.
+        self.radar_inst.ensurePolished()
+        widest_radar_label = 0
+        for label_text in ("Install RIO Radar", "Update RIO Radar"):
+            self.radar_inst.setText(label_text)
+            widest_radar_label = max(widest_radar_label, self.radar_inst.sizeHint().width())
+        self.radar_inst.setText("Install RIO Radar")
+        self.radar_inst.setFixedWidth(widest_radar_label)
+
+        def install_radar():
+            self._radar_do(S.install_f14_radar)
+
+        def remove_radar():
+            self._radar_do(S.remove_f14_radar)
+
+        self.radar_inst.clicked.connect(install_radar); self.radar_rem.clicked.connect(remove_radar)
+        r = QHBoxLayout(); r.addWidget(self.radar_inst); r.addWidget(self.radar_rem); r.addStretch(1); v.addLayout(r)
+        hint(v, "For the F-14B or F-14B(U) you fly: F10 > Other > RIO Radar. Hunt Bandit has Jester lock the nearest enemy aircraft the radar can see, Hunt Next moves to another, Hunt Off lets go. "
+                "It locks one at a time (the radar leaves TWS) and never a friendly. It copies sqe_f14_radar_export.lua into Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there. "
+                "Install it before you generate the mission. Needs mission scripting access; single player or the dedicated server on this PC. Takes effect when DCS starts.")
         # The server option lives on this tab with the other DCS settings (it was on Mission Build).
         v.addSpacing(10)
         self.server_fly = tick("Fly on the Local DCS Dedicated Server (Experimental)", getattr(settings, "dcs_server_fly", False),           # S161a
@@ -422,6 +447,13 @@ class SettingsDialog(QDialog):
         self.ecm_state.setText("Jammer script: " + S.ecm_script_status(self.saves.text()))
         self.ecm_inst.setEnabled(st not in ("nofolder", "ok")); self.ecm_rem.setEnabled(st not in ("nofolder", "none"))
         self.ecm_inst.setText("Update Jammer Script" if st == "old" else "Install Jammer Script")
+        st = S.f14_radar_state(self.saves.text())
+        self.radar_state.setText("RIO Radar script: " + S.f14_radar_status(self.saves.text()))
+        self.radar_inst.setEnabled(st not in ("nofolder", "ok")); self.radar_rem.setEnabled(st not in ("nofolder", "none"))
+        if st == "old":
+            self.radar_inst.setText("Update RIO Radar")
+        else:
+            self.radar_inst.setText("Install RIO Radar")
         st = S.f14_turnpoints_state(self.saves.text())
         self.tp_state.setText("RIO Navigation script: " + S.f14_turnpoints_status(self.saves.text()))
         self.tp_inst.setEnabled(st not in ("nofolder", "ok")); self.tp_rem.setEnabled(st not in ("nofolder", "none"))
@@ -429,6 +461,14 @@ class SettingsDialog(QDialog):
             self.tp_inst.setText("Update RIO Navigation")
         else:
             self.tp_inst.setText("Install RIO Navigation")
+
+    def _radar_do(self, fn):
+        ok, msg = fn(S.native(self.saves.text()))
+        if ok:
+            QMessageBox.information(self, "F-14 RIO Radar", msg)
+        else:
+            QMessageBox.warning(self, "F-14 RIO Radar", msg)
+        self._refresh()
 
     def _tp_do(self, fn):
         ok, msg = fn(S.native(self.saves.text()))
