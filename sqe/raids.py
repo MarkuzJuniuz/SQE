@@ -539,9 +539,37 @@ def pick_aim(state, d, rng: random.Random, taken=frozenset()):
             continue
         if kind not in ("sam", "sam_alone"):
             found = shy(state, d, found)
+        if kind == "field":
+            found = awacs_field_first(state, d, found)
         base, aim, _weight = _best(rng, found)
         return base, aim
     return None
+
+
+# S181 P3 (XO 2026-11-24: "red has to prioritize shooting the runway where the awacs come from"): at Levels 2 and 3 a raid on blue's fields goes for the E-3's
+# home field first while an E-3 can still fly from it: cutting that runway grounds the AWACS (S181 P1) and blinds blue to raids the E-2C does not reach (P2).
+# Soviet writing puts the enemy's air control and warning first in the air operation (see KINDS_WHILE_COVERED above); the weight is a judgment call, large
+# enough to outrank every other field after `shy`.
+AWACS_FIELD_WEIGHT = 10.0
+
+
+def awacs_field_first(state, d, found: list) -> list:
+    """The field candidates with the E-3's home field weighted AWACS_FIELD_WEIGHT times, while an E-3 airframe is in service and its runway is open. Level 1 (no SEAD doctrine): unchanged."""
+    from . import runways, support_assets
+    if getattr(d, "raid_arm", 0) <= 0:
+        return found
+    e3 = support_assets.ensure(state).get("bl_e3")
+    if e3 is None or int(e3.get("available", 0)) <= 0:
+        return found
+    home_id = e3.get("base_id", "")
+    if runways.is_closed(state, home_id):
+        return found
+    out = []
+    for base, aim, weight in found:
+        if base.id == home_id and not aim:
+            weight = weight * AWACS_FIELD_WEIGHT
+        out.append((base, aim, weight))
+    return out
 
 
 PATRIOT_NM = 40          # v0.41.20: a full-strength field's Patriot covers its own field and what lies this close to it
