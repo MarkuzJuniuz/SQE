@@ -1192,7 +1192,18 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return [(u.position.x, u.position.y) for u in g.units] + ([(g.points[-1].position.x, g.points[-1].position.y)] if len(g.points) > 1 else [])
 
         def fits(g, dx, dy):
-            return all(dry(px + dx, py + dy) for px, py in pts(g))
+            for px, py in pts(g):
+                if not dry(px + dx, py + dy):
+                    return False
+            # S226: a moved group must not end up with an off-road leg through the sea
+            for number in range(1, len(g.points)):
+                before = g.points[number - 1].position
+                after = g.points[number].position
+                if g.points[number].action != PointAction.OffRoad:
+                    continue
+                if not self._dry_part((before.x + dx, before.y + dy), (after.x + dx, after.y + dy))[1]:
+                    return False
+            return True
 
         def is_jtac_group(group):
             return group.name.startswith("Axeman")
@@ -3306,6 +3317,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     CAS_COAST_M = 150.0           # v0.41.384 (S29): a CAS column's or the JTAC's start, stop and patrol points keep this far from the sea (judgment call; SITE_MARGIN 1500 m would push a coastal column far inland)
     CAS_LAND_SEARCH_M = 6000.0    # v0.41.384: how far a point may be moved to reach land (a column is never thrown further, e.g. across a bay)
+    CAS_LEG_STEP_M = 100.0        # S226: an off-road leg is checked for sea every this far (judgment call; the water map's cells are 250 m)
+    CAS_LEG_BEARINGS_DEG = (10, -10, 20, -20, 30, -30, 45, -45, 60, -60)      # S226: other bearings tried when a start or stop leg crosses the sea (judgment call)
+    CAS_JTAC_STOP_M = 3800        # the JTAC's one waypoint, this far from the CAS target toward our side
+    CAS_TF_START_SHARES = (1.0, 0.85, 0.75, 0.6)      # S226: a start nearer than the full approach distance may be the only dry one (judgment call)
+    CAS_STOP_SLIP_M = 500.0       # S226: a task force stop moved further than this to reach land is no longer used when the leg is wet (judgment call)
+    CAS_APPROACH_TURNS_DEG = (20, -20, 40, -40, 60, -60, 75, -75, 90, -90, 120, -120)   # S226: the whole approach swung round onto land (judgment call)
 
     FRONT_BATTLES_MAX = 2          # S81: battles staged per mission (judgment call: the unit limit and the VR frame rate)
     FRONT_ADVANCE_M = 1200.0       # the attacking side creeps this far toward the other

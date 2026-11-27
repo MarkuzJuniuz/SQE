@@ -76,7 +76,9 @@ class CasGround:
         g.points[0].tasks.append(task.OptAlarmState(2))
 
     def _drive(self, g, via, speed_ms, road: bool = False):
-        for q in via:
+        # S226: an off-road leg is a straight line for DCS, so no leg may cross the sea
+        start = (g.points[0].position.x, g.points[0].position.y)
+        for q in self._dry_via(start, via):
             g.add_waypoint(mapping.Point(q[0], q[1], self.t), PointAction.OffRoad, speed_ms * 3.6)
         self._ground_orders(g)
 
@@ -125,11 +127,39 @@ class CasGround:
             r_ += 200.0
         return (p[0], p[1])
 
-    def _leg_on_land(self, a, b, step_m=250.0):
-        """v0.41.384: True when the straight leg a -> b stays on land (sampled every step_m)."""
-        d = math.hypot(b[0] - a[0], b[1] - a[1])
-        n = max(1, int(d // step_m))
-        return all(seac.is_land(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n) for i in range(n + 1))
+    def _dry_part(self, a, b):
+        """S226: how far the straight leg a -> b can be driven before it meets the sea -> (point, whole). A dry leg gives (b, True);
+        a wet one gives the last point before the water that keeps CAS_COAST_M from it (a itself when there is none) and False."""
+        length = math.hypot(b[0] - a[0], b[1] - a[1])
+        steps = max(1, int(math.ceil(length / self.CAS_LEG_STEP_M)))
+        last_good = (a[0], a[1])
+        for step in range(1, steps + 1):
+            x = a[0] + (b[0] - a[0]) * step / steps
+            y = a[1] + (b[1] - a[1]) * step / steps
+            if seac.in_sea(x, y):
+                return last_good, False
+            if seac.site_ok(x, y, self.CAS_COAST_M):
+                last_good = (x, y)
+        return (b[0], b[1]), True
+
+    def _dry_via(self, start, via):
+        """S226: the route points a column at `start` may drive through so that no leg crosses the sea. A wet patrol point is left out (the
+        column goes straight on); a wet last leg is cut at the last dry point; nothing is left when the column cannot move at all."""
+        points = []
+        here = (start[0], start[1])
+        for number, wanted in enumerate(via):
+            if math.hypot(wanted[0] - here[0], wanted[1] - here[1]) < 1.0:
+                continue
+            reached, whole = self._dry_part(here, wanted)
+            if whole:
+                points.append(reached)
+                here = reached
+                continue
+            is_last = number == len(via) - 1
+            if is_last and math.hypot(reached[0] - here[0], reached[1] - here[1]) >= self.CAS_PATROL_MIN_M:
+                points.append(reached)
+                here = reached
+        return points
 
     def _blue_company_roll(self):
         """The blue company's composition as the dice give it: Abrams 1-2, Bradley 2-3, Humvee 1-2 (three `vrng` draws, in this order). Scale it with `_scaled`."""
@@ -181,24 +211,47 @@ class CasGround:
         t_arr_ = max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S)
         self._drive_road(enemy, [self._cas_land(q_) for q_ in self._patrol_via((cx, cy), brg + 180, offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M), min(v, 3.5), t_arr_)], min(v, 3.5))   # v0.41.190: a patrol leg away from us first; v0.41.384: every point on land
 
-    def _cas_tf_start(self, cx, cy, brg, dist_run, static):
-        """-> (fx, fy, stop): where the friendly task force starts (on a road, on land, and with a dry straight leg to the stop for a garrison) and its stop point."""
-        stop = self._cas_land(offset(cx, cy, brg, 2000 if static else self.CAS_TF_STOP_M))      # v0.41.384 (S29): on land
-        bj_ = self.vrng.uniform(-6, 6)
-        fx, fy = offset(cx, cy, brg + bj_, dist_run)
+    def _tf_start_at(self, cx, cy, bearing_deg, distance_m, static):
+        """A possible start of the friendly task force: that far out on that bearing, on a road when it drives (not for a garrison) and on land."""
+        fx, fy = offset(cx, cy, bearing_deg, distance_m)
         if not static:
-            rp_ = self._road_pt(fx, fy)                           # v0.41.180: the task force starts on a road too, and meets the column along it
-            if rp_ is not None:
-                fx, fy = rp_
-        fx, fy = self._cas_land((fx, fy))                         # v0.41.384 (S29, XO 2026-11-11 run: a garrison near the coast put the column afloat)
-        if static and not self._leg_on_land((fx, fy), stop):
-            # v0.41.384: the straight off-road leg to the stop crosses water: try other start bearings, keep the first whose leg is dry (else the snapped start)
-            for da_ in (10, -10, 20, -20, 30, -30, 45, -45, 60, -60):
-                c_ = self._cas_land(offset(cx, cy, brg + bj_ + da_, dist_run))
-                if self._leg_on_land(c_, stop):
-                    fx, fy = c_
-                    break
-        return fx, fy, stop
+            road_point = self._road_pt(fx, fy)                    # v0.41.180: the task force starts on a road too, and meets the column along it
+            if road_point is not None:
+                fx, fy = road_point
+        return self._cas_land((fx, fy))                           # v0.41.384 (S29, XO 2026-11-11 run: a garrison near the coast put the column afloat)
+
+    def _tf_dry_start(self, cx, cy, bearing_deg, dist_run, static, stop, turns):
+        """A start with a dry straight leg to `stop`: at the full approach distance first, then nearer, on each turn off the bearing -> (x, y) or None."""
+        for share in self.CAS_TF_START_SHARES:
+            for turn in turns:
+                point = self._tf_start_at(cx, cy, bearing_deg + turn, dist_run * share, static)
+                if not seac.in_sea(*point) and self._dry_part(point, stop)[1]:
+                    return point
+        return None
+
+    def _cas_tf_start(self, cx, cy, brg, dist_run, static):
+        """-> (fx, fy, stop): where the friendly task force starts (on a road, on land, and with a dry straight leg to the stop) and its stop point."""
+        stop_m = 2000 if static else self.CAS_TF_STOP_M
+        wanted = offset(cx, cy, brg, stop_m)
+        stop = self._cas_land(wanted)                             # v0.41.384 (S29): on land
+        jitter = self.vrng.uniform(-6, 6)
+        first = self._tf_start_at(cx, cy, brg + jitter, dist_run, static)
+        if not seac.in_sea(*first) and self._dry_part(first, stop)[1]:
+            return first[0], first[1], stop
+        # S226: the straight leg to the stop crosses the sea. Where the stop is about where it was meant to be, look for another start for it.
+        if math.hypot(stop[0] - wanted[0], stop[1] - wanted[1]) <= self.CAS_STOP_SLIP_M:
+            point = self._tf_dry_start(cx, cy, brg + jitter, dist_run, static, stop, self.CAS_LEG_BEARINGS_DEG)
+            if point is not None:
+                return point[0], point[1], stop
+        # Else the whole approach swings round onto land, along the coast: the stop keeps its distance from the target (the target stays put).
+        for turn in self.CAS_APPROACH_TURNS_DEG:
+            other = offset(cx, cy, brg + turn, stop_m)
+            if not seac.site_ok(other[0], other[1], self.CAS_COAST_M):
+                continue
+            point = self._tf_dry_start(cx, cy, brg + turn, dist_run, static, other, (0,) + self.CAS_LEG_BEARINGS_DEG[:4])
+            if point is not None:
+                return point[0], point[1], other
+        return stop[0], stop[1], stop                             # no dry way in: the task force waits at its stop
 
     def _cas_task_force(self, package, z_, first_, tid, brg, fx, fy, stop, v, t_contact, static):
         """Build the friendly company at (fx, fy), name its units and drive it to `stop` -> (group or None, unit names)."""
@@ -231,8 +284,27 @@ class CasGround:
         p0 = jt.points[0]
         p0.tasks.append(task.FAC(callsign=1, frequency=int(plan.freq("JTAC") * 1e6), modulation=task.Modulation.AM, number=1))
         # S80 (XO 2026-11-14): the JTAC is a real vehicle of the company, not magic: visible and mortal. If it dies, the flight loses its controller.
-        jt.add_waypoint(mapping.Point(*self._cas_land(offset(cx, cy, brg, 3800)), self.t), PointAction.OffRoad, v * 3.6)
+        jt.add_waypoint(mapping.Point(*self._jtac_stop((jx, jy), cx, cy, brg), self.t), PointAction.OffRoad, v * 3.6)
         return jt.units[0].name
+
+    def _jtac_stop(self, start, cx, cy, brg):
+        """Where the JTAC drives: CAS_JTAC_STOP_M from the target toward our side. S226: the point must be about where it was meant to be
+        (not snapped back toward the enemy from out of the sea) and have a dry leg to it; else another bearing, else the JTAC stays put."""
+        own_side = bearing(cx, cy, start[0], start[1]) - brg                  # the side the task force came in from, when its approach was swung round
+        for turn in (0,) + self.CAS_LEG_BEARINGS_DEG + (own_side,):
+            wanted = offset(cx, cy, brg + turn, self.CAS_JTAC_STOP_M)
+            point = self._cas_land(wanted)
+            if math.hypot(point[0] - wanted[0], point[1] - wanted[1]) <= self.CAS_STOP_SLIP_M and self._dry_part(start, point)[1]:
+                return point
+        return start
+
+    def _front_advance(self, start, heading_deg):
+        """S226: where the attacking side of a front battle creeps to: FRONT_ADVANCE_M on that heading, cut at the water; None when it cannot move."""
+        wanted = offset(start[0], start[1], heading_deg, self.FRONT_ADVANCE_M)
+        reached, _whole = self._dry_part(start, wanted)
+        if math.hypot(reached[0] - start[0], reached[1] - start[1]) < self.CAS_PATROL_MIN_M:
+            return None
+        return reached
 
     def _stage_front_battles(self, package, manifest, tx, ty, route=None, t_s=900.0):
         """S81 (XO 2026-11-14): the ground war is on the map under any flight. Each sector within the target area radius of the target where both sides still have a force
@@ -287,9 +359,15 @@ class CasGround:
             names = _name_units(bg, f"BC{i + 1}")
             hold_, stance_ = True, "hold"
             if rs > bs * self.FRONT_RATIO and fresh:
-                self._drive_road(red, [offset(rx, ry, brg_rb, self.FRONT_ADVANCE_M)], 3.5); hold_, stance_ = False, "red"
+                advance = self._front_advance((rx, ry), brg_rb)
+                if advance is not None:
+                    self._drive_road(red, [advance], 3.5)
+                    hold_, stance_ = False, "red"
             elif bs > rs * self.FRONT_RATIO:
-                self._drive_road(bg, [offset(bx, by, brg_rb + 180, self.FRONT_ADVANCE_M)], 3.5); hold_, stance_ = False, "blue"
+                advance = self._front_advance((bx, by), brg_rb + 180)
+                if advance is not None:
+                    self._drive_road(bg, [advance], 3.5)
+                    hold_, stance_ = False, "blue"
             if hold_:
                 self._ground_orders(bg)
             manifest.add("friendly_ground", f"sector:{i}", names, label=g["names"][i], sector=i, stance=stance_,
