@@ -31,7 +31,7 @@ TRACK_RADARS = {"SNR_75V", "snr s-125 tr", "Kub 1S91 str", "S-300PS 40B6M tr", "
 TOR_VARIANTS = {"SA-15"}       # point defences that cover a long-range site and shoot down HARMs, GBUs and JSOWs aimed at it
 TOR_COVER_KM = 12.0           # a Tor this close to a SEAD/DEAD target, or to the strike leg into it, is part of the job: HARMs and JSOWs go at it, the DEAD gate waits for it
 SEARCH_RADARS = {"p-19 s-125 sr", "SA-11 Buk SR 9S18M1", "S-300PS 64H6E sr", "1L13 EWR", "55G6 EWR", "RLS_19J6"}      # S90 P3b: + the SA-5's ST-68U "Tin Shield"
-CAS_ZONE_M = 9000              # the AI CAS engage circle around TGT (m): the column stays within about 2 km of the point (CAS_ENEMY_ADVANCE_M, CAS_PATROL_MAX_M); S92 tried 18000 and put it back (a wider circle only adds neighbouring air defence)
+CAS_ZONE_M = 9000              # the AI CAS engage circle around TGT (m): the column stays within about 2 km of the point (CAS_ENEMY_ADVANCE_M); S92 tried 18000 and put it back (a wider circle only adds neighbouring air defence)
 KPH = 1.852
 
 

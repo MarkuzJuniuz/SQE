@@ -1,4 +1,4 @@
-"""CAS ground fight: the support force, the front battles on the map, the front air cover and the helpers that drive a column (road points, patrol legs, land snapping).
+"""CAS ground fight: the support force, the front battles on the map, the front air cover and the helpers that drive a column (road points, arrival speeds, land snapping).
 
 A mixin: `MissionBuilder` inherits these methods (like a C# partial class). They use `self.m`, `self.state`, `self.o`, `self.t` and the other fields the builder sets up.
 The `CAS_*` / `FRONT_*` class constants stay in `MissionBuilder` (read here as `self.CAS_...`); the module-level constants stay in `mission_builder.py`:
@@ -99,14 +99,54 @@ class CasGround:
         self._ground_orders(g)
         return True
 
-    def _patrol_via(self, start, away_brg, final, speed_ms, t_arrive):
-        """v0.41.190: the route points for a column that must take about t_arrive seconds to get from `start` to `final` at speed_ms: out `away_brg` and back
-        (half the extra distance each way, at most CAS_PATROL_MAX_M), then on to `final`. Just [final] when no leg is needed."""
-        direct = math.hypot(final[0] - start[0], final[1] - start[1])
-        leg = (speed_ms * t_arrive - direct) / 2.0
-        if leg < self.CAS_PATROL_MIN_M:
-            return [final]
-        return [offset(start[0], start[1], away_brg, min(leg, self.CAS_PATROL_MAX_M)), start, final]
+    @staticmethod
+    def _route_length(g) -> float:
+        """Metres along the group's route points as built (road points snapped), start to end."""
+        length = 0.0
+        for number in range(1, len(g.points)):
+            here = g.points[number - 1].position
+            there = g.points[number].position
+            length += math.hypot(there.x - here.x, there.y - here.y)
+        return length
+
+    def _dcs_share(self, set_ms: float) -> float:
+        """S228: the share of its set speed DCS really drives a column at: CAS_DCS_LOW_SHARE up to CAS_DCS_FULL_SPEED_MS, CAS_DCS_SPEED_SHARE from CAS_DCS_SLOW_FROM_MS, a straight line between."""
+        if set_ms <= self.CAS_DCS_FULL_SPEED_MS:
+            return self.CAS_DCS_LOW_SHARE
+        if set_ms >= self.CAS_DCS_SLOW_FROM_MS:
+            return self.CAS_DCS_SPEED_SHARE
+        part = (set_ms - self.CAS_DCS_FULL_SPEED_MS) / (self.CAS_DCS_SLOW_FROM_MS - self.CAS_DCS_FULL_SPEED_MS)
+        return self.CAS_DCS_LOW_SHARE - part * (self.CAS_DCS_LOW_SHARE - self.CAS_DCS_SPEED_SHARE)
+
+    def _set_speed_for(self, wanted_ms: float) -> float:
+        """S228: the speed to set so DCS really drives at wanted_ms (the inverse of _dcs_share, found by a few rounds of set = wanted / share(set))."""
+        speed = wanted_ms
+        for _round in range(30):
+            speed = wanted_ms / self._dcs_share(speed)
+        return speed
+
+    def _time_column(self, g, t_arrive, top_ms):
+        """S228 (v0.41.190's out-and-back patrol leg was skipped by DCS): set the group's driving speed so it reaches its last point at about mission second
+        t_arrive in DCS: the route as built divided by t_arrive, divided again by CAS_DCS_SPEED_SHARE (DCS drives slower than set), never above top_ms
+        nor below CAS_COLUMN_MIN_MS. Where even the floor speed would get it there early by CAS_HOLD_MIN_S or more, it first holds where it stands
+        (a Hold task with a time stop on its first point). No time left: top speed, no hold."""
+        if len(g.points) < 2:
+            return
+        length = self._route_length(g)
+        speed = top_ms
+        if t_arrive > 0:
+            speed = self._set_speed_for(length / t_arrive)
+            speed = min(top_ms, speed)
+            speed = max(self.CAS_COLUMN_MIN_MS, speed)
+        for point in g.points[1:]:
+            point.speed = speed
+        drive_s = length / (speed * self._dcs_share(speed))
+        wait_s = t_arrive - drive_s
+        if wait_s < self.CAS_HOLD_MIN_S:
+            return
+        hold = task.ControlledTask(task.Hold())
+        hold.stop_after_time(int(wait_s))
+        g.points[0].tasks.append(hold)
 
     def _cas_land(self, p):
         """v0.41.384 (S29): the point moved onto land (CAS_COAST_M from the sea) when it is in the water or on the beach (nearest 200 m ring with a good point, seacheck.site_ok); the point itself when it is fine or nothing is found."""
@@ -156,7 +196,7 @@ class CasGround:
                 here = reached
                 continue
             is_last = number == len(via) - 1
-            if is_last and math.hypot(reached[0] - here[0], reached[1] - here[1]) >= self.CAS_PATROL_MIN_M:
+            if is_last and math.hypot(reached[0] - here[0], reached[1] - here[1]) >= self.CAS_SHORTEST_LEG_M:
                 points.append(reached)
                 here = reached
         return points
@@ -209,7 +249,11 @@ class CasGround:
         # v0.41.137: the column stays where the CAS flight is sent. It used to start up to 10 km back and drive 13 km to be at the CAS point
         # at the TOT; any shortfall in DCS's real speed (slopes, a long mixed column, stopping to fight) left it kilometres from the point
         t_arr_ = max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S)
-        self._drive_road(enemy, [self._cas_land(q_) for q_ in self._patrol_via((cx, cy), brg + 180, offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M), min(v, 3.5), t_arr_)], min(v, 3.5))   # v0.41.190: a patrol leg away from us first; v0.41.384: every point on land
+        # S228: straight to its point at a speed that gets it there at t_arr_ in DCS (v0.41.190's out-and-back patrol leg was skipped by DCS); v0.41.384: on land
+        final = self._cas_land(offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M))
+        top_ms = min(v, 3.5)
+        self._drive_road(enemy, [final], top_ms)
+        self._time_column(enemy, t_arr_, top_ms)
 
     def _tf_start_at(self, cx, cy, bearing_deg, distance_m, static):
         """A possible start of the friendly task force: that far out on that bearing, on a road when it drives (not for a garrison) and on land."""
@@ -265,14 +309,18 @@ class CasGround:
             self._tf_names[str(package.number)] = gname_
             names = _name_units(g, utag_)
             # v0.41.157 (XO's 15:38 run: the task force reached the column 12 minutes after the A-10s, then drove 2.5 km past it): it stops CAS_TF_STOP_M (v0.41.179: 1.5 km, was 400 m) short of the
-            # contact point (static garrison: 2 km short) and holds, weapons free, so the survivors come to it; and it drives CAS_TF_SPEED_MARGIN faster than the
-            # plan, because DCS runs a mixed off-road column about 30% slower (measured in that run)
-            v_tf_ = min(8.0, v * self.CAS_TF_SPEED_MARGIN)
-            via_ = [self._cas_land(q_) for q_ in self._patrol_via((fx, fy), brg, stop, v_tf_, max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S))]   # v0.41.190: our column also drives a patrol leg (away from the enemy) first; v0.41.384: on land
+            # contact point (static garrison: 2 km short) and holds, weapons free, so the survivors come to it.
+            # S228: it drives straight to its stop at a speed that gets it there at the meeting time in DCS (DCS drives slower than set: CAS_DCS_SPEED_SHARE);
+            # the old out-and-back patrol leg (v0.41.190) was skipped by DCS. v0.41.384: on land
+            t_arrive = max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S)
+            stop_on_land = self._cas_land(stop)
+            top_ms = 8.0
+            via_ = [stop_on_land]
             if static:
-                self._drive(g, via_, v_tf_)
+                self._drive(g, via_, top_ms)
             else:
-                self._drive_road(g, via_, v_tf_)
+                self._drive_road(g, via_, top_ms)
+            self._time_column(g, t_arrive, top_ms)
         return g, names
 
     def _cas_jtac(self, package, plan, fx, fy, cx, cy, brg, v):
@@ -302,7 +350,7 @@ class CasGround:
         """S226: where the attacking side of a front battle creeps to: FRONT_ADVANCE_M on that heading, cut at the water; None when it cannot move."""
         wanted = offset(start[0], start[1], heading_deg, self.FRONT_ADVANCE_M)
         reached, _whole = self._dry_part(start, wanted)
-        if math.hypot(reached[0] - start[0], reached[1] - start[1]) < self.CAS_PATROL_MIN_M:
+        if math.hypot(reached[0] - start[0], reached[1] - start[1]) < self.CAS_SHORTEST_LEG_M:
             return None
         return reached
 

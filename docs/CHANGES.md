@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.716, the ground fight starts when the CAS flight arrives
+In a CAS mission both columns now reach their meeting point about a minute before your time on target. They used to get there 5 to 15 minutes early, because DCS skipped the short detour meant to delay them. A column with time to spare waits where it starts, then drives in slowly.
+
 ## v0.41.715, a warning when red goes for your runway or the AWACS's
 The red intelligence strip at the top (the one the carrier raid uses) now also shows when a red raid you can see is expected on your own field's runway or on the E-3's. While such a runway is cut, it says what that means: why you cannot fly from your field and for how long, or that no E-3 can take off and raids beyond the Hawkeye's reach may come unseen.
 
