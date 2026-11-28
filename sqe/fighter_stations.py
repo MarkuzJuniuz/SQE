@@ -384,9 +384,9 @@ class FighterStations:
         tcs = [x for x in package.flights if x.role == Role.TARCAP and not x.tag]
         ecs = [x for x in package.flights if x.role == Role.ESCORT and not x.tag]
         for a in tcs:
-            ka = (a.role, id(AIRCRAFT[a.aircraft].profile))
+            ka = self._stand_key(a, AIRCRAFT[a.aircraft].profile, geom)          # S231b: the player's own station when it has one
             for b in ecs:
-                kb = (b.role, id(AIRCRAFT[b.aircraft].profile))
+                kb = self._stand_key(b, AIRCRAFT[b.aircraft].profile, geom)
                 sa, sb = geom.stand.get(ka), geom.stand.get(kb)
                 la, lb = a.aircraft in LONG_RANGE_A2A, b.aircraft in LONG_RANGE_A2A
                 if sa is None or sb is None or la == lb or dist(sa[0], sa[1], sb[0], sb[1]) >= LRA_SPLIT_MIN_NM * NM:

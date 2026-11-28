@@ -162,7 +162,8 @@ def cap2_point(sx: float, sy: float, axis_deg: float, leg_nm: float, margin, flo
 
 def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_player: bool,
                tanker_xy: tuple | None, stack_idx: int = 0, spawn: tuple | None = None, spawn_alt_ft: int = 0,
-               spawn_kts: int = 0, jsow: bool = False, jsow_side: float = 0, keep_out=None, agm88_deg: float = 0, rel: str = "") -> list[Wpt]:
+               spawn_kts: int = 0, jsow: bool = False, jsow_side: float = 0, keep_out=None, agm88_deg: float = 0, rel: str = "",
+               player_station: bool = False) -> list[Wpt]:
     """Waypoints from start (takeoff for the player, an in-air 'just departed' spawn for AI) to egress. RTB is added by the builder."""
     wp: list[Wpt] = []
     bx, by = own_base
@@ -229,7 +230,13 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
             return out_of_rings(xy, g.all_rings)
         return xy
     wp.append(Wpt("PUSH", *lane_xy(g.push), alt, p.push_kts, "Push on time, check in with AWACS"))
-    st_ = (g.stand or {}).get(key) if role in (Role.TARCAP, Role.ESCORT, Role.SWEEP) else None
+    # S231b: the player's own TARCAP / escort may have a station of its own (max firing range; mission_builder._stand_key)
+    # player_station: a timing call that plans the player's flight as AI (`_push_to_s`) still asks for that flight's own station
+    stand_key = key
+    player_key = (role, id(p), "player")
+    if player_key in (g.stand or {}) and (human or player_station):
+        stand_key = player_key
+    st_ = (g.stand or {}).get(stand_key) if role in (Role.TARCAP, Role.ESCORT, Role.SWEEP) else None
     if st_ is not None and len(st_) >= 5:
         # TARCAP and ESCORT (the package escort): a station of their own, short of the target and outside live SAM cover,
         # where they hold and shoot at what comes in range without chasing it. No IP. The TARCAP gets there first, holds its time and goes

@@ -30,6 +30,7 @@ from . import seacheck as seac
 from . import pydcs_patch
 from . import threatmap as tm
 from . import samtier
+from . import missile_ranges
 from . import f14_scheme
 from . import rio_nav, rio_radar, turnpoints
 from .aircraft import AIRCRAFT, F14_KEYS, JDAM_HOGS
@@ -78,10 +79,10 @@ CAP_SPREAD_NM = {"TARCAP": 5, "ESCORT": 10, "SWEEP": 20,
 CAP2_ROOM_NM = 8             # Phase 8: CAP2 must have at least this much SAM room (nm to the nearest SAM ring), or as much as the station itself has when that is less (8 is the cover circle's own floor)
 TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
 TARCAP_FWD_NM = 20           # v0.41.120: the TARCAP's engage circle tries to reach this far past its station toward red (judgment call: red's alert pairs held 24 nm from the station in XO's 2026-10-23 run)
-TARCAP_NEAR_STRIKE_NM = 22   # v0.41.181 (XO 2026-10-28): a STRIKE package's TARCAP holds this far from the shooters' middle (was 26 for all); judgment call: it protects the package, it does not hunt red's patrols
+TARCAP_NEAR_STRIKE_NM = 22   # S231b: only for a type with no measured missile range (`missile_ranges.station_nm`). v0.41.181 (XO 2026-10-28): a STRIKE package's TARCAP holds this far from the shooters' middle (was 26 for all); judgment call: it protects the package, it does not hunt red's patrols
 TARCAP_FWD_CAS_NM = 10      # v0.41.181: engage reach past the station for a CAS / strike package's TARCAP (20 for SEAD / DEAD, unchanged); judgment call from two CAS runs where the Eagles pushed out into red's scrambles and lost 9-10 to R-27ERs
 TARCAP_FWD_STRIKE_NM = 12
-TARCAP_NEAR_NM = 18          # v0.41.168 (XO 2026-10-27: 16, the TARCAP dived into red's BARCAP swarm; 26 is a judgment call between the old 16 and the 56 nm that was too far to snipe). v0.41.118: ...then it moves in toward the middle of the shooters' launch points until it is this far from it (judgment call: AIM-54 / AIM-120 reach covers the HARM point from there; still outside the SAM rings and TARCAP_BEHIND_NM from the JSOW point)
+TARCAP_NEAR_NM = 18          # S231b: only for a type with no measured missile range (`missile_ranges.station_nm`). v0.41.168 (XO 2026-10-27: 16, the TARCAP dived into red's BARCAP swarm; 26 is a judgment call between the old 16 and the 56 nm that was too far to snipe). v0.41.118: ...then it moves in toward the middle of the shooters' launch points until it is this far from it (judgment call: AIM-54 / AIM-120 reach covers the HARM point from there; still outside the SAM rings and TARCAP_BEHIND_NM from the JSOW point)
 ESCORT_AT_EXPOSED = True     # S121 (XO 2026-11-20, run 2026-11-20_00-29-13: one red Su-27 pair shot down six SEAD F-16s while the package escort stood about 45 km away behind the JSOW flight): the package escort of a SEAD / JSOW package holds ESCORT_BEHIND_NM behind the shooters' launch point nearest red's patrols (the SEAD flights on the red side), not behind the JSOW point. False = the old station (behind the JSOW point)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 ESCORT_FOLLOWS = False      # T7 (XO decides): OFF after five server runs (T4fix, S165, S168, T7 rounds 1 and 2): the follow escort never flew with its leader (it never went near its MSHL / PUSH points, flew its own curve at 11,000 m and 570 to 700 kt, was 56 to 62 nm from the strikers by t=540 and died to the Sukhumi Buk there); a smaller `Escort` engagement distance and a hold until the lead was airborne changed nothing. False = the station escort. Was True: S138a (v0.41.547, XO 2026-11-21): the AI package escort of a plain STRIKE / CAS package flies WITH the lead striker (DCS Escort task, the strikers' push time, no station race-track) and fights what comes within its class's reach of them, up to the strikers' egress. False = the station escort (S137's tethered circle). Judgment call; XO flies it
@@ -141,7 +142,7 @@ RAID_SAM_RESERVE = 50    # v0.41.291 (XO 2026-11-04: spawn every red SAM, "trim 
 RAID_F14_HOLD = False     # v0.41.276 (XO 2026-11-04: "the interceptors should just fly fast and bend away from SAMs"): False = the fleet-defence F-14s and F-15s have no HOLD and no gate: they leave at the start, fly the SAM-bending lane at the dash speed and wait on the intercept point. True = the v0.41.256 hold-then-dash with the SEAD gate.
 COVER_ONSTATION_S = 120      # S141a (XO 2026-11-22: "on station 120 s before the first striker's IP"): a TARCAP / station escort is on its station this long before the first ground-attack flight of its package reaches its first protect point (IP, HARM / JSOW / SLAM / REL point or TGT). Doctrine: the cover is on station before the strike group enters the threat area (JP 3-01, from memory, firmness medium). Judgment call (180 was proposed).
 COVER_LEAD_MAX_S = 900        # S141a: judgment call: the cover never pushes more than this ahead of its old push (`TARCAP_LEAD_S` via `stagger`), so a far station cannot drag a TARCAP out of the marshal by half an hour
-OVERWATCH_BACK_MAX_NM = 20    # S141b (XO 2026-11-22: "at most 20 nm behind the package point"): a TARCAP / station escort holds on red's line into the package, at most this far behind the protect point nearest red (+ STAND_BACK_NM for the F-14); beyond it, the old station. About the AIM-120's head-on reach at altitude (20 to 30 nm, public figures, firmness medium): a point further back cannot cover the package. Judgment call.
+OVERWATCH_BACK_MAX_NM = 20    # S231b: only for a type with no measured missile range (`missile_ranges.station_nm`). S141b (XO 2026-11-22: "at most 20 nm behind the package point"): a TARCAP / station escort holds on red's line into the package, at most this far behind the protect point nearest red (+ STAND_BACK_NM for the F-14); beyond it, the old station. About the AIM-120's head-on reach at altitude (20 to 30 nm, public figures, firmness medium): a point further back cannot cover the package. Judgment call.
 STAGGER = {Role.SWEEP: -90, Role.ESCORT: -90, Role.SEAD: -60, Role.TARCAP: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
 
 
@@ -1788,10 +1789,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """S141a: the seconds from the flight's PUSH to its first point after PUSH that is named in `names` (or its station when `station`: the first orbit point
         with the TARCAP / ESCORT action), over the route `_protect_points` plans (the same plan_route call). None when it does not plan, has no PUSH or no such point."""
         base = self.state.bases[f.base_id]
+        # S231b: the player's own TARCAP / escort station when it has one (`_stand_key`)
+        own_station = len(self._stand_key(f, self._flight_profile(f, package), geom)) == 3
         try:
             wps = plan_route(f.role, (base.x, base.y), geom, self._flight_profile(f, package), is_player=False, tanker_xy=None,
                              jsow=getattr(f, "kit", "") in JSOW_FLIGHT_KITS, jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package),
-                             agm88_deg=self._agm88_deg(package, geom), rel=self._rel_kind(package, f))
+                             agm88_deg=self._agm88_deg(package, geom), rel=self._rel_kind(package, f), player_station=own_station)
         except ValueError:
             return None
         pi_ = next((k for k, w in enumerate(wps) if w.name == "PUSH"), None)
@@ -3384,6 +3387,19 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._cas_floors[package.id] = geom.cas_floor[0] if geom.cas_floor else 0
         self._cas_stock[package.id] = site_ is None or bool(tt_ is not None and tt_.kind == AssetKind.ARMOR and tt_.variant != "GARRISON")
 
+    def _stand_key(self, f, prof, geom):
+        """S231b: the key of a flight's station in geom.stand. Flights of one role and profile share a station, keyed (role, profile); the player's own
+        TARCAP / escort (a person flies it, not the all-AI test's stand-in) whose type has a measured missile range gets its own, (role, profile, "player"),
+        because its station takes the max firing range and the AI's the optimal one (XO 2026-11-27). routes.plan_route looks it up the same way."""
+        key = (f.role, id(prof))
+        if not f.is_player or geom.ai_player:
+            return key
+        if f.role not in (Role.TARCAP, Role.ESCORT):
+            return key
+        if missile_ranges.station_nm(f.aircraft, 20000, True) is None:
+            return key
+        return (f.role, id(prof), "player")
+
     def _flight_plans(self, geom, package, tx, ty, skip=()):
         """Per kind of flight: its own altitude tier, and for AI escorts and sweeps the point short of live SAM cover where they stop.
         Keyed (role, profile) like routes.plan_route looks them up. The player's own route is never cut short; a package whose job IS the sweep
@@ -3423,19 +3439,23 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if f.tag:
                 continue
             prof = self._flight_profile(f, package)                                   # v0.41.299: a JDAM / SLAM-ER striker has its own (high, no LOW) profile
-            key = (f.role, id(prof))
-            if key not in geom.tiers:
-                geom.tiers[key] = self._pick_tier(geom, f.role, prof, tx, ty, skip)
+            tier_key = (f.role, id(prof))
+            if tier_key not in geom.tiers:
+                geom.tiers[tier_key] = self._pick_tier(geom, f.role, prof, tx, ty, skip)
+            key = self._stand_key(f, prof, geom)                                       # S231b: the player's own cover flight has a station of its own
             if key in geom.stand or not self.o.fighter_standoff or f.role not in (Role.TARCAP, Role.ESCORT, Role.SWEEP):
                 continue
             if package.objective.type in (ObjectiveType.COUNTER_AIR, ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE) and not geom.sweep:
                 continue
             # TARCAP and ESCORT roles: a station of their own, for you and for the AI alike (v0.40.1)
-            t = geom.tiers[key]
+            t = geom.tiers[tier_key]
             alt_ = t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000)
+            # S231b: the type's missile range at this height (AI: optimal, the player's flight: max); None = no figure, the old constants stay
+            human_flight = f.is_player and not geom.ai_player
+            measured_nm = missile_ranges.station_nm(f.aircraft, alt_, human_flight)
             geom.stand[key] = profiles.station(self.state, pts, alt_, geom.egr)
             if package.objective.type == ObjectiveType.CAS and not geom.sweep and profiles._long_range_threat(self.state, pts[-1], alt_) is not None:
-                geom.stand[key] = profiles.cas_station(self.state, pts, alt_, geom.egr)       # v0.41.177: close enough to cover the A-10s
+                geom.stand[key] = profiles.cas_station(self.state, pts, alt_, geom.egr, measured_nm)       # v0.41.177: close enough to cover the A-10s
             if geom.sweep:
                 geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0], package)
             elif f.role in (Role.ESCORT, Role.SWEEP, Role.TARCAP) and any(getattr(x_, "kit", "") in (*JSOW_FLIGHT_KITS, "SLAM") for x_ in package.flights):      # v0.41.299: the SLAM-ER flight is shepherded the same way
@@ -3476,6 +3496,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     # closer than TARCAP_BEHIND_NM to the JSOW point and never into a SAM ring (the step back's rings, but an SA-10 at SA10_AVOID_NM (35 nm, the reach measured in
                     # the runs) instead of its 48 nm table ring + 5, which held the TARCAP 53 nm from the SA-10 while the HARM point is 36 nm from it)
                     near_nm_ = (TARCAP_NEAR_STRIKE_NM if package.objective.type == ObjectiveType.STRIKE else TARCAP_NEAR_NM) + back_extra_
+                    # S231b: a type with a measured missile range holds that far from the shooters (the F-14's stand-back is inside its own figure)
+                    if measured_nm is not None:
+                        near_nm_ = measured_nm
                     lps_ = self._launch_pts.get(package.id) or self._launch_points(package, geom)       # the stations are planned before _launch_pts is filled in
                     if lps_:
                         mx_, my_ = sum(q_[0] for q_ in lps_) / len(lps_), sum(q_[1] for q_ in lps_) / len(lps_)
@@ -3514,7 +3537,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if f.tag or (f.role == Role.ESCORT and self._escort_lead(package, f) is not None):
                     continue
                 prof = self._flight_profile(f, package)
-                key = (f.role, id(prof))
+                tier_key = (f.role, id(prof))
+                key = self._stand_key(f, prof, geom)                                   # S231b: the player's own station, when it has one
                 if f.role not in (Role.TARCAP, Role.ESCORT) or key in done_ or key not in geom.stand:
                     continue
                 done_.add(key)
@@ -3533,9 +3557,14 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     axis_points_ = axes_[axis_turn % len(axes_)]
                 axis_turn += 1
                 self.__dict__.setdefault("_ow_axis", {})[(package.id, f.role.value)] = (len(axes_), axis_points_)      # probe only: how many axes, and the points this flight covers
-                t = geom.tiers[key]
+                t = geom.tiers[tier_key]
                 alt_ = t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000)
-                ow_ = self._overwatch_station(package, geom, f, alt_, axis_points_, OVERWATCH_BACK_MAX_NM + STAND_BACK_NM.get(f.aircraft, 0))
+                # S231b: at most the type's missile range behind the protect point (AI: optimal, the player's flight: max); no figure: the old cap
+                back_max_nm = OVERWATCH_BACK_MAX_NM + STAND_BACK_NM.get(f.aircraft, 0)
+                measured_nm = missile_ranges.station_nm(f.aircraft, alt_, f.is_player and not geom.ai_player)
+                if measured_nm is not None:
+                    back_max_nm = measured_nm
+                ow_ = self._overwatch_station(package, geom, f, alt_, axis_points_, back_max_nm)
                 self.__dict__.setdefault("_ow_info", {})[(package.id, f.role.value)] = getattr(self, "_ow_why", "?")          # probe only: "" = overwatch found, else why the old station stayed
                 if ow_ is not None:
                     geom.stand[key] = (ow_[0], ow_[1], [], dist(ow_[0], ow_[1], tx, ty) / NM, profiles.leg_clear(self.state, ow_, geom.egr, alt_))     # S141b: the same tuple shape profiles.station returns
