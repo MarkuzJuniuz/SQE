@@ -11,6 +11,10 @@ from __future__ import annotations
 
 from .rio_nav import MENU_LUA, MENU_TITLE
 
+# S237 (XO 2026-11-28): the Hunt Bandit calls are off for now. False = no radar calls in the F10 menu and the red aircraft keep their usual names;
+# the Settings page and the install stay as they are. True brings them back.
+RADAR_CALLS_ON = False
+
 REQUEST_FILE = "SQE_radar.req"
 RESULT_FILE = "SQE_radar.res"
 # The three calls were checked against a VAICOM phrase list (2026-11-26): no phrase starts with "Hunt"; "Break Lock", "Lock Target", "Next Target" and "Bandit" are all taken.

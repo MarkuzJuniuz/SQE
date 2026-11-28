@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.725, F-14 Hunt Bandit calls off for now
+The F-14's Hunt Bandit, Hunt Next and Hunt Off calls are no longer added to the RIO Enhancements menu, and enemy aircraft keep their usual names. The navigation calls stay, and so does the Settings page. Jester's own lock commands work as before.
+
 ## v0.41.724, red learns from its raids
 At Levels 2 and 3, when blue's fighters stop a red raid you do not fly (or it gets through but loses two or more bombers), red's next raid on that target brings one more escort pair. After a second such loss it brings two, and a SEAD raid also gets one more package of anti-radiation jets and a bigger sweep, within the raid's limits. The extra jets come out of red's other raids and fade after a couple of quiet days. Caucasus Level 3 gets a little harder for blue and Syria Level 3 a little easier; Levels 1 and 2 play as before. The campaign guide now explains both sides' learning.
 
