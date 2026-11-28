@@ -2189,7 +2189,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if f.tag == "TKR_HVAACAP" and getattr(self, "_late_tanker_flag", None):
                 self._late_flag(g, self._late_tanker_flag)            # S193 PR 3: the tanker's guard launches with the late tanker (same flag)
             if f.tag in ("HVAACAP", "TKR_HVAACAP"):
-                self._commit_register("blue", g, blue_commit.HVAACAP_REACH_NM, 0, commit_end_, station_, blue_commit.HVAACAP_LEASH_NM, track_end)
+                # S235: the AWACS sends this guard at fighters closing on what it guards (the AWACS for an HVAACAP, the tanker for a TKR_HVAACAP)
+                guarded_kind = "awacs"
+                if f.tag == "TKR_HVAACAP":
+                    guarded_kind = "tanker"
+                self._commit_register("blue", g, blue_commit.HVAACAP_REACH_NM, 0, commit_end_, station_, blue_commit.HVAACAP_LEASH_NM, track_end, guarded_kind)
             else:
                 # S160c: a base / carrier BARCAP guard is on a leash round its station too, so it does not fight out of its SAM and SM-2 cover
                 barcap_leash_nm = blue_commit.BARCAP_LEASH_BASE_NM
@@ -3538,10 +3542,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if not geom.sweep:
             self._stagger_stations(geom, package, tx, ty)        # v0.41.139 (XO 2026-10-27): a long-range TARCAP stands behind and to one side of a short-range escort
 
-    def _commit_register(self, side, g, reach_nm, t0, t1, anchor=None, leash_nm=0, anchor_end=None) -> None:
+    def _commit_register(self, side, g, reach_nm, t0, t1, anchor=None, leash_nm=0, anchor_end=None, guards="") -> None:
         """S160: put an AI air-to-air group on its side's commit script (blue_commit.py). t1 is a mission time, or a hold dict whose (extended) end is used.
-        anchor (x, y) + leash_nm: the flight must stay within the leash of that point (HVAACAPs). Players are never registered (callers test it)."""
-        entry = {"side": side, "g": g.name, "reach": reach_nm * NM, "t0": t0, "t1": t1}
+        anchor (x, y) + leash_nm: the flight must stay within the leash of that point (HVAACAPs). Players are never registered (callers test it).
+        S235: guards "awacs" / "tanker": the AWACS may send this guard at a fighter closing on what it guards (`blue_commit.GUARD_CUE_NM`)."""
+        entry = {"side": side, "g": g.name, "reach": reach_nm * NM, "t0": t0, "t1": t1, "guards": guards}
         if anchor is not None and leash_nm:
             entry["ax"] = anchor[0]
             entry["az"] = anchor[1]
