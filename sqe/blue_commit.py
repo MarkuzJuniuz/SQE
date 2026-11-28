@@ -49,6 +49,11 @@ HVAA_RETRO_NM = 40              # it flies this far straight away from that figh
 HVAA_CLEAR_NM = 80              # no enemy fighter within this for HVAA_QUIET_S: it goes back to its track
 HVAA_QUIET_S = 300
 HVAA_REPLAN_S = 120             # while away and still threatened, a new point away from the nearest fighter at most this often
+# S235 (XO 2026-11-27: "the AWACS ... orchestrates a whole air theater but if it can't command its guards to protect itself it's just a floating picture"; "it should also be able
+# to direct tanker guards"): while the side has an AWACS up, a tanker / AWACS guard is sent at an enemy fighter that comes within GUARD_CUE_NM of what it guards, on the AWACS's
+# picture, without waiting for its own radar or its HVAACAP_REACH_NM. Server run 2026-11-27 (S181e round 3): the E-3 saw two Su-27s at about 110 km and pulled back, but its guard
+# committed only at 51 to 54 km on its own and needed about 2:30 to shoot; the Su-27 fired first and killed the E-3. 80 nm is about 4 minutes of a Mach 1.4 closure (judgment call).
+GUARD_CUE_NM = 80
 BARCAP_REACH_NM = 30            # S160c (T1fix7 Caucasus: two F-14BU carrier BARCAP jets, reach 45 nm, fought away from the fleet and died): a base / carrier BARCAP guard commits only this far (judgment call, like HVAACAP_REACH_NM)
 BARCAP_LEASH_FLEET_NM = 25      # ...and never more than this from its station. A carrier station is `barcap.STATION_FLEET_NM` 35 nm out; 35 + 25 = 60 nm from the boat stays inside the ships' SM-2 reach (`barcap.FLEET_REACH_NM` 78, measured p90 77.5 nm in S168). Judgment call
 BARCAP_LEASH_BASE_NM = 15       # ...a base station is `barcap.STATION_BASE_NM` 25 nm out; 25 + 15 = 40 nm from the field, the Patriot's ring (HAWK edge inside it). Judgment call
@@ -116,9 +121,11 @@ def commit_lua(side, flights, sams, hvaa=None, late=None) -> str:
         if flight.get("bx") is not None and flight.get("bz") is not None:
             end_x = int(flight["bx"])
             end_z = int(flight["bz"])
-        flight_rows.append("{g=%s, reach=%d, t0=%d, t1=%d, ax=%d, az=%d, bx=%d, bz=%d, leash=%d}" % (
+        # S235: "awacs" or "tanker" for a guard the AWACS may send (the kind of aircraft it guards), else ""
+        guards = str(flight.get("guards") or "")
+        flight_rows.append("{g=%s, reach=%d, t0=%d, t1=%d, ax=%d, az=%d, bx=%d, bz=%d, leash=%d, guards=%s}" % (
             _lua_string(flight["g"]), int(flight["reach"]), int(flight["t0"]), int(flight["t1"]),
-            anchor_x, anchor_z, end_x, end_z, leash))
+            anchor_x, anchor_z, end_x, end_z, leash, _lua_string(guards)))
     hvaa_rows = []                  # S176b: the group names of the side's tankers and AWACS that may pull back
     for group_name in (hvaa or []):
         hvaa_rows.append("{g=%s}" % _lua_string(group_name))
@@ -136,6 +143,7 @@ def commit_lua(side, flights, sams, hvaa=None, late=None) -> str:
              % (table, ", ".join(hvaa_rows), table, int(HVAA_SCRAM_NM * 1852), table, int(HVAA_RETRO_NM * 1852), table, int(HVAA_CLEAR_NM * 1852),
                 table, HVAA_QUIET_S, table, HVAA_REPLAN_S))
     data += "\n%s.late = {%s}" % (table, ", ".join(late_rows))
+    data += "\n%s.cue = %d" % (table, int(GUARD_CUE_NM * 1852))         # S235
     return data + "\n" + COMMIT_BODY.replace("__TABLE__", table)
 
 
@@ -215,6 +223,43 @@ local function anchorDist(f, p)
   return math.sqrt(dx * dx + dz * dz)
 end
 local NOWT = 0
+local function isFighter(u)
+  return u:hasAttribute("Fighters") or u:hasAttribute("Interceptors") or u:hasAttribute("Multirole fighters")
+end
+-- S235: what a tanker / AWACS guard guards: the side's live AWACS (or tanker) in the air nearest the guard's station. It follows it when it pulls back.
+local function guardedLead(f)
+  if not f.guards or f.guards == "" then return nil end
+  local attribute = "AWACS"
+  if f.guards == "tanker" then attribute = "Tankers" end
+  local station = {x = f.ax, z = f.az}
+  local best, bestD = nil, nil
+  for _, g in ipairs(coalition.getGroups(OWN, Group.Category.AIRPLANE)) do
+    if g and g:isExist() then
+      for _, u in ipairs(g:getUnits()) do
+        if u and u:isExist() and u:inAir() and u:hasAttribute(attribute) then
+          local d = dist(station, u:getPoint())
+          if bestD == nil or d < bestD then best, bestD = u, d end
+        end
+      end
+    end
+  end
+  return best
+end
+-- S235: the AWACS sends the guard at the enemy fighter nearest what it guards, within C.cue of it (on the AWACS's picture: no own-radar test)
+local function cueEnemy(f, guardedPoint)
+  local best, bestD = nil, nil
+  for _, eg in ipairs(coalition.getGroups(ENEMY, Group.Category.AIRPLANE)) do
+    if eg and eg:isExist() and (C.count[eg:getName()] or 0) < C.maxper and not (f.cool[eg:getName()] and f.cool[eg:getName()] > NOWT) then
+      for _, u in ipairs(eg:getUnits()) do
+        if u and u:isExist() and u:inAir() and isFighter(u) and not OWN_RADAR_ONLY[u:getTypeName()] then
+          local d = dist(guardedPoint, u:getPoint())
+          if d <= C.cue and (bestD == nil or d < bestD) then best, bestD = eg, d end
+        end
+      end
+    end
+  end
+  return best, bestD
+end
 local function nearestEnemy(f, group, lead, seenBySide)
   local lp = lead:getPoint()
   local best, bestD = nil, nil
@@ -254,6 +299,23 @@ local function targetState(f, lp)
   if nearest == nil then return "dead" end
   if liveCount(Group.getByName(f.g)) < f.units0 then return "hurt" end
   if inSam(lp, C.brk) then return "sam" end
+  -- S235: a guard the AWACS sent stays with what it guards (not with its station) and breaks off when the threat has left it
+  if f.cued then
+    local guarded = guardedLead(f)
+    if guarded then
+      local gp = guarded:getPoint()
+      if dist(lp, gp) > C.cue then return "leash" end
+      local nearestToGuarded = nil
+      for _, u in ipairs(tg:getUnits()) do
+        if u and u:isExist() then
+          local d = dist(gp, u:getPoint())
+          if nearestToGuarded == nil or d < nearestToGuarded then nearestToGuarded = d end
+        end
+      end
+      if nearestToGuarded ~= nil and nearestToGuarded > C.cue * C.breakf then return "far" end
+      return "on"
+    end
+  end
   if leashed(f) and anchorDist(f, lp) > f.leash then return "leash" end
   if nearest > f.reach * C.breakf then return "far" end
   return "on"
@@ -270,6 +332,7 @@ local function breakOff(f, g, why, now)
   end
   env.info("SQECOMMIT " .. C.side .. " " .. f.g .. " breaks off " .. f.on .. " (" .. why .. ") at " .. math.floor(now))
   f.on = nil
+  f.cued = nil
 end
 -- S176b: a tanker or an AWACS pulls back from enemy fighters (RETROGRADE / SCRAM) and goes back to its track when they are gone.
 local function nearestFighter(p)
@@ -375,6 +438,26 @@ local function tick(_, t)
         end
         local free = not f.on and now >= f.t0 and now <= f.t1 and lead:inAir() and not inSam(lp, C.cmt)
         if free and f.quiet and now < f.quiet then free = false end
+        -- S235: with an AWACS up, a tanker / AWACS guard within C.cue of what it guards is sent at the fighter nearest to it, wherever its station is
+        if free and seenBySide and f.guards and f.guards ~= "" then
+          local guarded = guardedLead(f)
+          if guarded and dist(lp, guarded:getPoint()) <= C.cue then
+            local eg, d = cueEnemy(f, guarded:getPoint())
+            if eg then
+              local task = {id = "AttackGroup", params = {groupId = eg:getID(), groupAttack = true, expend = "Auto", attackQtyLimit = false}}
+              local ok = pcall(function() g:getController():pushTask(task) end)
+              if ok then
+                f.on = eg:getName()
+                f.cued = true
+                f.units0 = liveCount(g)
+                C.count[f.on] = (C.count[f.on] or 0) + 1
+                free = false
+                env.info("SQECOMMIT " .. C.side .. " " .. f.g .. " sent by AWACS on " .. f.on .. ", " .. math.floor(d / 1000) .. " km from " .. guarded:getGroup():getName() .. ", t " .. math.floor(now))
+                pcall(function() trigger.action.outTextForCoalition(OWN, string.upper(f.g) .. ": committing, bandits " .. math.floor(d / 1852) .. " miles from " .. guarded:getGroup():getName() .. ".", 10) end)
+              end
+            end
+          end
+        end
         if free and leashed(f) and anchorDist(f, lp) > f.leash then free = false end
         if free then
           local eg, d = nearestEnemy(f, g, lead, seenBySide)
