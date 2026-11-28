@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.722, cover stations from measured missile ranges
+SQE now carries the launch ranges each fighter's missiles showed in DCS test duels (AI against a defending target, three heights). Where a TARCAP or escort station is set by a missile's reach, it now uses the flight's own type and height: AI flights the range at which DCS's AI shoots best, your own flight the longest range it fires at. Today the cover usually takes the nearest safe point on the enemy's way into the package, so most missions fly as before.
+
 ## v0.41.721, the AWACS sends its guards
 While an AWACS is up, it now sends the AI fighters guarding it, and those guarding the tankers, at enemy fighters that come within 80 nm of what they guard. They no longer wait until their own radar picks the bandits up. The guard follows the AWACS or tanker when it pulls back, and breaks off when the threat turns away. A text message shows it ("COWBOY 3: committing, bandits 70 miles from Overlord 1").
 

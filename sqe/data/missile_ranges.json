@@ -1,0 +1,18 @@
+{
+ "_about": "S231 (server run S231-caucasus, 2026-11-28, all AI, real time, one run per lane: a sample). Launch range in nm of each type's main radar missile against a hot, defending target pair at the same height: max = DCS's 'missile attack range' option MAX_RANGE, optimal = NEZ_RANGE (median launch). Heights: low 1,500, med 20,000, high 35,000 ft. A null means that lane fired no main missile: the type then has no figure of that kind. IR-only types (F-5E, MiG-21Bis) have no row.",
+ "heights_ft": {"low": 1500, "med": 20000, "high": 35000},
+ "types": {
+  "F-14B":     {"missile": "AIM-54C", "max_nm": {"low": 27.5, "med": 37.6, "high": 34.7}, "optimal_nm": {"low": 11.8, "med": 12.8, "high": 20.6}, "note": "optimal from the F-14B(U) lanes, same missile (the F-14B's NEZ lanes fired other missiles)", "run": "S231-caucasus 2026-11-28"},
+  "F-14BU":    {"missile": "AIM-54C", "max_nm": {"low": 16.7, "med": 37.6, "high": 34.5}, "optimal_nm": {"low": 11.8, "med": 12.8, "high": 20.6}, "run": "S231-caucasus 2026-11-28"},
+  "F-15C":     {"missile": "AIM-120C", "max_nm": {"low": 16.7, "med": 21.2, "high": 32.3}, "optimal_nm": {"low": 5.5, "med": 8.9, "high": 11.9}, "run": "S231-caucasus 2026-11-28"},
+  "F-16C":     {"missile": "AIM-120C", "max_nm": {"low": 17.0, "med": 22.1, "high": 32.1}, "optimal_nm": {"low": 4.8, "med": 8.5, "high": 11.5}, "run": "S231-caucasus 2026-11-28"},
+  "FA-18C":    {"missile": "AIM-120C", "max_nm": {"low": 16.5, "med": 17.4, "high": 32.1}, "optimal_nm": {"low": 4.7, "med": 9.0, "high": 11.4}, "run": "S231-caucasus 2026-11-28"},
+  "F_4E":      {"missile": "AIM-7E", "max_nm": {"low": 5.6, "med": 10.5, "high": 14.3}, "optimal_nm": null, "run": "S231-caucasus 2026-11-28"},
+  "Su_27":     {"missile": "R-27ER", "max_nm": {"low": 16.9, "med": 25.6, "high": 13.4}, "optimal_nm": {"low": 7.6, "med": 11.0, "high": 13.9}, "run": "S231-caucasus 2026-11-28"},
+  "MiG_29S":   {"missile": "R-27ER", "max_nm": {"low": 26.7, "med": 26.4, "high": 29.3}, "optimal_nm": {"low": 5.1, "med": 7.8, "high": 9.9}, "note": "optimal: the R-77, which it fired first at NEZ", "run": "S231-caucasus 2026-11-28"},
+  "MiG_29A":   {"missile": "R-27ER", "max_nm": {"low": 7.7, "med": 16.0, "high": 23.1}, "optimal_nm": {"low": 6.0, "med": 9.6, "high": 13.7}, "run": "S231-caucasus 2026-11-28"},
+  "MiG_31":    {"missile": "R-33", "max_nm": {"low": 13.2, "med": 19.0, "high": 22.2}, "optimal_nm": {"low": 3.1, "med": 5.3, "high": 6.2}, "note": "optimal: the R-40R, which it fired first at NEZ", "run": "S231-caucasus 2026-11-28"},
+  "MiG_25PD":  {"missile": "R-40R", "max_nm": {"low": 7.8, "med": 13.7, "high": 13.4}, "optimal_nm": null, "run": "S231-caucasus 2026-11-28"},
+  "MiG_23MLD": {"missile": "R-24R", "max_nm": {"low": 19.0, "med": 10.8, "high": 19.7}, "optimal_nm": {"low": 4.6, "med": 5.8, "high": 6.1}, "run": "S231-caucasus 2026-11-28"}
+ }
+}

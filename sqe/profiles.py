@@ -343,14 +343,18 @@ def leg_clear(state, p0, p1, alt_ft) -> bool:
     return True
 
 
-CAS_STATION_NM = 30.0           # v0.41.177 (XO 2026-10-28, 3 CAS runs): a CAS TARCAP / escort under a long-range SAM sits this far from the CAS target, on the push side (v0.41.181: 25, was 20, XO: it protects the package, it does not hunt) (judgment call: AIM-120 / AIM-7 reach covers the A-10s from there; the old rule left it 35-40 nm away and it never fired)
+CAS_STATION_NM = 30.0           # S231b: only for a type with no measured missile range (`missile_ranges.station_nm`). v0.41.177 (XO 2026-10-28, 3 CAS runs): a CAS TARCAP / escort under a long-range SAM sits this far from the CAS target, on the push side (v0.41.181: 25, was 20, XO: it protects the package, it does not hunt) (judgment call: AIM-120 / AIM-7 reach covers the A-10s from there; the old rule left it 35-40 nm away and it never fired)
 CAS_STATION_SWINGS = tuple(range(0, 181, 15))
 
 
-def cas_station(state, pts, alt_ft: int, egr=None):
+def cas_station(state, pts, alt_ft: int, egr=None, station_nm=None):
     """v0.41.177: a CAS fighter station within reach of the A-10s. Candidate points CAS_STATION_NM from the target, swung off the push bearing
-    (15 degrees at a time, either side, up to 180); the first one outside every live SAM ring wins, else the one with the most room. Same tuple as station()."""
+    (15 degrees at a time, either side, up to 180); the first one outside every live SAM ring wins, else the one with the most room. Same tuple as station().
+    S231b: station_nm, when given, is the flight type's missile range (`missile_ranges.station_nm`) and takes CAS_STATION_NM's place."""
     import math
+    distance_nm = CAS_STATION_NM
+    if station_nm is not None:
+        distance_nm = station_nm
     tx, ty = pts[-1]
     px, py = pts[0]
     b0 = math.atan2(py - ty, px - tx)
@@ -359,7 +363,7 @@ def cas_station(state, pts, alt_ft: int, egr=None):
     for sw in CAS_STATION_SWINGS:
         for sgn in ((1,) if sw in (0, 180) else (1, -1)):
             b = b0 + math.radians(sw * sgn)
-            x, y = tx + math.cos(b) * CAS_STATION_NM * NM, ty + math.sin(b) * CAS_STATION_NM * NM
+            x, y = tx + math.cos(b) * distance_nm * NM, ty + math.sin(b) * distance_nm * NM
             room = min((((a.x - x) ** 2 + (a.y - y) ** 2) ** 0.5 - r for a, r in sites), default=1e9)
             if room > 0:
                 best = (x, y, room)
@@ -372,7 +376,7 @@ def cas_station(state, pts, alt_ft: int, egr=None):
     lr = _long_range_threat(state, pts[-1], alt_ft)
     names = [lr[0].variant] if lr else []
     ok = egr is not None and leg_clear(state, (x, y), egr, alt_ft)
-    return x, y, names, CAS_STATION_NM, ok
+    return x, y, names, distance_nm, ok
 
 
 def station(state, pts, alt_ft: int, egr=None):
