@@ -749,11 +749,14 @@ class WarSimulator:
         strength = sum(f.count * flight_weight(f) for f in pkg.flights)
         esc = pkg.extra.get("escorts", 0)
         kh59_ = raids.is_kh59(pkg.extra)                                    # S48: a Kh-59M raid is a standoff raid like the SEAD package. S211: stopped before launch, salvo shot down, or arrived (`raids.KH59_*`)
+        fighter_part = strength                                             # S234b: blue's fighters' part of what meets the raid (red learns from it), the field's air defence apart
+        ad_part = 0.0
         if pkg.extra.get("land") and not pkg.extra.get("sead") and not kh59_:           # v0.41.30: the batteries round the raid's target fight it too (sams.covering_ad, AD_RAID_WEIGHT); S36b: not a SEAD raid, which fires its Kh-31P from standoff, outside the site's reach; S48: nor a Kh-59M raid, which launches from about 50 nm, outside the point defences
             from .sams import covering_ad, AD_RAID_WEIGHT
             from .raids import aim_xy
             ad_share = raids.SEAD_FLANK_AD_SHARE if pkg.extra.get("flank_of") else 1.0          # S186: a flank raid came in on the Patriot's blind side: the field's air defence counts less
-            strength += AD_RAID_WEIGHT * ad_share * covering_ad(state, *aim_xy(state, pkg.objective.aim, state.bases[pkg.objective.target_id]))
+            ad_part = AD_RAID_WEIGHT * ad_share * covering_ad(state, *aim_xy(state, pkg.objective.aim, state.bases[pkg.objective.target_id]))
+            strength += ad_part
         up_, psq_ = False, None
         from . import blue_barcap
         if pkg.extra.get("land") and pkg.extra.get("bomber_wing"):        # v0.41.86: a base patrol on station on the side the raid comes from adds a pair
@@ -764,6 +767,7 @@ class WarSimulator:
                 up_, psq_ = blue_barcap.patrol_up(state, rng, fb_, (wa_.x, wa_.y), window=(s0_ - blue_barcap.LEAD_MIN, s0_ + blue_barcap.PACKAGE_WINDOW_MIN) if s0_ is not None else None)
                 if up_:
                     strength += blue_barcap.PATROL_RAID_WEIGHT * ROLE_WEIGHT[Role.CAP]
+                    fighter_part += blue_barcap.PATROL_RAID_WEIGHT * ROLE_WEIGHT[Role.CAP]
         live_ = [state.assets[x] for x in (pkg.extra.get("prep_sites") or []) if x in state.assets
                  and not state.assets[x].destroyed and state.assets[x].health > 0.25 and not getattr(state.assets[x], "suppressed", False)]
         if live_:                                                          # v0.41.305 (XO 2026-11-05: "the war planner takes into account what happened on those packages"): each SAM site still threatening the lane (the SEAD / DEAD packages ahead of the raid did not take it down) costs blue's fighters reach
@@ -795,9 +799,11 @@ class WarSimulator:
             ra_ = state.raids if state.raids is not None else {}
             ra_["unseen_n"] = int(ra_.get("unseen_n", 0)) + 1
         tu_ = bool(pkg.extra.get("land")) and pkg.extra.get("raider") == raids.TU22              # v0.41.355 (Phase 10a): the Tu-22M3 land strike: a 2-ship, its own losses and hit size
+        raiders_lost = 0                                                    # S234b: for red's memory (`red_cover_learn`)
         if bw is not None and ok and tu_:
             k_ = rng.randint(1, max(1, nb_))
             k = raids.lose_raiders(state, pkg.extra, k_, rng) if pkg.extra.get("pool") else bw.lose(raids.TU22, k_)        # stopped: 1 or both bombers shot down (the Su-24M raid rule would take 2 to 4); B1: a strike pooled over two bomber fields loses them over both
+            raiders_lost = k
             lines.append(f"   {k} Tu-22M3 shot down before dropping their bombs")
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
@@ -805,6 +811,7 @@ class WarSimulator:
             lines += raids.tu_hit(state, pkg.objective.target_id, bw, rng, pkg.objective.aim, nb_)
         elif bw is not None and ok:
             k = raids.lose_raiders(state, pkg.extra, (rng.randint(2, 4) if nb_ <= 4 else max(2, round(nb_ * rng.uniform(0.4, 0.7)))) if pkg.extra.get("land") else max(1, round(pkg.extra.get("bombers", 4) * rng.uniform(0.4, 0.8))), rng)          # S46: a pooled raid loses them over its wings
+            raiders_lost = k
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") and not kh59_ else "launching their missiles"))
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
@@ -820,7 +827,7 @@ class WarSimulator:
                 lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim, pkg.extra.get("raider"))
             else:                                                                  # v0.41.155: a mass raid that got through puts most of its bombers on target
                 thr_ = max(2, round(nb_ * rng.uniform(0.4, 0.8)))
-                raids.lose_raiders(state, pkg.extra, max(1, thr_ // 3), rng)
+                raiders_lost = raids.lose_raiders(state, pkg.extra, max(1, thr_ // 3), rng)
                 lines += raids_hit(state, pkg.objective.target_id, None, rng, thr_, pkg.objective.aim, pkg.extra.get("raider"))
         elif bw is not None:
             bw.lose(raids.lose_type(pkg.extra, bw), 1)                                  # B1: a bomber field that is also a normal red wing loses a Tu-22M3 (Mozdok's wing: `lose(None)` as before)
@@ -845,7 +852,12 @@ class WarSimulator:
         if kh59_:
             stopped_odds = p * raids.KH59_PRELAUNCH_SHARE
             odds = stopped_odds + (1.0 - stopped_odds) * raids.KH59_SALVO_STOP
-        return {"success": prevented, "odds": odds, "lines": lines, "objective": pkg.objective.description, "roll": roll, "lost_by": lost_by}
+        # S234b: what red learns from this raid: blue's fighters' share of what met it and the raiders it lost
+        fighter_share = 0.0
+        if fighter_part + ad_part > 0:
+            fighter_share = fighter_part / (fighter_part + ad_part)
+        red_learn = {"share": round(fighter_share, 3), "raiders_lost": int(raiders_lost), "stopped": bool(ok)}
+        return {"success": prevented, "odds": odds, "lines": lines, "objective": pkg.objective.description, "roll": roll, "lost_by": lost_by, "red_learn": red_learn}
 
     def _awacs_dash(self, state: CampaignState, pkg: Package) -> list:
         """S181 P3b: the MiG-31 / MiG-25PD dash at the E-3 that rides with this raid (`raids.plan_awacs_dash`), settled on its own seeded dice (campaign, turn, raid) so no other

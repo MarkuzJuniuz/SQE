@@ -917,8 +917,14 @@ def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
     bw, raider = r[1], r[2]
     rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:raid")
     rdy = redair.ready_of(state, bw, (raider,))
-    want = min(sead_jets(state, aim, d), POOL_MAX_RAIDERS)
-    want -= want % 2                                                                 # S59b: never more raiders than the mass cap (L3: three packages of six are 18, they fly 16)
+    # S234b: what red learned from its last SEAD raids on this site (blue's fighters stopped them): more escorts, then a bigger wave and sweep
+    from . import red_cover_learn
+    learned_step = red_cover_learn.step(state, base.id, aim, True)
+    sead_wanted = sead_jets(state, aim, d)
+    if learned_step >= red_cover_learn.SEAD_WAVE_STEP:
+        sead_wanted += sead_n(d)
+    want = min(sead_wanted, POOL_MAX_RAIDERS)
+    want -= want % 2                                                                # S59b: never more raiders than the mass cap (L3: three packages of six are 18, they fly 16)
     nb = min(want, rdy)
     nb -= nb % 2
     pool = []
@@ -932,6 +938,7 @@ def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
     if nb < (sead_n(d) * SEAD_PATRIOT_MIN_PACKAGES if full_ else sead_n(d)):
         return None                                                                  # too few: nothing is booked, red keeps the jets
     want_e = int(round(nb * SEAD_ESCORT_RATIO[max(1, min(3, int(getattr(d, "level", 3))))]))
+    want_e += red_cover_learn.ESCORTS_PER_STEP * learned_step
     esc, esc_avail = _escort_for(state, bw, ax, ay, rnd, want=want_e)
     esc_even = esc_avail - esc_avail % 2
     escorts = min(want_e - want_e % 2, esc_even) if esc else 0
@@ -958,7 +965,10 @@ def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
         redair.spend(state, p["wing"], p["n"])
     escorts += sum(p["n"] for p in esc_pool)
     lvl_ = max(1, min(3, int(getattr(d, "level", 3))))
-    swp = _book_sweep(state, bw, ax, ay, f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:sweep", lvl_, SEAD_RAID_AC_MAX - nb - escorts, sweep_target(nb, lvl_))          # S66: what is left after the escorts
+    sweep_wanted = sweep_target(nb, lvl_)
+    if learned_step >= red_cover_learn.SEAD_WAVE_STEP:
+        sweep_wanted += red_cover_learn.SWEEP_PER_WAVE_STEP          # S234b: a bigger sweep ahead (still within SEAD_SWEEP_MAX and SEAD_RAID_AC_MAX)
+    swp = _book_sweep(state, bw, ax, ay, f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:sweep", lvl_, SEAD_RAID_AC_MAX - nb - escorts, sweep_wanted)          # S66: what is left after the escorts
     if swp is not None:
         sw_w, sw_t, sw_n0, sw_pool, sw_n = swp
         jets += [[sid, n, "swp"] for sid, n in redair.take_ready(state, sw_w, (sw_t,), sw_n0)]
@@ -1020,6 +1030,10 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int, ignore_cover: bool 
     alone_ = (raider in attack_types() and all(p["raider"] in attack_types() for p in pool) and aim_kind(aim) == "supply" and SU25_SUPPLY                          # v0.41.359 (Phase 10c): no blue fighter squadron can reach the site's field (blue's own patrol rule, `blue_barcap._cap_squadrons`): the Su-25s go alone
               and not blue_barcap._cap_squadrons(state, base))
     want_e = 0 if alone_ else max(4 if nb >= 4 else 2, nb // 2 + (2 if nb >= 8 else 0))
+    # S234b: red's last raids on this target were stopped by blue's fighters: more escorts this time
+    if not alone_:
+        from . import red_cover_learn
+        want_e += red_cover_learn.extra_escorts(state, base.id, aim, False)
     esc, esc_avail = _escort_for(state, bw, ax, ay, rnd, alone_, want_e)
     brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360                      # they come from where they took off
     esc_even = esc_avail - esc_avail % 2
