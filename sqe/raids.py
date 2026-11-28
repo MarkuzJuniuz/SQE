@@ -1338,9 +1338,141 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
                 booked[flank_obj.id] = flank_plan
                 warned.append(flank_obj)
                 credit -= flank_plan["bombers"]
+    if planned:
+        plan_awacs_dash(state, d, turn, warned, booked)
     if state.raids is not None:
         state.raids["credit"] = credit
     return warned, surprise
+
+
+# S181 P3b (XO 2026-11-24, red goes after blue's AWACS; Crew Chief's option 1 under XO's autonomy 2026-11-27): ahead of a big raid, at Levels 2 and 3, a pair (L2) or a four-ship (L3) of
+# MiG-31s / MiG-25PDs dashes high and fast at the E-3 on orbit, fires its long-range missiles (R-33 / R-40) and turns home. Soviet planning of the 1980s had MiG-25 / MiG-31 dashes against AWACS
+# (ausairpower.net "Counter ISR Programs"; secondary, firmness low to medium). At most one a day; it rides with the biggest raid of the turn (its intercept mission), so no new kind of job.
+AWACS_DASH_TYPES = ("MiG_31", "MiG_25PD", "Su_27")    # in this order: the first type a wing can field flies (the Caucasus Level 3 roster has no MiG-31: its Su-27s go, as the Su-27 sweeps at high-value air assets of the plan doc)
+AWACS_DASH_JETS = {2: 2, 3: 4}           # judgment call (plan doc `s181-red-awacs-shot-plan.md`)
+AWACS_DASH_MIN_BOMBERS = 4               # the SEAD raid it rides with must have at least this many bombers (a big raid; judgment call)
+AWACS_DASH_SEAD_NM = 150                 # ...and its target must be this close to the E-3's station: the blue fighters drawn to that fight are the ones on the AWACS's side (judgment call, XO 2026-11-27)
+AWACS_DASH_MIN_JETS = 2                  # a pair at least; fewer free than AWACS_DASH_JETS: it flies with what is free
+# XO 2026-11-27: red dashes only when it thinks it can get through: the line from its field to the launch point must be clear of blue's long-range SAMs.
+# Server runs 2026-11-27 (`test-runs/S181e/REPORT.md`): every dash whose line crossed them died before its launch point (6 of 10 jets to SM-2ER and Patriots, 0 shots at the E-3).
+AWACS_DASH_LAUNCH_NM = 60                # the launch point, this far from the E-3's station toward the field (the same figure as `raid_spawns.AWACS_DASH_LAUNCH_NM`)
+AWACS_DASH_ALT_FT = 40000                # the height it flies (the Patriot ring is read at this height: 63 nm)
+AWACS_DASH_SHIP_SAM_NM = 70              # the carrier group's SM-2ER reach against it (measured 2026-11-27: Ticonderoga / Arleigh Burke shots at 122 to 130 km)
+AWACS_DASH_SAMPLE_NM = 10                # the line is tested at a point every this many nm
+# ...out to where the type can fire at the E-3 (the line is tested from the field to this far from the station). MiG-31 R-33 and MiG-25PD R-40: from memory (public data sheets), firmness low;
+# Su-27 R-27ER: measured (server run 2026-11-27: first shot at the E-3 at 36 km). Round 4 of that run: a Su-27 pair whose launch point was clear died to the Tbilisi Patriots closing in.
+AWACS_DASH_SHOT_NM = {"MiG_31": 60, "MiG_25PD": 25, "Su_27": 20}
+
+
+def dash_way_defended(state, field_x: float, field_y: float, launch_x: float, launch_y: float) -> bool:
+    """Does a live blue Patriot (its ring at AWACS_DASH_ALT_FT) or the carrier group (AWACS_DASH_SHIP_SAM_NM) reach the straight line from the field to the launch point?"""
+    from . import fleet, samtier
+    from .sams import blue_battery
+    length_nm = math.hypot(launch_x - field_x, launch_y - field_y) / NM
+    steps = max(1, int(length_nm // AWACS_DASH_SAMPLE_NM))
+    sample_points = []
+    for step in range(steps + 1):
+        share = step / steps
+        sample_points.append((field_x + (launch_x - field_x) * share, field_y + (launch_y - field_y) * share))
+    # the Patriots at blue's fields (the site itself when it has moved, else the field)
+    patriot_reach_m = samtier.ring_nm("Patriot", AWACS_DASH_ALT_FT) * NM
+    for base in state.bases.values():
+        if base.kind != BaseKind.AIRFIELD:
+            continue
+        if not blue_battery(base, state)["patriot_ln"]:
+            continue
+        patriot = (getattr(state, "blue_sams", None) or {}).get("bsam_%s_pat" % base.id)
+        patriot_x = base.x
+        patriot_y = base.y
+        if patriot is not None:
+            patriot_x = patriot.x
+            patriot_y = patriot.y
+        for point_x, point_y in sample_points:
+            if math.hypot(patriot_x - point_x, patriot_y - point_y) <= patriot_reach_m:
+                return True
+    # the carrier group, while it is afloat
+    boat = fleet.carrier(state)
+    if boat is not None:
+        for point_x, point_y in sample_points:
+            if math.hypot(boat.x - point_x, boat.y - point_y) <= AWACS_DASH_SHIP_SAM_NM * NM:
+                return True
+    return False
+
+
+def dash_launch_point(station: tuple, field_x: float, field_y: float, out_nm: float = AWACS_DASH_LAUNCH_NM) -> tuple:
+    """The point `out_nm` from the E-3's station on the line toward the field (the default: the dash's launch point)."""
+    distance = math.hypot(field_x - station[0], field_y - station[1])
+    if distance <= 0:
+        return (station[0], station[1])
+    share = min(1.0, out_nm * NM / distance)
+    return (station[0] + (field_x - station[0]) * share, station[1] + (field_y - station[1]) * share)
+
+
+def plan_awacs_dash(state, d, turn: int, warned: list, booked: dict) -> None:
+    """Attach the AWACS dash to the biggest raid booked this turn: when an E-3 is on orbit, the level has a dash, none flew today and a wing has the jets in reach of the E-3's station.
+    Books the jets off the wing like any raid (`redair.take_ready`, `spend`) and adds plan["awacs_dash"] = {wing, type, n, station}. No dice: it follows from the state."""
+    from . import detection, redair, threatmap
+    from .loadouts import ENEMY_RADIUS_NM
+    n_wanted = AWACS_DASH_JETS.get(int(getattr(d, "level", 1)), 0)
+    if n_wanted <= 0 or state.raids is None:
+        return
+    if int(state.raids.get("dash_day", -1)) == state.day:
+        return
+    from . import support_assets
+    support_assets.plan(state, turn)                     # this turn's AWACS windows (the planner plans them right after the raids; planning a turn twice replaces its windows)
+    if not detection._on_orbit(state, "bl_e3", turn):
+        return
+    station = threatmap.awacs_station(state)
+    if station is None:
+        return
+    # XO 2026-11-27: it goes with a big SEAD raid near the AWACS, while blue's fighters are busy there; the biggest such raid this turn
+    biggest = None
+    for objective in warned:
+        plan = booked.get(objective.id) or {}
+        if not plan.get("sead"):
+            continue
+        if int(plan.get("bombers", 0)) < AWACS_DASH_MIN_BOMBERS:
+            continue
+        dest = plan.get("dest")
+        if not dest:
+            continue
+        if math.hypot(float(dest[0]) - station[0], float(dest[1]) - station[1]) / NM > AWACS_DASH_SEAD_NM:
+            continue
+        if biggest is None or int(plan["bombers"]) > int(booked[biggest.id]["bombers"]):
+            biggest = objective
+    if biggest is None:
+        return
+    best = None
+    for aircraft in AWACS_DASH_TYPES:
+        for wing in state.enemy_air:
+            field = state.assets.get(wing.base_asset_id)
+            if field is None or field.destroyed or runways.is_closed(state, wing.base_asset_id, turn):
+                continue
+            ready = redair.ready_of(state, wing, (aircraft,))
+            reach_nm = ENEMY_RADIUS_NM.get(aircraft, 0)
+            distance_nm = math.hypot(station[0] - field.x, station[1] - field.y) / NM
+            if ready < AWACS_DASH_MIN_JETS or distance_nm > reach_nm:
+                continue
+            # red goes only where it thinks it can get through (XO 2026-11-27): no blue Patriot or carrier SAM over its way in
+            shot_nm = AWACS_DASH_SHOT_NM.get(aircraft, 20)
+            shot_x, shot_y = dash_launch_point(station, field.x, field.y, shot_nm)
+            if dash_way_defended(state, field.x, field.y, shot_x, shot_y):
+                continue
+            if best is None or ready > best[0]:
+                best = (ready, wing, aircraft)
+        if best is not None:
+            break                                          # the first type in the list that a wing can field
+    if best is None:
+        return
+    ready, wing, aircraft = best
+    n_wanted = min(n_wanted, ready - ready % 2)             # a pair at least; what the wing has free, in pairs
+    taken = redair.take_ready(state, wing, (aircraft,), n_wanted)
+    plan = booked[biggest.id]
+    for sid, n in taken:
+        plan.setdefault("jets", []).append([sid, n, "dash"])
+    redair.spend(state, wing.base_asset_id, n_wanted)
+    plan["awacs_dash"] = {"wing": wing.base_asset_id, "type": aircraft, "n": n_wanted, "station": [round(station[0]), round(station[1])]}
+    state.raids["dash_day"] = state.day
 
 
 def hit(state, base_id: str, wing, rng: random.Random, through: int | None = None, aim: str = "", ac: str | None = None, kh59: bool = False, defences: bool = True) -> list:
