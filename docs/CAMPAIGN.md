@@ -147,6 +147,12 @@ other's force in a sector withdraws from it (`BREAK_RATIO`) and nobody is hunted
 red at the ratio in section 2's table (lower while its works feed the war), blue once its force in the sector is at least 30 and at least 0.9 times red's. Both sides get
 reinforcements, scaled by their **Force Index** (see below), and a dug-in **garrison** in each sector gives its side a bonus and a CAS target.
 
+**What you see on the map.** Up to two sectors near your target or route show their battle: red's armour column and a blue company 2 km apart.
+Where the sides are evenly matched it is an artillery duel: a gun battery 10 km behind each line, and rocket launchers 14 km back (blue at every
+level, red at Level 3), fire into the other side every few minutes, with smoke burning at both lines. Where one side is clearly stronger it moves
+up into a direct-fire clash. A group that loses half its vehicles pulls back 800 m instead of fighting to the last one. The guns are scenery that
+fills whatever room the unit limit has left after every flight, so in a crowded mission some or all of them are left out.
+
 Blue's CAS and strike work lowers red's force in a sector and lowers its Force Index; red's raids do the same to blue. When
 blue holds a sector in front of a red airfield and red has nothing organised there, **the airfield falls**: it and its
 ground units go down for good, its jets withdraw to the nearest standing red field with 30% lost, and its depots and fuel
