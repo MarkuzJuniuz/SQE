@@ -1350,7 +1350,8 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
 # (ausairpower.net "Counter ISR Programs"; secondary, firmness low to medium). At most one a day; it rides with the biggest raid of the turn (its intercept mission), so no new kind of job.
 AWACS_DASH_TYPES = ("MiG_31", "MiG_25PD", "Su_27")    # in this order: the first type a wing can field flies (the Caucasus Level 3 roster has no MiG-31: its Su-27s go, as the Su-27 sweeps at high-value air assets of the plan doc)
 AWACS_DASH_JETS = {2: 2, 3: 4}           # judgment call (plan doc `s181-red-awacs-shot-plan.md`)
-AWACS_DASH_MIN_BOMBERS = 4               # the raid it rides with (a SEAD raid too) must have at least this many bombers (a big raid: the dash opens the way; judgment call)
+AWACS_DASH_MIN_BOMBERS = 4               # the SEAD raid it rides with must have at least this many bombers (a big raid; judgment call)
+AWACS_DASH_SEAD_NM = 150                 # ...and its target must be this close to the E-3's station: the blue fighters drawn to that fight are the ones on the AWACS's side (judgment call, XO 2026-11-27)
 AWACS_DASH_MIN_JETS = 2                  # a pair at least; fewer free than AWACS_DASH_JETS: it flies with what is free
 # XO 2026-11-27: red dashes only when it thinks it can get through: the line from its field to the launch point must be clear of blue's long-range SAMs.
 # Server runs 2026-11-27 (`test-runs/S181e/REPORT.md`): every dash whose line crossed them died before its launch point (6 of 10 jets to SM-2ER and Patriots, 0 shots at the E-3).
@@ -1358,6 +1359,9 @@ AWACS_DASH_LAUNCH_NM = 60                # the launch point, this far from the E
 AWACS_DASH_ALT_FT = 40000                # the height it flies (the Patriot ring is read at this height: 63 nm)
 AWACS_DASH_SHIP_SAM_NM = 70              # the carrier group's SM-2ER reach against it (measured 2026-11-27: Ticonderoga / Arleigh Burke shots at 122 to 130 km)
 AWACS_DASH_SAMPLE_NM = 10                # the line is tested at a point every this many nm
+# ...out to where the type can fire at the E-3 (the line is tested from the field to this far from the station). MiG-31 R-33 and MiG-25PD R-40: from memory (public data sheets), firmness low;
+# Su-27 R-27ER: measured (server run 2026-11-27: first shot at the E-3 at 36 km). Round 4 of that run: a Su-27 pair whose launch point was clear died to the Tbilisi Patriots closing in.
+AWACS_DASH_SHOT_NM = {"MiG_31": 60, "MiG_25PD": 25, "Su_27": 20}
 
 
 def dash_way_defended(state, field_x: float, field_y: float, launch_x: float, launch_y: float) -> bool:
@@ -1395,12 +1399,12 @@ def dash_way_defended(state, field_x: float, field_y: float, launch_x: float, la
     return False
 
 
-def dash_launch_point(station: tuple, field_x: float, field_y: float) -> tuple:
-    """The dash's launch point: AWACS_DASH_LAUNCH_NM from the E-3's station on the line toward the field."""
+def dash_launch_point(station: tuple, field_x: float, field_y: float, out_nm: float = AWACS_DASH_LAUNCH_NM) -> tuple:
+    """The point `out_nm` from the E-3's station on the line toward the field (the default: the dash's launch point)."""
     distance = math.hypot(field_x - station[0], field_y - station[1])
     if distance <= 0:
         return (station[0], station[1])
-    share = AWACS_DASH_LAUNCH_NM * NM / distance
+    share = min(1.0, out_nm * NM / distance)
     return (station[0] + (field_x - station[0]) * share, station[1] + (field_y - station[1]) * share)
 
 
@@ -1418,17 +1422,25 @@ def plan_awacs_dash(state, d, turn: int, warned: list, booked: dict) -> None:
     support_assets.plan(state, turn)                     # this turn's AWACS windows (the planner plans them right after the raids; planning a turn twice replaces its windows)
     if not detection._on_orbit(state, "bl_e3", turn):
         return
+    station = threatmap.awacs_station(state)
+    if station is None:
+        return
+    # XO 2026-11-27: it goes with a big SEAD raid near the AWACS, while blue's fighters are busy there; the biggest such raid this turn
     biggest = None
     for objective in warned:
         plan = booked.get(objective.id) or {}
+        if not plan.get("sead"):
+            continue
         if int(plan.get("bombers", 0)) < AWACS_DASH_MIN_BOMBERS:
+            continue
+        dest = plan.get("dest")
+        if not dest:
+            continue
+        if math.hypot(float(dest[0]) - station[0], float(dest[1]) - station[1]) / NM > AWACS_DASH_SEAD_NM:
             continue
         if biggest is None or int(plan["bombers"]) > int(booked[biggest.id]["bombers"]):
             biggest = objective
     if biggest is None:
-        return
-    station = threatmap.awacs_station(state)
-    if station is None:
         return
     best = None
     for aircraft in AWACS_DASH_TYPES:
@@ -1442,8 +1454,9 @@ def plan_awacs_dash(state, d, turn: int, warned: list, booked: dict) -> None:
             if ready < AWACS_DASH_MIN_JETS or distance_nm > reach_nm:
                 continue
             # red goes only where it thinks it can get through (XO 2026-11-27): no blue Patriot or carrier SAM over its way in
-            launch_x, launch_y = dash_launch_point(station, field.x, field.y)
-            if dash_way_defended(state, field.x, field.y, launch_x, launch_y):
+            shot_nm = AWACS_DASH_SHOT_NM.get(aircraft, 20)
+            shot_x, shot_y = dash_launch_point(station, field.x, field.y, shot_nm)
+            if dash_way_defended(state, field.x, field.y, shot_x, shot_y):
                 continue
             if best is None or ready > best[0]:
                 best = (ready, wing, aircraft)
