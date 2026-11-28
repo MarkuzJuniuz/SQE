@@ -422,7 +422,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         warns: list = []
         self.warns = warns
         # S219: RIO Radar in this mission: airborne red aircraft are named for Jester's lock order as they are made (`_red_unit_name`)
-        self._radar_names = bool(o.f14_radar and pf.is_player and not o.player_is_ai and pf.aircraft in ("F-14B", "F-14BU"))
+        # S237: off while `rio_radar.RADAR_CALLS_ON` is False
+        self._radar_names = bool(rio_radar.RADAR_CALLS_ON and o.f14_radar and pf.is_player and not o.player_is_ai and pf.aircraft in ("F-14B", "F-14BU"))
         self._radar_named = 0
         self._anchor_id = package.id
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
