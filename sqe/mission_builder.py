@@ -914,7 +914,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
             warns += list(dict.fromkeys(self.lo.warnings))
-            self._place_front_show()                  # S233: the front's guns last, from the room left over (scenery never pushes out a flight)
+            self._place_front_show(manifest)                  # S233: the front's guns last, from the room left over (scenery never pushes out a flight)
             self._wire_dormant()
             counts = self._counts()
             self._free_locked_speeds(m)

@@ -241,7 +241,7 @@ def tally(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         elif g["kind"] == "enemy_air":
             t["red_landed"] += sum(1 for u in g["units"] if u in down)
             t["red_air_total"] += len(g["units"]); t["red_air_lost"] += n_dead
-        elif g["kind"] == "asset":
+        elif g["kind"] in ("asset", "enemy_front"):
             t["red_ground_total"] += len(g["units"]); t["red_ground_lost"] += n_dead
     return t
 
@@ -612,6 +612,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     limped_ = set((data.get("limped") or {}).keys())         # the hook's `limped` object: units that landed or were recovered below LIMP_LIFE (unit name -> hit points left, percent)
     site_cap = {}                                           # v0.41.241: blue supply sites / garrisons: the health the destroyed buildings or vehicles leave (applied after the raid's own hit, so one raid is never counted twice)
     site_lost = {}                                          # S215a: ...and how many of how many were destroyed, for the line
+    front_red_points = {}                                   # S233b: sector -> the strength points a red column lost in passing this mission (its second platoon shares the cap)
     for g in manifest.groups:
         dead = [u for u in g["units"] if u in lost]
         if g["kind"] == "blue_site" and dead and g["units"] and g.get("health_before") is not None:
@@ -659,6 +660,14 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                         from . import sams as _sams
                         _sams.hit_field(state, nb, 0.10)
                         out["lines"].append(f"The position was overrun; the column presses on toward {nb.name}")
+        elif g["kind"] == "enemy_front":
+            if g["units"]:                                         # S233b: red's second platoon in a front battle (placed after its column, so the column's loss is known)
+                from . import ground as _gr4
+                sector_ = g.get("sector")
+                out["lines"].append(f"Front, {g.get('label') or g['ref']}: the enemy's forward platoon lost {len(dead)} of {len(g['units'])} vehicles")
+                gl4 = _gr4.front_loss_red(state, sector_, len(dead), int(g.get("base_count") or len(g["units"])), front_red_points.get(sector_, 0.0))
+                if gl4:
+                    out["lines"].append(gl4)
         elif g["kind"] == "asset":
             a = state.assets[g["ref"]]
             before = a.health
@@ -678,6 +687,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 a.health = before - (before - a.health) * _wk.damage_factor(state, a)
             if not g.get("primary") and _gr2.zone_of(state, a.id) is not None:      # S83: a red column hit only in passing loses no more than FRONT_CAP points (as blue's company), a CAS target is not capped
                 a.health = max(a.health, before - _gr2.FRONT_CAP / _gr2.MAX_FORCE)
+                front_red_points[_gr2.zone_of(state, a.id)] = (before - a.health) * _gr2.MAX_FORCE      # S233b: red's second platoon shares what is left of the cap
             dmg = before - a.health
             ra_ = {"name": a.name, "before": before, "after": a.health, "kind": a.kind.value, "primary": bool(g.get("primary")),
                    "destroyed": bool(a.destroyed or a.health <= _gr2.DOWN_HEALTH)}          # v0.41.171: tempo credits (tempo.credits)

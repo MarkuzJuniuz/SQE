@@ -1332,6 +1332,23 @@ def front_loss(state, i: int, dead: int, base_count: int):
     return f"{g['names'][i]}: friendly strength down {pts:.0f} to {g['blue'][i]:.0f}"
 
 
+def front_loss_red(state, i: int, dead: int, base_count: int, already: float = 0.0):
+    """S233b: red's second platoon in a front battle lost `dead` vehicles: the sector's Red strength (its column's health) drops by the rule of `front_loss`,
+    and the column and the platoon share one FRONT_CAP for the sector (`already` = the points the column lost in passing this mission). Returns a log line, or None."""
+    g = getattr(state, "ground", None)
+    if not g or dead <= 0 or i is None or not 0 <= i < len(g.get("red", [])):
+        return None
+    a = state.assets.get(f"armor_{i + 1}")
+    if a is None:
+        return None
+    room = max(0.0, FRONT_CAP - already)
+    pts = min(room, MAX_FORCE * AIR_EFFECT * dead / max(1, base_count), a.health * MAX_FORCE)
+    if pts <= 0:
+        return None
+    a.health = max(0.0, a.health - pts / MAX_FORCE)
+    return f"{g['names'][i]}: enemy strength down {pts:.0f} to {a.health * MAX_FORCE:.0f}"
+
+
 def blue_losses(state, asset_id: str, dead: int, total: int, base_count=None):
     """The friendly company at a column's JTAC took losses: the zone's Blue strength drops. Returns a log line or None (no ground war).
     S84: with `base_count` (the company's size at full strength) the loss is the same rule as a front battle's (front_loss: 100 * AIR_EFFECT of the share lost,

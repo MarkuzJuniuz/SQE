@@ -150,8 +150,11 @@ reinforcements, scaled by their **Force Index** (see below), and a dug-in **garr
 **What you see on the map.** Up to two sectors near your target or route show their battle: red's armour column and a blue company 2 km apart.
 Where the sides are evenly matched it is an artillery duel: a gun battery 10 km behind each line, and rocket launchers 14 km back (blue at every
 level, red at Level 3), fire into the other side every few minutes, with smoke burning at both lines. Where one side is clearly stronger it moves
-up into a direct-fire clash. A group that loses half its vehicles pulls back 800 m instead of fighting to the last one. The guns are scenery that
-fills whatever room the unit limit has left after every flight, so in a crowded mission some or all of them are left out.
+up into a direct-fire clash. A side with 40 or more strength in the sector also has a second, dug-in platoon 600 m along the line from its first
+group (blue M113s and a Humvee, red BMP-1s and a BTR), and the guns fire at both of the other side's groups. A group that loses half its vehicles
+pulls back 800 m instead of fighting to the last one. A battle you see costs strength like the daily fight: each side's losses there take up to
+20 points off its sector strength. The second platoons and the guns fill whatever room the unit limit has left after every flight (platoons first),
+so in a crowded mission some or all of them are left out.
 
 Blue's CAS and strike work lowers red's force in a sector and lowers its Force Index; red's raids do the same to blue. When
 blue holds a sector in front of a red airfield and red has nothing organised there, **the airfield falls**: it and its

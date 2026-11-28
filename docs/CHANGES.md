@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.727, a second platoon on each side of the front
+A side with 40 or more strength in a front battle's sector now has a second, dug-in platoon beside its first group: M113s and a Humvee for blue, BMP-1s and a BTR for red. The guns fire at both of the other side's groups, and a platoon that loses half its vehicles pulls back too. Its losses cost its side's strength in that sector, sharing the cap a front battle already had. Like the guns, the platoons go in only where the unit limit still has room.
+
 ## v0.41.726, the front battles come alive
 A front battle on the map now has artillery: behind each side a gun battery, and rocket launchers (blue at every level, red at Level 3), fire into the other side's line every few minutes, and smoke columns burn at both lines. The two sides stand 2 km apart: a balanced sector is an artillery duel, and the stronger side moves up into a direct-fire clash. A group that loses half its vehicles pulls back instead of fighting to the last one. The guns are scenery: they go in only where the unit limit still has room after every flight.
 

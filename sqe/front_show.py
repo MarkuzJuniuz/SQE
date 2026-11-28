@@ -27,6 +27,13 @@ MLRS_PERIOD_S, MLRS_FIRST_S = 600, (240, 300)
 GUN_SPREAD_M, GUN_RADIUS_M, GUN_ROUNDS = 150, 60, 8
 MLRS_SPREAD_M, MLRS_RADIUS_M, MLRS_ROUNDS = 300, 200, 12
 FALLBACK_M = 800.0            # how far a broken group pulls back (S233 probe)
+# S233b: a second, dug-in platoon beside each side's line (XO 2026-11-27: "up to TWO visible platoons per side"). It stands when the side's sector strength is at least
+# SECOND_PLATOON_MIN_FORCE (of ground.MAX_FORCE 100; judgment call: a sector under 40 shows only its first group, so a weak side looks weak). Fixed kinds, no dice:
+# a mechanised infantry platoon a side (blue M113s and a Humvee, red BMP-1s and a BTR; judgment call: lighter than the company and the column, the targets the guns can hurt).
+SECOND_PLATOON_MIN_FORCE = 40.0
+SECOND_PLATOON_SIDE_M = 600.0     # along the line from the first group (judgment call: a platoon front is a few hundred metres)
+BLUE_SECOND_PLATOON = [("M_113", 3), ("M1043_HMMWV_Armament", 1)]
+RED_SECOND_PLATOON = [("BMP_1", 3), ("BTR_80", 1)]
 SMOKE_BEHIND_M = 250.0        # smoke columns this far behind each line, where the other side's shells fall (judgment call)
 SMOKE_SIDE_M = 200.0          # ...and this far to either side
 SMOKE_PRESETS = (6, 1)        # DCS big-smoke presets: 6 medium smoke, 1 small smoke and fire

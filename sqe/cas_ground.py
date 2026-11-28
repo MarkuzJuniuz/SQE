@@ -380,7 +380,7 @@ class CasGround:
             if d_ <= R:
                 cands.append((d_, i, a))
         built = 0
-        show = {"batteries": [], "guns": [], "smoke": [], "fallback": []}       # S233: the front's plans; batteries are placed and the script written at the build's end
+        show = {"platoons": [], "batteries": [], "guns": [], "smoke": [], "fallback": []}       # S233: the front's plans; platoons and batteries are placed and the script written at the build's end
         # Nearest candidate first.
         def candidate_distance(candidate):
             return candidate[0]
@@ -427,14 +427,16 @@ class CasGround:
                 self._ground_orders(bg)
             manifest.add("friendly_ground", f"sector:{i}", names, label=g["names"][i], sector=i, stance=stance_,
                          base_count=_full_strength_count(names, ground.blue_strength(st, i)))      # S83: its size at full strength, so losses read back as strength
+            company_entry = manifest.groups[-1]           # S233b: the second blue platoon joins this entry when it is placed
             # S233: the show (guns, rockets, smoke) and the pull-back of a broken group; the red column stays put when it is this package's own target
             red_may_pull_back = a.id != package.objective.target_id
-            self._front_show_for(i, red, bg, (rx, ry), (bx, by), brg_rb, red_may_pull_back, show)
+            targets = self._front_show_for(i, red, bg, (rx, ry), (bx, by), brg_rb, red_may_pull_back, show)
+            self._front_platoons_for(i, (rx, ry), (bx, by), brg_rb, rs, bs, red_may_pull_back, company_entry, targets, show)
             self._spawn_front_air(i, red, bg, t_s, manifest)
             built += 1
         self._front_show_plan = show            # placed by `_place_front_show` at the very end of the build, from the room left over
 
-    def _place_front_show(self):
+    def _place_front_show(self, manifest):
         """S233: at the end of the build (after every flight, raid and wreck), the noted batteries go in while the unit limit has room, nearest battle first, and
         the front script is written. The show is scenery: it never takes room from anything else, and a battery that does not fit is left out quietly."""
         from .mission_builder import F  # the builder's module imports this one
@@ -443,6 +445,9 @@ class CasGround:
         self._front_show_plan = None
         if not show:
             return
+        # S233b: the second platoons first (they are part of the fight), then the guns that fire at them
+        for platoon in show["platoons"]:
+            self._place_front_platoon(platoon, show, manifest)
         for battery in show["batteries"]:
             if self._units_room() < battery["count"]:
                 continue
@@ -486,6 +491,8 @@ class CasGround:
         rx, ry = red_xy
         bx, by = blue_xy
         red_name, blue_name = red_g.name, blue_g.name
+        # the groups each side's guns fire at: one list per side, shared by its batteries, so a second platoon placed later joins it
+        targets = {"red": [red_name], "blue": [blue_name]}
         batteries = [
             ("blue", "guns", front_show.BLUE_GUN, front_show.GUNS_PER_SIDE, front_show.GUNS_BACK_M),
             ("red", "guns", front_show.RED_GUN, front_show.GUNS_PER_SIDE, front_show.GUNS_BACK_M),
@@ -500,18 +507,18 @@ class CasGround:
                 wanted = offset(bx, by, brg_rb, back_m)
                 facing = (int(brg_rb) + 180) % 360
                 country = self.usa
-                targets = [red_name]
+                aim = targets["red"]
             else:
                 wanted = offset(rx, ry, brg_rb + 180, back_m)
                 facing = int(brg_rb) % 360
                 country = self.red
-                targets = [blue_name]
+                aim = targets["blue"]
             spot = self._cas_land(wanted)
             if math.hypot(spot[0] - wanted[0], spot[1] - wanted[1]) > front_show.SHOW_SLIP_M:
                 continue
             label = "Guns" if kind == "guns" else "Rockets"
             show["batteries"].append({"side": side, "kind": kind, "type": unit_type, "count": count, "x": spot[0], "y": spot[1], "facing": facing,
-                                      "country": country, "targets": targets, "name": f"Front {label} {'Blue' if side == 'blue' else 'Red'} {i + 1}"})
+                                      "country": country, "targets": aim, "name": f"Front {label} {'Blue' if side == 'blue' else 'Red'} {i + 1}"})
         # smoke where the other side's shells fall: behind each line, to both sides
         for x, y, behind in ((bx, by, brg_rb), (rx, ry, brg_rb + 180)):
             back_x, back_y = offset(x, y, behind, front_show.SMOKE_BEHIND_M)
@@ -527,6 +534,68 @@ class CasGround:
             reached, whole = self._dry_part(start, wanted)
             if whole:
                 show["fallback"].append((name, reached[0], reached[1]))
+        return targets
+
+    def _front_platoons_for(self, i, red_xy, blue_xy, brg_rb, red_force, blue_force, red_may_pull_back, company_entry, targets, show):
+        """S233b: note each side's second platoon for battle i: beside its first group along the line, dug in, when the side's sector strength is at least
+        `front_show.SECOND_PLATOON_MIN_FORCE`. Red's only when its column may pull back (a column that is this package's own target keeps the battle as it was).
+        Placed by `_place_front_platoon` at the build's end from the room left over."""
+        from . import front_show
+        g = self.state.ground
+        sides = []
+        if blue_force >= front_show.SECOND_PLATOON_MIN_FORCE:
+            sides.append(("blue", blue_xy, (int(brg_rb) + 180) % 360, brg_rb, front_show.BLUE_SECOND_PLATOON, self.usa, blue_force))
+        if red_may_pull_back and red_force >= front_show.SECOND_PLATOON_MIN_FORCE:
+            sides.append(("red", red_xy, int(brg_rb) % 360, brg_rb + 180, front_show.RED_SECOND_PLATOON, self.red, red_force))
+        for side, first_xy, facing, away, comp, country, force in sides:
+            spot = None
+            # along the line, whichever side of the first group is on land with a dry way to it
+            for side_turn in (90, -90):
+                wanted = offset(first_xy[0], first_xy[1], brg_rb + side_turn, front_show.SECOND_PLATOON_SIDE_M)
+                land_spot = self._cas_land(wanted)
+                if math.hypot(land_spot[0] - wanted[0], land_spot[1] - wanted[1]) > self.CAS_STOP_SLIP_M:
+                    continue
+                if not self._dry_part(first_xy, land_spot)[1]:
+                    continue
+                spot = land_spot
+                break
+            if spot is None:
+                continue
+            fallback_wanted = offset(spot[0], spot[1], away, front_show.FALLBACK_M)
+            fallback_reached, fallback_whole = self._dry_part(spot, fallback_wanted)
+            fallback_point = None
+            if fallback_whole:
+                fallback_point = fallback_reached
+            word = "Blue" if side == "blue" else "Red"
+            show["platoons"].append({"side": side, "sector": i, "label": g["names"][i], "comp": comp, "x": spot[0], "y": spot[1], "facing": facing,
+                                     "country": country, "force": force, "name": f"{word} Platoon {i + 1}", "tag": f"{'BP' if side == 'blue' else 'RP'}{i + 1}",
+                                     "fallback": fallback_point, "aimed_by": targets[side], "company_entry": company_entry if side == "blue" else None})
+
+    def _place_front_platoon(self, platoon, show, manifest):
+        """S233b: place one noted second platoon if the unit limit has room (quietly left out if not), dug in. Blue's joins its company's manifest entry (one loss
+        rule and one cap for the sector, `ground.front_loss`); red's gets its own `enemy_front` entry (the debrief shares the column's cap)."""
+        from .mission_builder import F  # the builder's module imports this one
+        st = self.state
+        need = 0
+        for _unit_type, count in platoon["comp"]:
+            need += count
+        if self._units_room() < need:
+            return
+        group = self._platoon(platoon["country"], platoon["name"], platoon["comp"], platoon["x"], platoon["y"], platoon["facing"], F.Rectangle)
+        if group is None:
+            return
+        self._ground_orders(group)
+        names = _name_units(group, platoon["tag"])
+        platoon["aimed_by"].append(group.name)
+        if platoon["fallback"] is not None:
+            show["fallback"].append((group.name, platoon["fallback"][0], platoon["fallback"][1]))
+        if platoon["side"] == "blue":
+            entry = platoon["company_entry"]
+            entry["units"].extend(names)
+            entry["base_count"] = _full_strength_count(entry["units"], ground.blue_strength(st, platoon["sector"]))
+        else:
+            manifest.add("enemy_front", f"sector:{platoon['sector']}", names, label=platoon["label"], sector=platoon["sector"],
+                         base_count=_full_strength_count(names, platoon["force"]))
 
     def _spawn_front_air(self, i, red_g, blue_g, t_s, manifest):
         """S82 (XO 2026-11-14): the day's air strikes over a battle, from real jets. The daily ground fight records each strike it sent on sector i
