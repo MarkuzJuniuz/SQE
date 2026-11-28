@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.723, blue sends more cover where red's fighters bled it
+When a strike, DEAD or CAS package that you do not fly fails, or loses jets, mostly to red's fighters, blue's planners expect more fighters in that area. The next packages there get a bigger TARCAP and then a Fighter Sweep ahead of them. The extra cover fades after a couple of quiet days, and its jets come out of the other jobs. Level 3 Caucasus gets a little easier for blue; Syria and Levels 1 and 2 play as before.
+
 ## v0.41.722, cover stations from measured missile ranges
 SQE now carries the launch ranges each fighter's missiles showed in DCS test duels (AI against a defending target, three heights). Where a TARCAP or escort station is set by a missile's reach, it now uses the flight's own type and height: AI flights the range at which DCS's AI shoots best, your own flight the longest range it fires at. Today the cover usually takes the nearest safe point on the enemy's way into the package, so most missions fly as before.
 

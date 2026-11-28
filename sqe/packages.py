@@ -554,7 +554,12 @@ class PackageBuilder:
             n_fl = 1 if any(w.available > 0 for w in st.enemy_air) else 0
         else:
             n_fl = threat.defender_flights(threat.expected_defenders(st, tx, ty, iads))
-        self._hot = n_fl >= CAS_JET_MIN_DEF_FLIGHTS                                  # v0.41.188: red fighters can reach the target: CAS jets first
+            # S234: what the last packages of this kind met there (red fighters bled them): blue expects more, so the cover grows, then a sweep
+            from . import cover_learn
+            learned = cover_learn.extra_flights(st, obj)
+            if learned and n_fl >= 1:
+                n_fl = min(4, n_fl + learned)
+        self._hot = n_fl >= CAS_JET_MIN_DEF_FLIGHTS                                 # v0.41.188: red fighters can reach the target: CAS jets first
         self._a10_strike = self._a10_supply_strike(obj, n_fl)                        # v0.41.360 (Phase 10c part 2): a clean supply strike may take A-10C squadrons
         pkg = Package(id=f"pkg{number}", number=number, objective=obj, n_def=2 * n_fl, extra=extra)
         slots = self._slots(obj, self._defended(obj), n_fl, extra)
