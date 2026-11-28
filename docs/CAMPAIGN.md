@@ -115,7 +115,9 @@ A package is a set of flights with one target. The basic shapes (from `sqe/packa
 | Intercept (raid) | the fighters that cover what red is raiding |
 
 The TARCAP (up to 4 jets) is sized to the fighters red can field near the target. Where red has more than that, the package
-gets an escort as well, or a separate Fighter Sweep is planned ahead of it. A **Standoff** job (a site under a long-range SAM such as the SA-10) uses JSOWs,
+gets an escort as well, or a separate Fighter Sweep is planned ahead of it. When a strike, DEAD or CAS package you did not fly fails
+or loses jets, mostly to red's fighters, blue expects one more red pair in that area next time (two after a second such loss), so the
+TARCAP grows and then a Fighter Sweep goes in ahead; it fades one step every two days without a new such loss. A **Standoff** job (a site under a long-range SAM such as the SA-10) uses JSOWs,
 SLAM-ERs or similar weapons released far outside the SAM's reach, with HARM shooters timed on the same minute.
 
 **Routes round the SAM rings.** An AI flight, and you, fly round every live SAM ring on the way out to the marshal point, to the IP or the station, and home. The ring is the SAM's reach plus a margin: SA-10 35 nm,
@@ -242,6 +244,12 @@ is not listed as an Intercept job and is settled by the war simulation against b
 
 An intercept you do not fly is a fighter fight when the raid has an escort: about a quarter of the intercepting jets are lost, and well over half of red's escorts and
 sweep, whether or not the bombers get through (the figures measured in DCS test missions).
+
+**Red learns from its raids** (Levels 2 and 3). When blue's fighters, not the field's own air defence, stop a raid you did not fly
+(or it gets through but loses two or more bombers), red's next raid on that target brings one more escort pair. After a second such loss
+it brings two, and a SEAD raid also gets one more package of anti-radiation jets and a bigger sweep, within the raid's limits
+(16 jets, 40 aircraft). The extra comes out of red's same wings, so other raids that turn get fewer jets (a sweep can shrink to pay for
+the escorts). It fades one step every two days without a new such loss.
 
 **What red carries.** A raid's kit follows what it attacks. A Su-24M raid on a runway carries four BetAB-500ShP (rocket-boosted
 concrete-piercing bombs, on pylons 2, 3, 6 and 7); on troops or a garrison four RBK-500U cluster bombs (126 OAB-2.5RT

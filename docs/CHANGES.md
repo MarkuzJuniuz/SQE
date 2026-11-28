@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.724, red learns from its raids
+At Levels 2 and 3, when blue's fighters stop a red raid you do not fly (or it gets through but loses two or more bombers), red's next raid on that target brings one more escort pair. After a second such loss it brings two, and a SEAD raid also gets one more package of anti-radiation jets and a bigger sweep, within the raid's limits. The extra jets come out of red's other raids and fade after a couple of quiet days. Caucasus Level 3 gets a little harder for blue and Syria Level 3 a little easier; Levels 1 and 2 play as before. The campaign guide now explains both sides' learning.
+
 ## v0.41.723, blue sends more cover where red's fighters bled it
 When a strike, DEAD or CAS package that you do not fly fails, or loses jets, mostly to red's fighters, blue's planners expect more fighters in that area. The next packages there get a bigger TARCAP and then a Fighter Sweep ahead of them. The extra cover fades after a couple of quiet days, and its jets come out of the other jobs. Level 3 Caucasus gets a little easier for blue; Syria and Levels 1 and 2 play as before.
 
