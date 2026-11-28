@@ -1352,6 +1352,56 @@ AWACS_DASH_TYPES = ("MiG_31", "MiG_25PD", "Su_27")    # in this order: the first
 AWACS_DASH_JETS = {2: 2, 3: 4}           # judgment call (plan doc `s181-red-awacs-shot-plan.md`)
 AWACS_DASH_MIN_BOMBERS = 4               # the raid it rides with (a SEAD raid too) must have at least this many bombers (a big raid: the dash opens the way; judgment call)
 AWACS_DASH_MIN_JETS = 2                  # a pair at least; fewer free than AWACS_DASH_JETS: it flies with what is free
+# XO 2026-11-27: red dashes only when it thinks it can get through: the line from its field to the launch point must be clear of blue's long-range SAMs.
+# Server runs 2026-11-27 (`test-runs/S181e/REPORT.md`): every dash whose line crossed them died before its launch point (6 of 10 jets to SM-2ER and Patriots, 0 shots at the E-3).
+AWACS_DASH_LAUNCH_NM = 60                # the launch point, this far from the E-3's station toward the field (the same figure as `raid_spawns.AWACS_DASH_LAUNCH_NM`)
+AWACS_DASH_ALT_FT = 40000                # the height it flies (the Patriot ring is read at this height: 63 nm)
+AWACS_DASH_SHIP_SAM_NM = 70              # the carrier group's SM-2ER reach against it (measured 2026-11-27: Ticonderoga / Arleigh Burke shots at 122 to 130 km)
+AWACS_DASH_SAMPLE_NM = 10                # the line is tested at a point every this many nm
+
+
+def dash_way_defended(state, field_x: float, field_y: float, launch_x: float, launch_y: float) -> bool:
+    """Does a live blue Patriot (its ring at AWACS_DASH_ALT_FT) or the carrier group (AWACS_DASH_SHIP_SAM_NM) reach the straight line from the field to the launch point?"""
+    from . import fleet, samtier
+    from .sams import blue_battery
+    length_nm = math.hypot(launch_x - field_x, launch_y - field_y) / NM
+    steps = max(1, int(length_nm // AWACS_DASH_SAMPLE_NM))
+    sample_points = []
+    for step in range(steps + 1):
+        share = step / steps
+        sample_points.append((field_x + (launch_x - field_x) * share, field_y + (launch_y - field_y) * share))
+    # the Patriots at blue's fields (the site itself when it has moved, else the field)
+    patriot_reach_m = samtier.ring_nm("Patriot", AWACS_DASH_ALT_FT) * NM
+    for base in state.bases.values():
+        if base.kind != BaseKind.AIRFIELD:
+            continue
+        if not blue_battery(base, state)["patriot_ln"]:
+            continue
+        patriot = (getattr(state, "blue_sams", None) or {}).get("bsam_%s_pat" % base.id)
+        patriot_x = base.x
+        patriot_y = base.y
+        if patriot is not None:
+            patriot_x = patriot.x
+            patriot_y = patriot.y
+        for point_x, point_y in sample_points:
+            if math.hypot(patriot_x - point_x, patriot_y - point_y) <= patriot_reach_m:
+                return True
+    # the carrier group, while it is afloat
+    boat = fleet.carrier(state)
+    if boat is not None:
+        for point_x, point_y in sample_points:
+            if math.hypot(boat.x - point_x, boat.y - point_y) <= AWACS_DASH_SHIP_SAM_NM * NM:
+                return True
+    return False
+
+
+def dash_launch_point(station: tuple, field_x: float, field_y: float) -> tuple:
+    """The dash's launch point: AWACS_DASH_LAUNCH_NM from the E-3's station on the line toward the field."""
+    distance = math.hypot(field_x - station[0], field_y - station[1])
+    if distance <= 0:
+        return (station[0], station[1])
+    share = AWACS_DASH_LAUNCH_NM * NM / distance
+    return (station[0] + (field_x - station[0]) * share, station[1] + (field_y - station[1]) * share)
 
 
 def plan_awacs_dash(state, d, turn: int, warned: list, booked: dict) -> None:
@@ -1390,6 +1440,10 @@ def plan_awacs_dash(state, d, turn: int, warned: list, booked: dict) -> None:
             reach_nm = ENEMY_RADIUS_NM.get(aircraft, 0)
             distance_nm = math.hypot(station[0] - field.x, station[1] - field.y) / NM
             if ready < AWACS_DASH_MIN_JETS or distance_nm > reach_nm:
+                continue
+            # red goes only where it thinks it can get through (XO 2026-11-27): no blue Patriot or carrier SAM over its way in
+            launch_x, launch_y = dash_launch_point(station, field.x, field.y)
+            if dash_way_defended(state, field.x, field.y, launch_x, launch_y):
                 continue
             if best is None or ready > best[0]:
                 best = (ready, wing, aircraft)

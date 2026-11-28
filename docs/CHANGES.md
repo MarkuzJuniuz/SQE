@@ -1,7 +1,7 @@
 # CHANGES.md
 
 ## v0.41.720, red's fast interceptors go for the AWACS
-At Levels 2 and 3, ahead of a big raid, red now sends a pair of MiG-31s (or Su-27s where it has no MiG-31 free) high and fast at the E-3 on its orbit, to fire long-range missiles and turn for home. At most one such dash a day. The intercept briefing names it. The E-3's guard and its retreat usually save it; at Level 3 about one war in four loses an E-3 airframe this way.
+At Levels 2 and 3, ahead of a big raid, red can now send a pair of MiG-31s (or Su-27s where it has no MiG-31 free) high and fast at the E-3 on its orbit, to fire long-range missiles and turn for home. Red only tries it when its way in is clear of blue's Patriots and the carrier group's missiles, so it comes late in a war, once blue's defences have thinned. At most one such dash a day. They hold their fire until they are close to the AWACS, and the intercept briefing names them.
 
 ## v0.41.719, packages you do not fly lose jets more like they do in DCS
 The war's figures for blue's losses now follow DCS test missions: a plain supply strike loses fewer jets than before, a strike behind a SEAD and a stand-off DEAD package lose more (halfway to what DCS showed). Level 3 gets a little harder; Levels 1 and 2 are unchanged.

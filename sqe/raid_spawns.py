@@ -24,6 +24,7 @@ from .aircraft import AIRCRAFT
 from .loadouts import BOMBER_TYPES, ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_land_bomber_loadout, enemy_standoff_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
 from .raids import KH59_FLY_S, KH59_LAUNCH_NM       # S209: the plan needs it too (the way in is measured from the launch point)
+from .raids import AWACS_DASH_ALT_FT as AWACS_DASH_ALT_FT_PLAN, AWACS_DASH_LAUNCH_NM as AWACS_DASH_LAUNCH_NM_PLAN      # S181 P3b: the booking and the mission use the same figures
 from .red_air_picture import CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, a2a_zone_nm
 from .support_caps import SUPPORT_CAP_ZONE_NM
 from .routes import AVOID_NM, FT, NM, RAID_IP_NEAR_NM, RAID_SA11_NM, Wpt, avoid_circles, bearing, dist, offset
@@ -36,10 +37,10 @@ RAID_PUSH_NM = 10             # v0.41.29: a raid's PUSH, this far from its marsh
 RAID_MSHL_MIN_NM = 60         # ...its marshal is at least this far from the target (judgment call: well outside blue's Patriot reach)
 RAID_MPS = 232.0              # a red raid's speed (450 kts), the same figure its placement always used
 # S181 P3b: the AWACS dash (judgment calls from the plan doc; the MiG-31's R-33 / the MiG-25PD's R-40 reach of about 60 nm and the high, fast profile: public data sheets, from memory, firmness low)
-AWACS_DASH_ALT_FT = 40000
+AWACS_DASH_ALT_FT = AWACS_DASH_ALT_FT_PLAN       # 40,000 ft: the booking reads the Patriot ring at the same height (`raids`)
 AWACS_DASH_KPH = 1500         # about Mach 1.4 at 40,000 ft (what DCS's AI will hold for a long dash is to be measured)
 AWACS_DASH_HOME_KPH = 900
-AWACS_DASH_LAUNCH_NM = 60     # its launch point, this far from the E-3's station on the line from its field
+AWACS_DASH_LAUNCH_NM = AWACS_DASH_LAUNCH_NM_PLAN  # 60: its launch point, this far from the E-3's station on the line from its field (the booking tests the same line)
 AWACS_DASH_LEAD_S = 480       # it is at its launch point this long before the raid's time over target (the E-3 is the first thing to go)
 RAID_MIN_NM = 40              # ...a raid with no time to hold starts no closer than this to its target (it is late instead)
 RAID_ESCORT_AHEAD_NM = 4.0    # v0.41.296 (XO 2026-11-05: "the Su-27s are in front of their package"; he first thought 10 nm too much): the fleet raid's escort group flies this far AHEAD of the bomber group it guards. JUDGMENT CALL: no public source gives a spacing (Chipman 1990 says Su-27s "may be tasked to escort" Badgers / Backfires; CIMSEC's Backfire piece has no formation detail)
@@ -1102,9 +1103,10 @@ class RaidSpawns:
         arrive_s = max(60.0, float(tot_s) - AWACS_DASH_LEAD_S)
         to_launch = dist(field.x, field.y, launch[0], launch[1])
         start_s = arrive_s - to_launch / speed_ms
+        # with no time to fly in from its field, it still starts over its field (at the mission's start) and arrives late, like a raid with no time to hold;
+        # it is never placed part-way, inside blue's SAM and ship rings (server run 2026-11-27: a pair placed 25 km short of its launch point died to SM-2ER in 3 minutes)
         start = (field.x, field.y)
         if start_s < 0:
-            start = offset(launch[0], launch[1], bearing(launch[0], launch[1], field.x, field.y), speed_ms * arrive_s)
             start_s = 0.0
 
         def pt(x, y):
@@ -1112,12 +1114,22 @@ class RaidSpawns:
 
         name = f"Raid Dash {package.number}"
         g = self.m.flight_group_inflight(self.red, name, cls, pt(*start), int(alt), int(AWACS_DASH_KPH), task.FighterSweep, group_size=int(dash.get("n", 2)))
-        g.points[0].tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+        # on the way in it only shoots back: the sweep's own "engage any fighter" task goes (server run 2026-11-27: the pair fought every F-16 it met and never reached the E-3)
+        kept_tasks = []
+        for first_task in g.points[0].tasks:
+            if getattr(first_task, "Id", "") != "EngageTargets":
+                kept_tasks.append(first_task)
+        g.points[0].tasks = kept_tasks
+        g.points[0].tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))
         g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
         e3 = self._blue_e3_group()
         g.add_waypoint(pt(*launch), int(alt), int(AWACS_DASH_KPH), "LAUNCH")
+        # at its launch point it opens fire, at the E-3 when it is in the mission (else at whatever it meets on the way through the station)
+        g.points[-1].tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
         if e3 is not None:
             g.points[-1].tasks.append(task.AttackGroup(e3.id))
+        else:
+            g.points[-1].tasks.append(task.EngageTargets(int(AWACS_DASH_LAUNCH_NM * NM), [task.Targets.All.Air]))
         g.add_waypoint(pt(sx, sy), int(alt), int(AWACS_DASH_KPH), "STN")
         g.add_waypoint(pt(field.x, field.y), int(alt), int(AWACS_DASH_HOME_KPH), "RTB")
         load = enemy_cap_loadout(dash["type"])
