@@ -23,6 +23,8 @@ Not verified in DCS: that popTask removes exactly the pushed attack; that red EW
 """
 from __future__ import annotations
 
+import math
+
 from . import samtier
 from . import threatmap as tm
 from .models import AssetKind
@@ -54,6 +56,8 @@ HVAA_REPLAN_S = 120             # while away and still threatened, a new point a
 # picture, without waiting for its own radar or its HVAACAP_REACH_NM. Server run 2026-11-27 (S181e round 3): the E-3 saw two Su-27s at about 110 km and pulled back, but its guard
 # committed only at 51 to 54 km on its own and needed about 2:30 to shoot; the Su-27 fired first and killed the E-3. 80 nm is about 4 minutes of a Mach 1.4 closure (judgment call).
 GUARD_CUE_NM = 80
+GUARD_CUE_CONE_DEG = 60          # ...and only at a fighter whose track points within this of straight at what the guard guards (S235 server run 1: the two tanker guards were sent
+                                 # at a dash flying past the tanker 147 km out, chased it for 9:30 and held the "two flights a group" slots the E-3's own guards needed). Judgment call
 BARCAP_REACH_NM = 30            # S160c (T1fix7 Caucasus: two F-14BU carrier BARCAP jets, reach 45 nm, fought away from the fleet and died): a base / carrier BARCAP guard commits only this far (judgment call, like HVAACAP_REACH_NM)
 BARCAP_LEASH_FLEET_NM = 25      # ...and never more than this from its station. A carrier station is `barcap.STATION_FLEET_NM` 35 nm out; 35 + 25 = 60 nm from the boat stays inside the ships' SM-2 reach (`barcap.FLEET_REACH_NM` 78, measured p90 77.5 nm in S168). Judgment call
 BARCAP_LEASH_BASE_NM = 15       # ...a base station is `barcap.STATION_BASE_NM` 25 nm out; 25 + 15 = 40 nm from the field, the Patriot's ring (HAWK edge inside it). Judgment call
@@ -144,6 +148,7 @@ def commit_lua(side, flights, sams, hvaa=None, late=None) -> str:
                 table, HVAA_QUIET_S, table, HVAA_REPLAN_S))
     data += "\n%s.late = {%s}" % (table, ", ".join(late_rows))
     data += "\n%s.cue = %d" % (table, int(GUARD_CUE_NM * 1852))         # S235
+    data += "\n%s.cone = %s" % (table, repr(round(math.cos(math.radians(GUARD_CUE_CONE_DEG)), 4)))
     return data + "\n" + COMMIT_BODY.replace("__TABLE__", table)
 
 
@@ -252,8 +257,18 @@ local function cueEnemy(f, guardedPoint)
     if eg and eg:isExist() and (C.count[eg:getName()] or 0) < C.maxper and not (f.cool[eg:getName()] and f.cool[eg:getName()] > NOWT) then
       for _, u in ipairs(eg:getUnits()) do
         if u and u:isExist() and u:inAir() and isFighter(u) and not OWN_RADAR_ONLY[u:getTypeName()] then
-          local d = dist(guardedPoint, u:getPoint())
-          if d <= C.cue and (bestD == nil or d < bestD) then best, bestD = eg, d end
+          local up = u:getPoint()
+          local d = dist(guardedPoint, up)
+          -- only a fighter heading for what it guards (within C.cone of straight at it), not one passing by (S235 run 1: the tanker guards chased a dash flying past)
+          local v = u:getVelocity()
+          local speed = math.sqrt(v.x * v.x + v.z * v.z)
+          local toX = guardedPoint.x - up.x
+          local toZ = guardedPoint.z - up.z
+          local heading_for = false
+          if speed > 1 and d > 1 then
+            heading_for = (v.x * toX + v.z * toZ) / (speed * d) >= C.cone
+          end
+          if heading_for and d <= C.cue and (bestD == nil or d < bestD) then best, bestD = eg, d end
         end
       end
     end
